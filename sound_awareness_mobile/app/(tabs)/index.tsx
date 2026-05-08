@@ -19,6 +19,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { theme } from '@/constants/Colors';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -242,6 +243,13 @@ export default function RadarScreen() {
       setBlipAngle(Math.floor(Math.random() * 360));
     }
     setLevel(newLevel);
+
+    // Trigger SOS modal on critical
+    if (newLevel === 'critical') {
+      setTimeout(() => {
+        router.push('/sos-alert');
+      }, 600);
+    }
   }, []);
 
   const statusBoxStyle = useAnimatedStyle(() => ({
