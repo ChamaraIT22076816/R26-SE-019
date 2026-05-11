@@ -3,6 +3,7 @@ Interactive Sign Learning Feedback Demo (MediaPipe Tasks API)
 - Records a reference sign (e.g., thumbs-up) by pressing 'r'
 - Continuously compares your live hand pose to the reference,
   showing green/yellow/red overlay + textual correction hints.
+- Press 'd' to delete the saved reference and reset.
 - Press 'q' to quit.
 """
 
@@ -15,15 +16,14 @@ import os
 import urllib.request
 
 # ---------- Configuration ----------
-FEEDBACK_THRESHOLD_GOOD = 0.05   # similarity below this = green
-FEEDBACK_THRESHOLD_OK  = 0.15   # between good and ok = yellow
+FEEDBACK_THRESHOLD_GOOD = 0.05
+FEEDBACK_THRESHOLD_OK  = 0.15
 WINDOW_NAME = "Sign Feedback Demo"
 REFERENCE_FILE = "reference_sign.npy"
 MODEL_FILE = "hand_landmarker.task"
 # -----------------------------------
 
 def download_model():
-    """Download the Hand Landmarker model if not already present."""
     if os.path.exists(MODEL_FILE):
         return
     print("Downloading Hand Landmarker model (~15MB)...")
@@ -34,7 +34,6 @@ def download_model():
     print("Model downloaded.")
 
 def normalize_landmarks(hand_landmarks_proto):
-    """Convert Task API hand landmarks into a 21x3 numpy array, normalized."""
     pts = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks_proto])
     wrist = pts[0]
     centered = pts - wrist
@@ -44,7 +43,6 @@ def normalize_landmarks(hand_landmarks_proto):
     return centered / scale
 
 def similarity(live_norm, ref_norm):
-    """Average Euclidean distance between normalized landmarks."""
     diff = live_norm - ref_norm
     distances = np.linalg.norm(diff, axis=1)
     return np.mean(distances)
@@ -55,13 +53,11 @@ def get_feedback_color_and_text(mean_dist):
     elif mean_dist < FEEDBACK_THRESHOLD_OK:
         return (0, 255, 255), "Almost there! Check your hand shape."
     else:
-        return (0, 0, 255), "Try again." 
+        return (0, 0, 255), "Try again."
 
 def main():
-    # Make sure the model is available
     download_model()
 
-    # Create Hand Landmarker
     base_options = mp.tasks.BaseOptions(model_asset_path=MODEL_FILE)
     options = vision.HandLandmarkerOptions(
         base_options=base_options,
@@ -76,13 +72,14 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     reference_norm = None
-    try:
+    # Try to load existing reference
+    if os.path.exists(REFERENCE_FILE):
         reference_norm = np.load(REFERENCE_FILE)
-        print(f"Loaded reference from {REFERENCE_FILE}")
-    except FileNotFoundError:
-        print("No reference found. Press 'r' to record a new reference sign.")
+        print(f"✅ Loaded reference from '{REFERENCE_FILE}'")
+    else:
+        print("ℹ️  No reference saved yet. Press 'r' to record your first sign.")
 
-    frame_idx = 0  # Used for VIDEO mode timestamp
+    frame_idx = 0
 
     while cap.isOpened():
         success, frame = cap.read()
@@ -90,61 +87,60 @@ def main():
             continue
 
         frame = cv2.flip(frame, 1)
-        # Convert to RGB because Tasks API expects RGB
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        # Detect hands (VIDEO mode requires a timestamp in ms)
         frame_idx += 1
         detection_result = landmarker.detect_for_video(mp_image, frame_idx)
 
         key = cv2.waitKey(5) & 0xFF
 
-        # ---- Record reference if 'r' pressed and a hand is detected ----
+        # ---- Record reference ('r') ----
         if key == ord('r') and detection_result.hand_landmarks:
             reference_norm = normalize_landmarks(detection_result.hand_landmarks[0])
             np.save(REFERENCE_FILE, reference_norm)
-            print("Reference sign recorded!")
+            print("✅ New reference recorded! Try matching it now.")
 
-        # ---- Draw hand landmarks if present ----
+        # ---- Delete reference ('d') ----
+        if key == ord('d'):
+            if os.path.exists(REFERENCE_FILE):
+                os.remove(REFERENCE_FILE)
+                reference_norm = None
+                print("🗑️  Reference deleted. Press 'r' to record a new one.")
+            else:
+                print("ℹ️  No reference to delete.")
+
+        # ---- Draw landmarks and feedback ----
         if detection_result.hand_landmarks:
-            # The Task API returns a list of NormalizedLandmark protos per hand
             hand_landmarks = detection_result.hand_landmarks[0]
 
-            # Draw the basic white skeleton
-            landmark_points = []
-            for lm in hand_landmarks:
-                # Convert normalized coordinates (0-1) to pixel coordinates
-                h, w, _ = frame.shape
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                landmark_points.append((cx, cy))
+            # Convert to pixel coordinates
+            h, w, _ = frame.shape
+            landmark_points = [(int(lm.x * w), int(lm.y * h)) for lm in hand_landmarks]
 
-            # Draw connections manually (simplified for demo; we'll use MediaPipe drawing utils if available)
-            # But we can still use mp_drawing from solutions? Not imported. We'll draw manually.
-            # Drawing connections to keep it clean:
-            connections = [(0, 1), (1, 2), (2, 3), (3, 4),  # thumb
-                           (0, 5), (5, 6), (6, 7), (7, 8),  # index
-                           (0, 9), (9, 10), (10, 11), (11, 12), # middle
-                           (0, 13), (13, 14), (14, 15), (15, 16), # ring
-                           (0, 17), (17, 18), (18, 19), (19, 20)] # pinky
+            connections = [
+                (0, 1), (1, 2), (2, 3), (3, 4),       # thumb
+                (0, 5), (5, 6), (6, 7), (7, 8),       # index
+                (0, 9), (9, 10), (10, 11), (11, 12),  # middle
+                (0, 13), (13, 14), (14, 15), (15, 16), # ring
+                (0, 17), (17, 18), (18, 19), (19, 20)  # pinky
+            ]
+
+            # Draw white skeleton
             for (start, end) in connections:
-                pt1 = landmark_points[start]
-                pt2 = landmark_points[end]
-                cv2.line(frame, pt1, pt2, (255, 255, 255), 1)
+                cv2.line(frame, landmark_points[start], landmark_points[end], (255, 255, 255), 1)
             for pt in landmark_points:
                 cv2.circle(frame, pt, 2, (255, 255, 255), -1)
 
-            # ---- If reference exists, compare and give feedback ----
+            # Feedback if reference exists
             if reference_norm is not None:
                 live_norm = normalize_landmarks(hand_landmarks)
                 dist = similarity(live_norm, reference_norm)
                 color, msg = get_feedback_color_and_text(dist)
 
-                # Draw skeleton again in feedback color (thicker)
+                # Draw colored skeleton thickly
                 for (start, end) in connections:
-                    pt1 = landmark_points[start]
-                    pt2 = landmark_points[end]
-                    cv2.line(frame, pt1, pt2, color, 3)
+                    cv2.line(frame, landmark_points[start], landmark_points[end], color, 3)
                 for pt in landmark_points:
                     cv2.circle(frame, pt, 4, color, -1)
 
@@ -158,6 +154,10 @@ def main():
         else:
             cv2.putText(frame, "No hand detected", (10, 40),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+        # Show keyboard shortcuts
+        cv2.putText(frame, "[r] record   [d] delete reference   [q] quit", (10, frame.shape[0] - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
 
         cv2.imshow(WINDOW_NAME, frame)
         if key == ord('q'):
