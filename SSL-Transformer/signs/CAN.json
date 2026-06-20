@@ -1,0 +1,640 @@
+{
+  "gloss": "CAN",
+  "source": "Blender manual pose",
+  "components": {
+    "root": {
+      "root": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "spine": {
+      "hip": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "spine_01": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "spine_02": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "spine_03": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "head": {
+      "neck": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "head": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "head_end": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "jaw": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "jaw_end": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eye_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eye_end_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eye_r": {
+        "x": -0.0,
+        "y": -1e-06,
+        "z": 1e-06,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eye_end_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "mouth_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "mouth_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyelid_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyelid_end_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyelid_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyelid_end_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyebrow_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "eyebrow_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "left_arm": {
+      "shoulder_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "upperarm_l": {
+        "x": -0.0,
+        "y": 0.322691,
+        "z": 0.0,
+        "w": 0.946504,
+        "type": "quaternion"
+      },
+      "lowerarm_l": {
+        "x": -0.143566,
+        "y": -0.066946,
+        "z": 0.158407,
+        "w": 0.974584,
+        "type": "quaternion"
+      },
+      "upperarm_twist_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerarm_twist_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "left_hand": {
+      "hand_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_01_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_02_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_03_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_end_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_01_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_02_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_03_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_end_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_01_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_02_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_03_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_end_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_01_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_02_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_03_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_end_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_01_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_02_l": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_03_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_end_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "right_arm": {
+      "shoulder_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "upperarm_r": {
+        "x": -0.043626,
+        "y": 0.176398,
+        "z": -0.283876,
+        "w": 0.941486,
+        "type": "quaternion"
+      },
+      "lowerarm_r": {
+        "x": 0.43746,
+        "y": -0.721347,
+        "z": 0.441427,
+        "w": -0.305662,
+        "type": "quaternion"
+      },
+      "upperarm_twist_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerarm_twist_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "right_hand": {
+      "hand_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_01_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_02_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_03_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "thumb_end_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_01_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_02_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_03_r": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "index_end_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_01_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_02_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_03_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "middle_end_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_01_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_02_r": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_03_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ring_end_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_01_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_02_r": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_03_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "pinky_end_r": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "left_leg": {
+      "upperleg_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerleg_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "foot_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ball_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "foot_end_l": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "upperleg_twist_l": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerleg_twist_l": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    },
+    "right_leg": {
+      "upperleg_r": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerleg_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "foot_r": {
+        "x": 0.0,
+        "y": -0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "ball_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": -0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "foot_end_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "upperleg_twist_r": {
+        "x": -0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      },
+      "lowerleg_twist_r": {
+        "x": -0.0,
+        "y": -0.0,
+        "z": 0.0,
+        "w": 1.0,
+        "type": "quaternion"
+      }
+    }
+  }
+}

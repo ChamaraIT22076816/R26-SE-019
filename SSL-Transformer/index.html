@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSL Sign Renderer — IT4010 Prototype</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0f172a; color: #e2e8f0;
+            overflow: hidden; height: 100vh;
+        }
+        #container { width: 100%; height: 100vh; position: relative; }
+        #canvas-container { width: 100%; height: 100%; }
+
+        /* ── Left Panel: Controls ── */
+        #controls {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(15,23,42,0.92); backdrop-filter: blur(16px);
+            padding: 20px; border-radius: 16px;
+            border: 1px solid rgba(226,232,240,0.08); min-width: 320px;
+            max-height: calc(100vh - 40px); overflow-y: auto;
+        }
+        #controls::-webkit-scrollbar { width: 4px; }
+        #controls::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.3); border-radius: 2px; }
+
+        h1 { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #60a5fa; }
+        .info { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(226,232,240,0.08); }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+        .label { color: #94a3b8; }
+        .value { color: #e2e8f0; font-weight: 500; }
+        .current-sign {
+            font-size: 36px; font-weight: 800; text-align: center;
+            margin: 16px 0; color: #60a5fa; text-transform: uppercase; letter-spacing: 3px;
+            text-shadow: 0 0 30px rgba(96,165,250,0.3);
+        }
+        .section-label {
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 1.5px; color: #64748b; margin: 12px 0 8px;
+        }
+        .button-group { display: flex; gap: 8px; margin-bottom: 10px; }
+        button {
+            flex: 1; padding: 10px 12px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; background: #3b82f6; color: white;
+        }
+        button:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+        button:active { transform: translateY(0); }
+        button:disabled { background: #334155; color: #64748b; cursor: not-allowed; transform: none; box-shadow: none; }
+        .sequence-display {
+            font-size: 12px; color: #cbd5e1; text-align: center;
+            margin-top: 8px; padding: 8px;
+            background: rgba(30,41,59,0.5); border-radius: 6px;
+        }
+
+        /* ── Right Panel: Pipeline ── */
+        #pipeline-panel {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(15,23,42,0.92); backdrop-filter: blur(16px);
+            padding: 20px; border-radius: 16px;
+            border: 1px solid rgba(226,232,240,0.08); width: 380px;
+            max-height: calc(100vh - 40px); overflow-y: auto;
+        }
+        #pipeline-panel::-webkit-scrollbar { width: 4px; }
+        #pipeline-panel::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.3); border-radius: 2px; }
+        #pipeline-panel h2 { font-size: 16px; font-weight: 700; color: #60a5fa; margin-bottom: 16px; }
+
+        .api-input-group { display: flex; gap: 8px; margin-bottom: 12px; }
+        .api-input-group input {
+            flex: 1; padding: 10px 12px; border-radius: 8px;
+            border: 1px solid rgba(226,232,240,0.1); background: rgba(30,41,59,0.6);
+            color: #e2e8f0; font-size: 13px; font-family: 'Inter', sans-serif;
+            outline: none; transition: border-color 0.2s;
+        }
+        .api-input-group input:focus { border-color: #60a5fa; }
+        .api-input-group button { flex: 0 0 auto; padding: 10px 16px; }
+
+        .pipeline-stage {
+            background: rgba(30,41,59,0.4); border-radius: 10px;
+            padding: 12px; margin-bottom: 10px;
+            border-left: 3px solid #334155;
+            transition: border-color 0.3s, background 0.3s;
+        }
+        .pipeline-stage.active { border-left-color: #f59e0b; background: rgba(245,158,11,0.05); }
+        .pipeline-stage.done { border-left-color: #10b981; background: rgba(16,185,129,0.05); }
+        .pipeline-stage.error { border-left-color: #ef4444; background: rgba(239,68,68,0.05); }
+        .stage-header {
+            font-size: 12px; font-weight: 600; color: #94a3b8;
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+        }
+        .stage-content {
+            font-size: 14px; color: #e2e8f0; word-break: break-word;
+        }
+        .stage-content .sinhala { font-size: 18px; font-weight: 600; color: #fbbf24; }
+        .stage-content .gloss-tag {
+            display: inline-block; padding: 4px 10px; margin: 2px 4px 2px 0;
+            background: rgba(96,165,250,0.15); border: 1px solid rgba(96,165,250,0.3);
+            border-radius: 6px; font-size: 13px; font-weight: 600; color: #60a5fa;
+        }
+        .stage-content .token-tag {
+            display: inline-block; padding: 3px 8px; margin: 2px 4px 2px 0;
+            background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3);
+            border-radius: 6px; font-size: 12px; color: #a78bfa;
+        }
+        .stage-content .unknown-tag {
+            display: inline-block; padding: 3px 8px; margin: 2px 4px 2px 0;
+            background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 6px; font-size: 12px; color: #fca5a5; text-decoration: line-through;
+        }
+        .emotion-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;
+        }
+        .emotion-happy { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .emotion-sad { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .emotion-angry { background: rgba(239,68,68,0.15); color: #f87171; }
+        .emotion-neutral { background: rgba(148,163,184,0.15); color: #cbd5e1; }
+        .emotion-fear { background: rgba(168,85,247,0.15); color: #c084fc; }
+
+        .upload-area {
+            border: 2px dashed rgba(96,165,250,0.3); border-radius: 12px;
+            padding: 20px; text-align: center; cursor: pointer;
+            transition: all 0.2s; margin-bottom: 12px;
+        }
+        .upload-area:hover { border-color: #60a5fa; background: rgba(96,165,250,0.05); }
+        .upload-area.dragging { border-color: #60a5fa; background: rgba(96,165,250,0.1); }
+        .upload-area .icon { font-size: 28px; margin-bottom: 6px; }
+        .upload-area .text { font-size: 13px; color: #94a3b8; }
+        .upload-area .filename { font-size: 13px; color: #60a5fa; font-weight: 600; margin-top: 4px; }
+
+        .processing-spinner {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid rgba(96,165,250,0.2); border-top-color: #60a5fa;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+
+        /* ── General ── */
+        .loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%,-50%); text-align: center; z-index: 10;
+        }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 4px solid rgba(96,165,250,0.2); border-top-color: #60a5fa;
+            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error {
+            background: rgba(239,68,68,0.1); border: 1px solid #ef4444;
+            padding: 12px; border-radius: 8px; margin-top: 12px;
+            font-size: 13px; color: #fca5a5;
+        }
+        .debug-info {
+            background: rgba(16,185,129,0.1); border: 1px solid #10b981;
+            padding: 8px; border-radius: 6px; margin-top: 8px;
+            font-size: 11px; color: #6ee7b7; font-family: monospace;
+        }
+        code { background: rgba(96,165,250,0.15); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+        /* ── Title Bar ── */
+        #title-bar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(15,23,42,0.85); backdrop-filter: blur(10px);
+            padding: 10px 24px; border-radius: 40px;
+            border: 1px solid rgba(226,232,240,0.08);
+            font-size: 12px; color: #64748b; text-align: center;
+            white-space: nowrap;
+        }
+        #title-bar strong { color: #94a3b8; }
+        
+        /* ── Timeline UI ── */
+        .timeline-controls {
+            margin-top: 24px; padding-top: 24px;
+            border-top: 1px solid rgba(226,232,240,0.1);
+        }
+        .gloss-timeline {
+            display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px;
+        }
+        .timeline-pill {
+            background: rgba(30,41,59,0.8); border: 1px solid rgba(51,65,85,0.8);
+            padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+            color: #94a3b8; cursor: default; transition: all 0.2s;
+        }
+        .timeline-pill:hover { background: rgba(51,65,85,0.8); color: #e2e8f0; }
+        .timeline-pill.active {
+            background: rgba(96,165,250,0.15); border-color: #60a5fa;
+            color: #60a5fa; box-shadow: 0 0 12px rgba(96,165,250,0.15);
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <h1>🤟 SSL Sign Renderer</h1>
+        <div class="info">
+            <div class="info-row">
+                <span class="label">Model:</span>
+                <span class="value" id="model-status">Not loaded</span>
+            </div>
+
+        </div>
+        <div class="current-sign" id="current-sign">—</div>
+
+        <div class="timeline-controls" id="timeline-controls" style="display:none">
+            <div class="section-label">Timeline Controls</div>
+            <div class="button-group" style="justify-content: center;">
+                <button id="tl-prev-btn">← Prev</button>
+                <button id="tl-play-pause-btn">⏸ Pause</button>
+                <button id="tl-next-btn">Next →</button>
+            </div>
+            <div class="gloss-timeline" id="gloss-timeline"></div>
+        </div>
+
+        <div id="error-display"></div>
+    </div>
+
+    <!-- ── Right Panel: Translation Pipeline ── -->
+    <div id="pipeline-panel">
+        <h2>🗣️ Sinhala → SSL Pipeline</h2>
+
+        <!-- API Connection -->
+        <div class="section-label">Backend API</div>
+        <div class="api-input-group">
+            <input type="text" id="api-url" placeholder="https://xxxx.ngrok.io" value="">
+            <button id="api-connect-btn" style="background:#10b981;">Connect</button>
+        </div>
+        <div id="api-status" style="font-size:12px; color:#94a3b8; margin-bottom:12px;">Not connected</div>
+
+        <!-- Audio Upload -->
+        <div class="section-label">Audio Input</div>
+        <div class="upload-area" id="upload-area">
+            <div class="icon">🎤</div>
+            <div class="text">Click to upload .wav file</div>
+            <div class="filename" id="audio-filename"></div>
+        </div>
+        <input type="file" id="audio-file-input" accept=".wav,.mp3,.m4a" style="display:none">
+        <div class="button-group">
+            <button id="translate-btn" disabled style="background:#f59e0b; color:#0f172a;">🔄 Translate</button>
+        </div>
+
+        <!-- Pipeline Stages -->
+        <div class="section-label">Pipeline Output</div>
+
+        <div class="pipeline-stage" id="stage-asr">
+            <div class="stage-header">① Whisper ASR</div>
+            <div class="stage-content" id="asr-output">—</div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-tokens">
+            <div class="stage-header">② Sinling Tokens</div>
+            <div class="stage-content" id="tokens-output">—</div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-emotion">
+            <div class="stage-header">③ Emotion Detection</div>
+            <div class="stage-content" id="emotion-output">—</div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-gloss">
+            <div class="stage-header">④ Gloss Generation</div>
+            <div class="stage-content" id="gloss-output">—</div>
+        </div>
+    </div>
+
+    <div id="title-bar">
+        <strong>IT4010</strong> — Sinhala Audio → Sign Language Translation System — <strong>R26-SE-019</strong>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div>Loading SSL Renderer...</div>
+    </div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── STATE ────────────────────────────────────────────────────────────
+let scene, camera, renderer, controls;
+let model;
+let boneMap = {};
+let initialPose = {};  // Store T-pose for reset (quaternion-based)
+
+// ── PIPELINE STATE ───────────────────────────────────────────────────────
+let apiUrl = '';
+let apiConnected = false;
+let selectedAudioFile = null;
+let signPoseCache = {};  // Cache of loaded sign poses: { "ME": {components...}, ... }
+
+// ── BONE NAME MAPPING FOR CARLA MODEL ─────────────────────────────────
+// Maps generic component names to actual bone names in the Carla FBX model
+const CARLA_BONE_MAP = {
+    "left_arm": "upperarm_l",
+    "left_forearm": "lowerarm_l",
+    "left_hand": "hand_l",
+    "right_arm": "upperarm_r",
+    "right_forearm": "lowerarm_r",
+    "right_hand": "hand_r",
+    "left_shoulder": "shoulder_l",
+    "right_shoulder": "shoulder_r",
+    "spine": "spine_01",
+    "chest": "spine_03",
+    "neck": "neck",
+    "head": "head",
+    "hip": "hip",
+    
+    // Finger mappings (generic to Carla names)
+    // Thumbs
+    "thumb_01_l": "thumb_01_l", "thumb_02_l": "thumb_02_l", "thumb_03_l": "thumb_03_l",
+    "thumb_01_r": "thumb_01_r", "thumb_02_r": "thumb_02_r", "thumb_03_r": "thumb_03_r",
+    // Index
+    "index_01_l": "index_01_l", "index_02_l": "index_02_l", "index_03_l": "index_03_l",
+    "index_01_r": "index_01_r", "index_02_r": "index_02_r", "index_03_r": "index_03_r",
+    // Middle
+    "middle_01_l": "middle_01_l", "middle_02_l": "middle_02_l", "middle_03_l": "middle_03_l",
+    "middle_01_r": "middle_01_r", "middle_02_r": "middle_02_r", "middle_03_r": "middle_03_r",
+    // Ring
+    "ring_01_l": "ring_01_l", "ring_02_l": "ring_02_l", "ring_03_l": "ring_03_l",
+    "ring_01_r": "ring_01_r", "ring_02_r": "ring_02_r", "ring_03_r": "ring_03_r",
+    // Pinky
+    "pinky_01_l": "pinky_01_l", "pinky_02_l": "pinky_02_l", "pinky_03_l": "pinky_03_l",
+    "pinky_01_r": "pinky_01_r", "pinky_02_r": "pinky_02_r", "pinky_03_r": "pinky_03_r",
+};
+
+// ── INIT ─────────────────────────────────────────────────────────────
+async function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f172a);
+
+    // Wide frustum — we'll update near/far after model loads
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.001, 100000);
+    camera.position.set(0, 96, 262);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const key = new THREE.DirectionalLight(0xffffff, 1.0);
+    key.position.set(200, 500, 200);
+    key.castShadow = true;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x60a5fa, 0.4);
+    fill.position.set(-200, 200, -200);
+    scene.add(fill);
+
+    await loadModel();
+
+    setupUI();
+    document.getElementById('loading').style.display = 'none';
+    animate();
+}
+
+// ── MODEL LOADING ─────────────────────────────────────────────────────
+async function loadModel() {
+    return new Promise((resolve, reject) => {
+        const loader = new FBXLoader();
+        loader.load(
+            'character.fbx',
+            (fbx) => {
+                model = fbx;
+
+                // FBX is in centimeters (Y: 0-175, X: -82 to 82 confirmed from vertex data)
+                // Work in cm units — no scaling needed
+                scene.add(model);
+
+                const HEIGHT = 175;  // cm
+                const WIDTH  = 165;  // cm (arm span)
+
+                // Camera fitted for cm-scale model
+                camera.position.set(0, HEIGHT * 0.55, HEIGHT * 1.5);
+                camera.near = 1;
+                camera.far  = 10000;
+                camera.updateProjectionMatrix();
+                controls.target.set(0, HEIGHT * 0.5, 0);
+                controls.minDistance = 50;
+                controls.maxDistance = 1000;
+                controls.update();
+
+                // Ground & grid in cm scale
+                const grid = new THREE.GridHelper(WIDTH * 4, 20, 0x334155, 0x1e293b);
+                scene.add(grid);
+                const ground = new THREE.Mesh(
+                    new THREE.CircleGeometry(WIDTH * 2, 32),
+                    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 })
+                );
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.y = -0.5;
+                ground.receiveShadow = true;
+                scene.add(ground);
+
+                // DEBUG: dump full scene graph
+                console.log('=== MODEL TRAVERSE ===');
+                model.traverse((child) => {
+                    console.log(
+                        child.type,
+                        JSON.stringify(child.name),
+                        'visible:', child.visible,
+                        'isMesh:', child.isMesh,
+                        'isSkinned:', child.isSkinnedMesh,
+                        'isBone:', child.isBone,
+                        child.geometry ? ('verts:' + (child.geometry.attributes.position?.count || 0)) : ''
+                    );
+                });
+                console.log('=== END TRAVERSE ===');
+
+                // Extract bones & shadows
+                let hasMesh = false;
+                model.traverse((child) => {
+                    if (child.isMesh || child.isSkinnedMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        hasMesh = true;
+                    }
+                    if (child.isBone) boneMap[child.name] = child;
+                    if (child.isSkinnedMesh && child.skeleton) {
+                        child.skeleton.bones.forEach(b => { boneMap[b.name] = b; });
+                    }
+                });
+
+                // CAPTURE INITIAL T-POSE for reset (store as quaternion for reliability)
+                Object.entries(boneMap).forEach(([boneName, bone]) => {
+                    initialPose[boneName] = {
+                        qx: bone.quaternion.x,
+                        qy: bone.quaternion.y,
+                        qz: bone.quaternion.z,
+                        qw: bone.quaternion.w
+                    };
+                });
+                console.log('✓ Captured T-pose with', Object.keys(initialPose).length, 'bones (quaternion)');
+
+                // If no mesh found, create visual skeleton
+                if (!hasMesh && boneMap['mixamorigHips']) {
+                    console.warn('⚠️ No mesh found in FBX - creating skeleton visualizer');
+                    createSkeletonVisualizer(boneMap);
+                }
+
+
+                const boneCount = Object.keys(boneMap).length;
+                console.log('✓ Bones:', boneCount, Object.keys(boneMap));
+                document.getElementById('model-status').textContent = `✓ FBX (${boneCount} bones)`;
+                resolve();
+            },
+            (xhr) => {
+                if (xhr.total > 0) {
+                    const pct = Math.round(xhr.loaded / xhr.total * 100);
+                    document.getElementById('model-status').textContent = `Loading ${pct}%`;
+                }
+            },
+            (error) => {
+                showError('Failed to load character.fbx');
+                console.error('FBX error:', error);
+                reject(error);
+            }
+        );
+    });
+}
+
+
+// ── BONE ANIMATION ────────────────────────────────────────────────────
+// Supports MULTIPLE rotation formats:
+//
+// QUATERNION FORMAT (most reliable — no rotation order issues):
+//   { "boneName": { "x": 0.1, "y": 0.2, "z": 0.3, "w": 0.9, "type": "quaternion" } }
+//
+// EULER FORMAT (3-axis):
+//   { "boneName": { "x": 0.5, "y": 0.2, "z": 1.0 } }
+//
+// SINGLE-AXIS (legacy):
+//   { "boneName": 2.5 }
+//
+// The sign data can be in sequence format (with components groups) or flat format.
+
+/**
+ * Apply a rotation value to a bone, supporting quaternion, euler, and single-axis formats.
+ * 
+ * CRITICAL: Blender's pose bone rotation is a DELTA on top of the rest pose.
+ * In Blender, an unposed bone has rotation = identity (0,0,0,1).
+ * In Three.js after FBX load, bones have their rest orientation baked into quaternion.
+ * 
+ * So we must COMPOSE: final = restQuaternion × deltaQuaternion
+ * NOT replace: bone.quaternion = deltaQuaternion (wrong!)
+ */
+function applyRotationToBone(bone, boneName, value) {
+    if (!bone || value == null) return false;
+
+    // Look up the T-pose (rest) quaternion we captured when the model loaded
+    const rest = initialPose[boneName];
+
+    // ── QUATERNION FORMAT (preferred — no rotation order ambiguity) ──
+    if (typeof value === 'object' && value.type === 'quaternion') {
+        if (rest) {
+            // Compose: final = rest × delta
+            // rest = T-pose orientation from FBX loader
+            // delta = Blender's pose rotation (relative to rest)
+            const restQ = new THREE.Quaternion(rest.qx, rest.qy, rest.qz, rest.qw);
+            const deltaQ = new THREE.Quaternion(value.x, value.y, value.z, value.w);
+            bone.quaternion.copy(restQ).multiply(deltaQ);
+        } else {
+            // No rest pose captured, apply directly (fallback)
+            bone.quaternion.set(value.x, value.y, value.z, value.w);
+        }
+        return true;
+    }
+
+    // ── EULER 3-AXIS FORMAT ──
+    if (typeof value === 'object' && value.x !== undefined) {
+        if (rest) {
+            // Convert Euler delta to quaternion, then compose with rest
+            const euler = new THREE.Euler(value.x, value.y, value.z, 'XYZ');
+            const deltaQ = new THREE.Quaternion().setFromEuler(euler);
+            const restQ = new THREE.Quaternion(rest.qx, rest.qy, rest.qz, rest.qw);
+            bone.quaternion.copy(restQ).multiply(deltaQ);
+        } else {
+            bone.rotation.x = value.x;
+            bone.rotation.y = value.y;
+            bone.rotation.z = value.z;
+        }
+        return true;
+    }
+
+    // ── SINGLE-AXIS (legacy) ──
+    if (typeof value === 'number') {
+        bone.rotation.z = value;
+        return true;
+    }
+
+    return false;
+}
+
+function applySign(signData) {
+    if (!signData?.components) return;
+    const c = signData.components;
+    
+    console.log('Applying sign:', signData.gloss);
+    let applied = 0, skipped = 0;
+    
+    // ── UNIVERSAL HANDLER: Apply ALL component data ──
+    Object.entries(c).forEach(([componentName, componentData]) => {
+        if (!componentData || typeof componentData !== 'object') return;
+        
+        Object.entries(componentData).forEach(([boneName, value]) => {
+            // Skip special keys like wrist_position
+            if (boneName === 'wrist_position') return;
+            
+            // Handle wrist rotation (hand orientation)
+            if (boneName === 'wrist_rotation') {
+                const isLeftHand = componentName === 'left_hand';
+                const handBoneName = isLeftHand ? 'hand_l' : 'hand_r';
+                const handBone = boneMap[handBoneName];
+                if (handBone && typeof value === 'object') {
+                    applyRotationToBone(handBone, handBoneName, value);
+                    applied++;
+                }
+                return;
+            }
+            
+            // Try to find the bone in boneMap
+            let bone = boneMap[boneName];
+            
+            // If not found, try common naming conversions
+            if (!bone) {
+                if (boneName.startsWith('mixamorigLeftHand')) {
+                    const fingerName = boneName.replace('mixamorigLeftHand', '').toLowerCase();
+                    bone = boneMap[`${fingerName}_l`] || boneMap[boneName];
+                } else if (boneName.startsWith('mixamorigRightHand')) {
+                    const fingerName = boneName.replace('mixamorigRightHand', '').toLowerCase();
+                    bone = boneMap[`${fingerName}_r`] || boneMap[boneName];
+                }
+            }
+            
+            if (!bone) {
+                skipped++;
+                return;
+            }
+
+            if (applyRotationToBone(bone, boneName, value)) {
+                applied++;
+            }
+        });
+    });
+    
+    console.log(`✅ Applied ${applied} bone rotations (${skipped} skipped)`);
+}
+
+function resetPose() {
+    // Restore to the initial T-pose captured when model loaded (quaternion-based)
+    Object.entries(initialPose).forEach(([boneName, pose]) => {
+        const bone = boneMap[boneName];
+        if (bone) {
+            bone.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
+        }
+    });
+    
+    console.log('✅ Reset to T-pose (' + Object.keys(initialPose).length + ' bones)');
+}
+
+// ── SKELETON VISUALIZER ───────────────────────────────────────────────
+function createSkeletonVisualizer(bones) {
+    // Create simple cylinders + spheres to visualize the skeleton
+    const jointRadius = 4;
+    const mat = new THREE.MeshStandardMaterial({ 
+        color: 0x60a5fa, 
+        metalness: 0.5, 
+        roughness: 0.4,
+        emissive: 0x3b82f6
+    });
+
+    // Carla model bone connections
+    const limbs = [
+        { parent: 'spine_03', child: 'neck' },
+        { parent: 'neck', child: 'head' },
+        { parent: 'shoulder_l', child: 'upperarm_l' },
+        { parent: 'upperarm_l', child: 'lowerarm_l' },
+        { parent: 'lowerarm_l', child: 'hand_l' },
+        { parent: 'shoulder_r', child: 'upperarm_r' },
+        { parent: 'upperarm_r', child: 'lowerarm_r' },
+        { parent: 'lowerarm_r', child: 'hand_r' },
+        { parent: 'upperleg_l', child: 'lowerleg_l' },
+        { parent: 'lowerleg_l', child: 'foot_l' },
+        { parent: 'upperleg_r', child: 'lowerleg_r' },
+        { parent: 'lowerleg_r', child: 'foot_r' },
+    ];
+
+    // Create line segments connecting joints
+    limbs.forEach(limb => {
+        const parentBone = bones[limb.parent];
+        const childBone = bones[limb.child];
+        
+        if (parentBone && childBone) {
+            // Get positions in world space
+            const startPos = new THREE.Vector3();
+            const endPos = new THREE.Vector3();
+            
+            parentBone.updateWorldMatrix(true, false);
+            childBone.updateWorldMatrix(true, false);
+            parentBone.getWorldPosition(startPos);
+            childBone.getWorldPosition(endPos);
+            
+            const length = startPos.distanceTo(endPos);
+            const midpoint = startPos.clone().add(endPos).multiplyScalar(0.5);
+            
+            // Create cylinder connecting the two bones
+            const cylinder = new THREE.Mesh(
+                new THREE.CylinderGeometry(2, 2, length, 6),
+                mat.clone()
+            );
+            cylinder.position.copy(midpoint);
+            cylinder.lookAt(endPos);
+            cylinder.castShadow = true;
+            cylinder.receiveShadow = true;
+            scene.add(cylinder);
+            
+            // Add sphere at child bone position
+            const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(jointRadius, 16, 16),
+                mat.clone()
+            );
+            sphere.position.copy(endPos);
+            sphere.castShadow = true;
+            sphere.receiveShadow = true;
+            scene.add(sphere);
+        }
+    });
+
+    // Add torso/spine representation
+    if (bones['hip'] && bones['spine_03']) {
+        const hips = new THREE.Vector3();
+        const chest = new THREE.Vector3();
+        bones['hip'].updateWorldMatrix(true, false);
+        bones['spine_03'].updateWorldMatrix(true, false);
+        bones['hip'].getWorldPosition(hips);
+        bones['spine_03'].getWorldPosition(chest);
+        
+        const torsoLength = hips.distanceTo(chest);
+        const torsoMid = hips.clone().add(chest).multiplyScalar(0.5);
+        
+        const torso = new THREE.Mesh(
+            new THREE.CylinderGeometry(8, 8, torsoLength, 8),
+            mat.clone()
+        );
+        torso.position.copy(torsoMid);
+        torso.castShadow = true;
+        torso.receiveShadow = true;
+        scene.add(torso);
+    }
+
+    console.log('✓ Skeleton visualizer created with ' + limbs.length + ' limbs');
+}
+
+
+function setupUI() {
+    setupTimelineUI();
+    // ── PIPELINE UI SETUP ──
+    setupPipelineUI();
+}
+
+// ── PIPELINE UI ──────────────────────────────────────────────────────
+function setupPipelineUI() {
+    document.getElementById('api-connect-btn').addEventListener('click', connectAPI);
+    document.getElementById('api-url').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') connectAPI();
+    });
+
+    const uploadArea = document.getElementById('upload-area');
+    const audioInput = document.getElementById('audio-file-input');
+    uploadArea.addEventListener('click', () => audioInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragging'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragging'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault(); uploadArea.classList.remove('dragging');
+        if (e.dataTransfer.files[0]) handleAudioFile(e.dataTransfer.files[0]);
+    });
+    audioInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) handleAudioFile(e.target.files[0]);
+    });
+    document.getElementById('translate-btn').addEventListener('click', runTranslation);
+}
+
+function handleAudioFile(file) {
+    selectedAudioFile = file;
+    document.getElementById('audio-filename').textContent = `📎 ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+    document.getElementById('translate-btn').disabled = !apiConnected;
+    ['stage-asr','stage-tokens','stage-emotion','stage-gloss'].forEach(id => {
+        document.getElementById(id).className = 'pipeline-stage';
+    });
+}
+
+async function connectAPI() {
+    apiUrl = document.getElementById('api-url').value.trim().replace(/\/$/, '');
+    const statusEl = document.getElementById('api-status');
+    if (!apiUrl) { statusEl.innerHTML = '⚠️ Enter a URL'; return; }
+    statusEl.innerHTML = '<span class="processing-spinner"></span> Connecting...';
+    try {
+        const res = await fetch(`${apiUrl}/`, { 
+            method: 'GET', 
+            signal: AbortSignal.timeout(10000),
+            headers: { "ngrok-skip-browser-warning": "69420" }
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            apiConnected = true;
+            statusEl.innerHTML = `✅ Connected — ${data.glosses_available} glosses`;
+            statusEl.style.color = '#4ade80';
+            document.getElementById('api-connect-btn').textContent = '✓ OK';
+            document.getElementById('api-connect-btn').style.background = '#334155';
+            if (selectedAudioFile) document.getElementById('translate-btn').disabled = false;
+        } else { throw new Error('Bad response'); }
+    } catch (err) {
+        apiConnected = false;
+        statusEl.innerHTML = `❌ ${err.message}`;
+        statusEl.style.color = '#f87171';
+    }
+}
+
+function setStage(id, state, content) {
+    document.getElementById(id).className = `pipeline-stage ${state}`;
+    if (content !== undefined)
+        document.getElementById(id.replace('stage-','') + '-output').innerHTML = content;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runTranslation() {
+    if (!apiConnected || !selectedAudioFile) return;
+    const btn = document.getElementById('translate-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="processing-spinner"></span> Processing...';
+    
+    setStage('stage-asr','active','<span class="processing-spinner"></span> Transcribing...');
+    setStage('stage-tokens','','—'); setStage('stage-emotion','','—'); setStage('stage-gloss','','—');
+    
+    try {
+        const fd = new FormData();
+        fd.append('audio', selectedAudioFile);
+        const res = await fetch(`${apiUrl}/translate`, { 
+            method: 'POST', 
+            body: fd,
+            headers: { "ngrok-skip-browser-warning": "69420" }
+        });
+        if (!res.ok) throw new Error(`Server ${res.status}`);
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        console.log('🎯 Result:', r);
+        
+        // ASR
+        setStage('stage-asr','done',`<span class="sinhala">${r.transcription}</span>`);
+        
+        // Tokens
+        await delay(300);
+        setStage('stage-tokens','active','<span class="processing-spinner"></span> Tokenizing...');
+        await delay(400);
+        setStage('stage-tokens','done', r.tokens.map(t => {
+            const p = r.pos_tags?.find(x => x.word === t);
+            return `<span class="token-tag">${t}${p ? ` <small style="opacity:.6">${p.tag}</small>`:''}</span>`;
+        }).join(''));
+        
+        // Emotion
+        await delay(300);
+        setStage('stage-emotion','active','<span class="processing-spinner"></span> Analyzing...');
+        await delay(400);
+        const emo = r.emotion;
+        const icons = {happy:'😄',sad:'😢',angry:'😡',neutral:'😐',fear:'😨',surprise:'😲'};
+        setStage('stage-emotion','done',
+            `<span class="emotion-badge emotion-${emo.emotion}">${icons[emo.emotion]||'🎭'} ${emo.emotion} (${Math.round(emo.confidence*100)}%)</span>`);
+        
+        // Glosses
+        await delay(300);
+        setStage('stage-gloss','active','<span class="processing-spinner"></span> Mapping...');
+        await delay(400);
+        let gh = r.glosses.map(g => `<span class="gloss-tag">${g}</span>`).join('');
+        if (r.unknown_tokens?.length) gh += '<br><small style="color:#94a3b8">Unknown: </small>' + r.unknown_tokens.map(u => `<span class="unknown-tag">${u}</span>`).join('');
+        if (!r.glosses.length) gh = '<span style="color:#fca5a5">No glosses found</span>';
+        setStage('stage-gloss','done', gh);
+        
+        // Auto-play
+        if (r.glosses.length) { initTimeline(r.glosses); }
+    } catch (err) {
+        console.error('Translation error:', err);
+        setStage('stage-asr','error',`❌ ${err.message}`);
+    } finally {
+        btn.disabled = false; btn.innerHTML = '🔄 Translate';
+    }
+}
+
+// ── TIMELINE CONTROLS ───────────────────────────────────────────────
+let currentTranslationGlosses = [];
+let currentTranslationIndex = 0;
+let isTimelinePlaying = false;
+let timelineTimeout = null;
+
+function setupTimelineUI() {
+    document.getElementById('tl-prev-btn').addEventListener('click', () => jumpToTimelineIndex(currentTranslationIndex - 1));
+    document.getElementById('tl-next-btn').addEventListener('click', () => jumpToTimelineIndex(currentTranslationIndex + 1));
+    document.getElementById('tl-play-pause-btn').addEventListener('click', toggleTimelinePlay);
+}
+
+function initTimeline(glosses) {
+    currentTranslationGlosses = glosses;
+    currentTranslationIndex = 0;
+    document.getElementById('timeline-controls').style.display = 'block';
+    
+    const container = document.getElementById('gloss-timeline');
+    container.innerHTML = glosses.map((g, i) => 
+        `<div class="timeline-pill" id="pill-${i}">${g}</div>`
+    ).join('');
+    
+    isTimelinePlaying = true;
+    document.getElementById('tl-play-pause-btn').innerHTML = '⏸ Pause';
+    playTimelineStep();
+}
+
+function toggleTimelinePlay() {
+    isTimelinePlaying = !isTimelinePlaying;
+    document.getElementById('tl-play-pause-btn').innerHTML = isTimelinePlaying ? '⏸ Pause' : '▶ Play';
+    if (isTimelinePlaying) {
+        if (currentTranslationIndex >= currentTranslationGlosses.length) currentTranslationIndex = 0;
+        playTimelineStep();
+    } else {
+        if (timelineTimeout) clearTimeout(timelineTimeout);
+    }
+}
+
+function jumpToTimelineIndex(index) {
+    if (index < 0 || index >= currentTranslationGlosses.length) return;
+    if (timelineTimeout) clearTimeout(timelineTimeout);
+    isTimelinePlaying = false;
+    document.getElementById('tl-play-pause-btn').innerHTML = '▶ Play';
+    currentTranslationIndex = index;
+    renderTimelineStep(currentTranslationIndex);
+}
+
+async function playTimelineStep() {
+    if (!isTimelinePlaying || currentTranslationIndex >= currentTranslationGlosses.length) {
+        if (currentTranslationIndex >= currentTranslationGlosses.length) {
+            isTimelinePlaying = false;
+            document.getElementById('tl-play-pause-btn').innerHTML = '▶ Play';
+            document.getElementById('current-sign').textContent = '✔️ Sequence Done';
+            resetPose();
+            updateTimelineUI(-1);
+        }
+        return;
+    }
+    
+    await renderTimelineStep(currentTranslationIndex);
+    
+    if (isTimelinePlaying) {
+        // Increased time gap for easier viewing (2500ms)
+        timelineTimeout = setTimeout(() => {
+            currentTranslationIndex++;
+            playTimelineStep();
+        }, 2500); 
+    }
+}
+
+async function renderTimelineStep(index) {
+    updateTimelineUI(index);
+    const gloss = currentTranslationGlosses[index];
+    document.getElementById('current-sign').textContent = gloss;
+    
+    const signData = await getSignData(gloss);
+    if (signData) {
+        resetPose(); 
+        await delay(200);
+        applySign({ gloss, components: signData });
+    } else {
+        document.getElementById('current-sign').textContent = `${gloss} ⚠️ (Not Found)`;
+    }
+}
+
+function updateTimelineUI(activeIndex) {
+    for (let i=0; i<currentTranslationGlosses.length; i++) {
+        const p = document.getElementById(`pill-${i}`);
+        if (p) {
+            if (i === activeIndex) p.classList.add('active');
+            else p.classList.remove('active');
+        }
+    }
+}
+
+async function getSignData(gloss) {
+    if (signPoseCache[gloss]) return signPoseCache[gloss];
+    try {
+        const res = await fetch(`signs/${gloss}.json`);
+        if (res.ok) { const d = await res.json(); signPoseCache[gloss] = d.components||d; return signPoseCache[gloss]; }
+    } catch(e) {}
+    return null;
+}
+
+function showError(msg) {
+    const el = document.getElementById('error-display');
+    el.className = 'error'; el.textContent = msg;
+}
+
+// ── RENDER LOOP ─────────────────────────────────────────────────────
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+init().catch(console.error);
+</script>
+</body>
+</html>
