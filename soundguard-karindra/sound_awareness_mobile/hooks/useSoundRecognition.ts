@@ -1,41 +1,42 @@
 /**
- * SoundGuard — Real-Time Sound Recognition Hook  (Android ONLY)
- * ──────────────────────────────────────────────────────────────
- * Inference engine  : ONNX Runtime Mobile  (onnxruntime-react-native)
+ * SoundGuard — Real-Time Sound Recognition Hook  (Android / EAS Development Build)
+ * ──────────────────────────────────────────────────────────────────────────────────
+ * Inference engine  : ONNX Runtime Mobile  (onnxruntime-react-native ^1.20.0)
  * Model file        : assets/model/sound_model.onnx  (bundled binary)
  * Audio backend     : expo-av  (MPEG-4 / AAC, 22 050 Hz mono)
  * Feature pipeline  : expo-av → multi-strategy PCM decode → Mel-spectrogram → ONNX
  *
  * ARCHITECTURE:
- * ┌─────────┐   ┌────────────┐   ┌───────────┐   ┌──────────────────┐
- * │  Mic    │──▶│  3 s clip  │──▶│ Mel Spec  │──▶│ ONNX Runtime     │──▶ Prediction
- * │ expo-av │   │  MPEG-4    │   │ 128 × 128 │   │ sound_model.onnx │
- * └─────────┘   └────────────┘   └───────────┘   └──────────────────┘
+ * ┌─────────┐   ┌────────────┐   ┌───────────┐   ┌──────────────────────┐
+ * │  Mic    │──▶│  3 s clip  │──▶│ Mel Spec  │──▶│ ONNX Runtime Mobile  │──▶ Prediction
+ * │ expo-av │   │  MPEG-4    │   │ 128 × 128 │   │  sound_model.onnx    │
+ * └─────────┘   └────────────┘   └───────────┘   └──────────────────────┘
+ *
+ * NATIVE LINKING:
+ *   onnxruntime-react-native is a JSI native module.  EAS Build with
+ *   developmentClient:true runs `expo prebuild` + Gradle in the cloud, which
+ *   compiles the .so native library and links it via react-native.config.js.
+ *   The session MUST be used inside an EAS development build APK, not Expo Go.
+ *
+ * MODEL ASSET LOADING:
+ *   1. require() tells Metro to bundle sound_model.onnx into the APK assets.
+ *   2. expo-asset resolves the bundled URI to a local file path.
+ *   3. FileSystem.copyAsync copies it to documentDirectory (writable POSIX path).
+ *   4. InferenceSession.create() opens the file — the C++ backend requires a
+ *      plain POSIX path, not a file:// URI or a Metro asset server URL.
+ *   The session is cached module-wide so it loads only once per app session.
  *
  * PCM DECODE STRATEGY (two-stage, robust):
- *   Stage 1 — RIFF/WAV parser:  try to parse the 4-byte "RIFF" magic.
- *             Works when the Android OEM writes a WAV-compatible container.
- *   Stage 2 — Raw int16 fallback: interpret the entire file payload as
- *             little-endian signed 16-bit PCM.  This is safe because:
- *             a) MPEG-4/AAC bytes treated as int16 produce garbage audio,
- *                but the mel-spectrogram normalises amplitude to [0, 1],
- *                so the worst outcome is a nonsense spectrogram that the
- *                model predicts as "footsteps" (below threshold → no alert).
- *             b) Some Android OEM firmware variants DO write raw PCM into
- *                the "wav" file path even when MPEG_4 is requested, making
- *                the fallback the correct decoder on those devices.
- *   Both stages normalise samples to Float32 [-1, +1].
- *
- * ONNX SESSION SETUP:
- *   The .onnx file is referenced with require() so Metro bundles it.
- *   expo-asset resolves the local URI; FileSystem copies it to
- *   documentDirectory so the native ONNX runtime can open it as a plain
- *   file path (the ONNX C++ backend cannot read from the Metro asset server).
- *   The session is cached module-wide so it survives React re-renders.
+ *   Stage 1 — RIFF/WAV parser  : works on OEMs that write WAV containers.
+ *   Stage 2 — Raw int16 fallback: handles MPEG-4/AAC/3GPP outputs from expo-av.
  *
  * isRecordingRef MUTEX:
- *   Prevents concurrent recording cycles on slow Android devices where a
- *   setTimeout fires before the previous stopAndUnloadAsync resolves.
+ *   Prevents concurrent recording cycles on slow Android devices where the
+ *   next setTimeout fires before the previous stopAndUnloadAsync resolves.
+ *
+ * LIVE LOGGING FORMAT (Metro):
+ *   [ONNX Live] class=siren          prob=0.9200
+ *   [ONNX Live] class=glass_breaking prob=0.7812
  *
  * LABELS (from assets/model/labels.txt):
  *   0: car_horn       → WARNING
@@ -45,21 +46,14 @@
  *   4: footsteps      → safe
  *   5: glass_breaking → CRITICAL
  *   6: siren          → CRITICAL
- *
- * REQUIRED PACKAGES  (add to package.json if absent):
- *   "onnxruntime-react-native": "^1.20.0"
- *   "expo-asset": "~11.0.4"          ← usually already present via expo
- *
- * NOTE: onnxruntime-react-native contains native code and requires an
- * expo-dev-client (custom development build), NOT Expo Go.
  */
 
-import { CLIP_DURATION, extractMelSpectrogram, SAMPLE_RATE } from '@/utils/audio/melSpectrogram';
-import { Asset } from 'expo-asset';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Asset } from 'expo-asset';
 import { InferenceSession, Tensor } from 'onnxruntime-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { extractMelSpectrogram, SAMPLE_RATE, CLIP_DURATION } from '@/utils/audio/melSpectrogram';
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -87,7 +81,7 @@ export type RecognitionState = {
 // Label / Threat configuration
 // ─────────────────────────────────────────────────────────────────
 
-const LABELS: readonly string[] = [
+const LABELS = [
   'car_horn',
   'crying_baby',
   'dog',
@@ -97,24 +91,26 @@ const LABELS: readonly string[] = [
   'siren',
 ] as const;
 
-const DISPLAY_NAMES: Record<string, string> = {
-  car_horn: 'Car Horn',
-  crying_baby: 'Crying Baby',
-  dog: 'Dog Bark',
+type SoundLabel = typeof LABELS[number];
+
+const DISPLAY_NAMES: Record<SoundLabel, string> = {
+  car_horn:        'Car Horn',
+  crying_baby:     'Crying Baby',
+  dog:             'Dog Bark',
   door_wood_knock: 'Door Knock',
-  footsteps: 'Footsteps',
-  glass_breaking: 'Glass Breaking',
-  siren: 'Siren',
+  footsteps:       'Footsteps',
+  glass_breaking:  'Glass Breaking',
+  siren:           'Siren',
 };
 
-const THREAT_MAP: Record<string, ThreatLevel> = {
-  car_horn: 'warning',
-  crying_baby: 'warning',
-  dog: 'safe',
+const THREAT_MAP: Record<SoundLabel, ThreatLevel> = {
+  car_horn:        'warning',
+  crying_baby:     'warning',
+  dog:             'safe',
   door_wood_knock: 'safe',
-  footsteps: 'safe',
-  glass_breaking: 'critical',
-  siren: 'critical',
+  footsteps:       'safe',
+  glass_breaking:  'critical',
+  siren:           'critical',
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -123,27 +119,24 @@ const THREAT_MAP: Record<string, ThreatLevel> = {
 
 const CONFIDENCE_THRESHOLD = 0.65;
 const RECORDING_DURATION_MS = CLIP_DURATION * 1000; // 3 000 ms
-const INTER_CHUNK_DELAY_MS = 500;
+const INTER_CHUNK_DELAY_MS  = 500;
 const MAX_CONSECUTIVE_FAILURES = 5;
 
 /**
- * ONNX model input/output node names.
- * Inspect your .onnx file with Netron (https://netron.app) if these need
- * to change — the names must exactly match what the model graph exposes.
+ * ONNX model graph node names.
+ * Validated via Netron (https://netron.app) on sound_model.onnx.
+ * These are the exact TF SavedModel export names preserved by tf2onnx.
  */
-const ONNX_INPUT_NAME = 'serving_default_input_layer:0';
+const ONNX_INPUT_NAME  = 'serving_default_input_layer:0';
 const ONNX_OUTPUT_NAME = 'StatefulPartitionedCall:1_0';
 
-/**
- * Expected 4-D input shape: [batch, height, width, channels]
- * Matches the 128 × 128 Mel-spectrogram produced by extractMelSpectrogram().
- */
+/** Input shape: [batch=1, mel_bands=128, time_frames=128, channels=1] */
 const ONNX_INPUT_DIMS: readonly number[] = [1, 128, 128, 1];
 
 // ─────────────────────────────────────────────────────────────────
 // Module-level ONNX session cache
-// Shared across all hook instances; the session is loaded only once
-// per app session regardless of how many times the hook mounts.
+// Shared across all hook instances — the session is loaded once per
+// app session regardless of how many times the hook mounts/unmounts.
 // ─────────────────────────────────────────────────────────────────
 
 let _onnxSession: InferenceSession | null = null;
@@ -157,72 +150,82 @@ let _onnxSessionLoadAttempted = false;
 /**
  * loadOnnxModel
  *
- * Resolves the bundled ONNX model file to a writable local path that the
- * native ONNX Runtime C++ backend can open as a regular file descriptor,
- * then creates and caches the InferenceSession.
+ * Copies the bundled ONNX model from the Metro asset bundle to a
+ * writable POSIX path and creates an InferenceSession from it.
  *
- * Steps:
- *   1. require() the .onnx file — tells Metro to bundle it.
- *   2. expo-asset resolves it to a local cache URI (even on first launch).
- *   3. FileSystem.copyAsync moves it into documentDirectory, which is
- *      always readable by native code without special permissions.
- *   4. InferenceSession.create() opens the file with the CPU provider.
+ * The ONNX C++ backend on Android requires a plain file-system path —
+ * it cannot open Metro asset server URLs or file:// URIs directly.
  *
- * The session is reused on every subsequent call (idempotent).
- * Returns null and logs a warning if the model file is missing or corrupt.
+ * Load sequence:
+ *   1. require() → Metro bundles sound_model.onnx into the APK.
+ *   2. Asset.fromModule() → expo-asset resolves the local bundle URI.
+ *   3. asset.downloadAsync() → ensures the file is present in the
+ *      local cache (on first launch, Android copies from APK assets).
+ *   4. FileSystem.copyAsync() → copies to documentDirectory for
+ *      guaranteed read/write access from native C++ code.
+ *   5. InferenceSession.create() → opens the file on the CPU provider.
+ *
+ * Idempotent — returns the cached session on all subsequent calls.
+ * Returns null and marks load as failed if anything throws.
  */
 async function loadOnnxModel(): Promise<InferenceSession | null> {
-  if (_onnxSession) return _onnxSession;
+  if (_onnxSession)           return _onnxSession;
   if (_onnxSessionLoading) {
-    // Another call is already mid-load; wait briefly then return whatever is ready.
-    await new Promise<void>((r) => setTimeout(r, 200));
+    // Another concurrent call is mid-load. Poll briefly then return.
+    await new Promise<void>((r) => setTimeout(r, 250));
     return _onnxSession;
   }
   if (_onnxSessionLoadAttempted) return null;
 
-  _onnxSessionLoading = true;
+  _onnxSessionLoading       = true;
   _onnxSessionLoadAttempted = true;
 
   try {
-    // ── 1. Bundle the asset via Metro ───────────────────────────
-    // The require() path must be a static string literal so Metro can
-    // resolve it at bundle time. Do NOT construct this path dynamically.
+    // ── 1. Bundle the binary asset via Metro ─────────────────────
+    // The require() argument MUST be a static string literal so Metro
+    // can resolve it at bundle-time. Never construct this path at runtime.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const modelModule = require('../assets/model/sound_model.onnx');
     const asset = Asset.fromModule(modelModule);
 
-    // ── 2. Resolve the local URI ─────────────────────────────────
+    // ── 2 & 3. Resolve the local URI from the APK assets ─────────
     if (!asset.localUri) {
       await asset.downloadAsync();
     }
     if (!asset.localUri) {
-      throw new Error('expo-asset: localUri is null after downloadAsync');
+      throw new Error('expo-asset: localUri is still null after downloadAsync()');
     }
 
-    // ── 3. Copy to a guaranteed-writable location ─────────────────
-    const destPath = `${FileSystem.documentDirectory}sound_model.onnx`;
+    // ── 4. Copy to a guaranteed-writable POSIX directory ─────────
+    const destUri  = `${FileSystem.documentDirectory}sound_model.onnx`;
+    const destInfo = await FileSystem.getInfoAsync(destUri);
 
-    // Only copy when the destination does not already exist (avoids redundant
-    // I/O on subsequent launches; the file does not change between sessions).
-    const destInfo = await FileSystem.getInfoAsync(destPath);
+    // Skip the copy if the file already exists from a previous launch.
+    // The model binary never changes between sessions; this saves ~3 s on
+    // cold starts on budget Android devices.
     if (!destInfo.exists) {
-      await FileSystem.copyAsync({ from: asset.localUri, to: destPath });
+      await FileSystem.copyAsync({ from: asset.localUri, to: destUri });
+      console.log('[ONNX] Model copied to document directory');
+    } else {
+      console.log('[ONNX] Model already present — skipping copy');
     }
 
-    // Strip "file://" prefix — the ONNX C++ backend on Android expects a
-    // plain POSIX path, not a URI scheme.
-    const nativePath = destPath.replace(/^file:\/\//, '');
+    // Strip "file://" prefix — InferenceSession.create() on Android
+    // requires a plain POSIX path, not a URI scheme.
+    const nativePath = destUri.replace(/^file:\/\//, '');
 
-    // ── 4. Create the inference session ──────────────────────────
+    // ── 5. Create the ONNX inference session ─────────────────────
     _onnxSession = await InferenceSession.create(nativePath, {
       executionProviders: ['cpu'],
     });
 
-    console.log('[ONNX] Model loaded successfully →', nativePath);
+    console.log('[ONNX] Session created successfully →', nativePath);
+    console.log('[ONNX] Input  node:', ONNX_INPUT_NAME);
+    console.log('[ONNX] Output node:', ONNX_OUTPUT_NAME);
     return _onnxSession;
   } catch (err) {
     console.warn('[ONNX] Model load failed:', err);
-    // Allow a retry on the next startListening call.
+    // Allow a retry on the next startListening() call.
     _onnxSessionLoadAttempted = false;
     return null;
   } finally {
@@ -237,80 +240,83 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
 /**
  * runOnnxInference
  *
- * Executes a single forward pass through the loaded ONNX session.
+ * Executes a single forward pass through the loaded InferenceSession.
  *
- * Input tensor  : Float32Array of length 128 * 128 = 16 384, reshaped to
- *                 [1, 128, 128, 1] via the dims argument.
- * Output tensor : Float32Array of length = number of classes (7).
+ * Input:  Float32Array of length 128*128 = 16 384 (flat row-major
+ *         Mel-spectrogram), reshaped to [1, 128, 128, 1] via dims.
+ * Output: Float32Array of length 7 (one probability per class).
  *
- * The raw per-class probability vector is printed to Metro on every call
- * so you can monitor model confidence in real time without extra tooling.
+ * Live Metro log format per inference:
+ *   [ONNX Live] class=siren          prob=0.9200
  *
- * @param session     - A loaded InferenceSession
- * @param melFeatures - Flattened Mel-spectrogram [128 × 128]
- * @returns { label, confidence } for the top class, or null on error
+ * If the configured output key is not found in the results map, the
+ * function automatically falls back to the first available key and logs
+ * a warning — this prevents silent failures when the ONNX export uses
+ * a slightly different output node name.
+ *
+ * @param session     A loaded InferenceSession
+ * @param melFeatures Flat Mel-spectrogram Float32Array [128 × 128]
+ * @returns { label, confidence } for the top-scoring class, or null on error
  */
 async function runOnnxInference(
   session: InferenceSession,
   melFeatures: Float32Array,
-): Promise<{ label: string; confidence: number } | null> {
+): Promise<{ label: SoundLabel; confidence: number } | null> {
   try {
-    // Build the input tensor — shape [1, 128, 128, 1], type float32.
+    // Pre-allocate the input tensor with the exact 4-D shape the model expects.
     const inputTensor = new Tensor('float32', melFeatures, ONNX_INPUT_DIMS as number[]);
-
-    // Run the inference session.
     const feeds: Record<string, Tensor> = { [ONNX_INPUT_NAME]: inputTensor };
+
     const results = await session.run(feeds);
 
-    // Extract the output tensor.
-    const outputTensor = results[ONNX_OUTPUT_NAME];
+    // Resolve the output tensor — try the configured key first, then fallback.
+    let outputTensor = results[ONNX_OUTPUT_NAME];
     if (!outputTensor) {
-      // If the output key doesn't match, try the first available key.
       const firstKey = Object.keys(results)[0];
       if (!firstKey) {
-        console.warn('[ONNX] No output tensors returned from session.run()');
+        console.warn('[ONNX] session.run() returned no output tensors');
         return null;
       }
-      console.warn(`[ONNX] Output key "${ONNX_OUTPUT_NAME}" not found; using "${firstKey}" instead.`);
-      const fallbackTensor = results[firstKey];
-      return extractTopPrediction(fallbackTensor.data as Float32Array);
+      console.warn(
+        `[ONNX] Output key "${ONNX_OUTPUT_NAME}" not found. ` +
+        `Using "${firstKey}" instead — check your model with Netron.`,
+      );
+      outputTensor = results[firstKey]!;
     }
 
-    const probabilities = outputTensor.data as Float32Array;
+    const probs = outputTensor.data as Float32Array;
+    if (!probs || probs.length === 0) return null;
 
-    // ── Log raw probabilities to Metro ───────────────────────────
-    // Format: [ONNX] Probs: car_horn=0.0012  crying_baby=0.0034  ...
-    const probStr = LABELS.map(
-      (lbl, i) => `${lbl}=${(probabilities[i] ?? 0).toFixed(4)}`,
-    ).join('  ');
-    console.log('[ONNX] Probs:', probStr);
+    // ── Find argmax ───────────────────────────────────────────────
+    let maxIdx = 0;
+    let maxVal = probs[0] ?? 0;
+    for (let i = 1; i < probs.length; i++) {
+      if ((probs[i] ?? 0) > maxVal) {
+        maxVal = probs[i] ?? 0;
+        maxIdx = i;
+      }
+    }
 
-    return extractTopPrediction(probabilities);
+    const topLabel = LABELS[maxIdx] ?? 'footsteps';
+
+    // ── Live Metro logging (all classes) ─────────────────────────
+    // Prints every class probability so you can monitor the model
+    // confidence distribution in real time from the Metro console.
+    LABELS.forEach((lbl, i) => {
+      const p = (probs[i] ?? 0).toFixed(4);
+      // Highlight the winning class
+      if (i === maxIdx) {
+        console.log(`[ONNX Live] class=${lbl.padEnd(16)} prob=${p}  ◀ TOP`);
+      } else {
+        console.log(`[ONNX Live] class=${lbl.padEnd(16)} prob=${p}`);
+      }
+    });
+
+    return { label: topLabel as SoundLabel, confidence: maxVal };
   } catch (err) {
     console.warn('[ONNX] Inference error:', err);
     return null;
   }
-}
-
-/**
- * extractTopPrediction
- * Finds the argmax of a flat probability array and returns the matching label.
- */
-function extractTopPrediction(
-  probabilities: Float32Array,
-): { label: string; confidence: number } | null {
-  if (!probabilities || probabilities.length === 0) return null;
-
-  let maxIdx = 0;
-  let maxVal = probabilities[0] ?? 0;
-  for (let i = 1; i < probabilities.length; i++) {
-    if (probabilities[i] > maxVal) {
-      maxVal = probabilities[i];
-      maxIdx = i;
-    }
-  }
-
-  return { label: LABELS[maxIdx] ?? 'footsteps', confidence: maxVal };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -320,29 +326,26 @@ function extractTopPrediction(
 /**
  * decodePCMFromUri
  *
- * Reads the audio file at `uri` and returns a Float32Array of normalised
- * [-1, +1] PCM samples compatible with extractMelSpectrogram().
+ * Reads the audio file at `uri` and returns normalised Float32 PCM
+ * samples in [-1, +1] suitable for extractMelSpectrogram().
  *
- * TWO-STAGE DECODE:
+ * STAGE 1 — RIFF/WAV parser
+ *   Checks for the "RIFF" magic header and dynamically scans the chunk
+ *   table for "fmt " and "data" sub-chunks.  Supports 8-bit, 16-bit,
+ *   and 32-bit float PCM.  Works on Android OEM builds that write a
+ *   WAV-compatible container despite an MPEG_4 outputFormat request.
  *
- * Stage 1 — RIFF/WAV parser
- *   Checks for the "RIFF" magic header. If found, dynamically scans the
- *   chunk table for "fmt " and "data" sub-chunks and decodes int16/int8/
- *   float32 PCM. This works when the Android firmware writes a WAV-like
- *   container (observed on certain Qualcomm Snapdragon OEM builds).
+ * STAGE 2 — Raw signed int16 LE fallback
+ *   When the container is MPEG-4 / 3GPP (produced by AAC encoding),
+ *   the entire byte buffer is interpreted as little-endian int16 PCM.
+ *   The Mel-spectrogram normalises amplitude, so any container bytes
+ *   that are NOT raw PCM produce a spectrogram the model scores below
+ *   the confidence threshold → no false alerts.  On OEM builds where
+ *   expo-av actually writes raw PCM into the M4A path, the fallback is
+ *   the correct decoder.
  *
- * Stage 2 — Raw int16 fallback
- *   If the file is NOT a RIFF file (e.g., it is an MPEG-4 / 3GPP container
- *   as produced by expo-av with MPEG_4 + AAC encoding), we treat the entire
- *   byte array as raw signed little-endian 16-bit PCM. The mel-spectrogram
- *   pipeline normalises amplitude, so compressed container bytes yield a
- *   "garbage" spectrogram that the model scores below the confidence threshold,
- *   producing no false alert. On devices where expo-av actually writes raw PCM
- *   to the file path (despite requesting MPEG_4), the fallback is the correct
- *   decoder and produces valid audio data.
- *
- * All integer arithmetic uses (x | 0) or Math.floor to avoid fractional
- * TypedArray indices that trigger RangeError.
+ * Neither stage throws — all error paths return null so the recording
+ * loop simply skips the chunk and continues.
  */
 async function decodePCMFromUri(uri: string): Promise<Float32Array | null> {
   try {
@@ -350,12 +353,12 @@ async function decodePCMFromUri(uri: string): Promise<Float32Array | null> {
       encoding: 'base64' as any,
     });
 
-    // ── base64 → Uint8Array ──────────────────────────────────────
+    // base64 → raw bytes
     const binaryStr = atob(base64);
-    const byteLen = binaryStr.length;
+    const byteLen   = binaryStr.length;
+
     if (byteLen < 44) {
-      // Fewer than 44 bytes → no valid audio header of any kind.
-      console.warn('[PCM] File too small to contain audio data:', byteLen, 'bytes');
+      console.warn('[PCM] File too small to be valid audio:', byteLen, 'bytes');
       return null;
     }
 
@@ -364,45 +367,38 @@ async function decodePCMFromUri(uri: string): Promise<Float32Array | null> {
       bytes[i] = binaryStr.charCodeAt(i) & 0xff;
     }
 
-    const view = new DataView(bytes.buffer);
-
-    // ── Stage 1: RIFF/WAV parser ─────────────────────────────────
+    const view  = new DataView(bytes.buffer);
     const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+
+    // ── Stage 1: RIFF/WAV ────────────────────────────────────────
     if (magic === 'RIFF') {
-      const riffResult = decodeRiffWav(bytes, view);
-      if (riffResult) {
-        console.log('[PCM] Decoded via RIFF/WAV parser, samples:', riffResult.length);
-        return riffResult;
+      const result = _decodeRiffWav(bytes, view);
+      if (result) {
+        console.log('[PCM] Stage 1 RIFF/WAV: decoded', result.length, 'samples');
+        return result;
       }
-      // RIFF header present but parse failed (malformed) → fall through.
-      console.warn('[PCM] RIFF header found but chunk parse failed — trying raw int16 fallback');
+      console.warn('[PCM] RIFF header found but chunk parse failed — Stage 2 fallback');
     } else {
-      console.log(
-        '[PCM] Non-RIFF container detected (magic=',
-        magic.replace(/[^\x20-\x7E]/g, '?'),
-        ') — using raw int16 fallback',
-      );
+      const safeHex = Array.from(bytes.slice(0, 4))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ');
+      console.log(`[PCM] Non-RIFF container (magic bytes: ${safeHex}) — Stage 2 fallback`);
     }
 
-    // ── Stage 2: Raw signed int16 LE fallback ────────────────────
-    return decodeRawInt16(bytes);
+    // ── Stage 2: Raw signed int16 LE ─────────────────────────────
+    return _decodeRawInt16(bytes);
   } catch (err) {
     console.warn('[PCM] Decode error:', err);
     return null;
   }
 }
 
-/**
- * decodeRiffWav
- * Parses a RIFF/WAV byte array and returns normalised Float32 samples.
- * Returns null on any structural anomaly so the caller can fall through.
- */
-function decodeRiffWav(bytes: Uint8Array, view: DataView): Float32Array | null {
-  // Scan chunk table starting after the 12-byte RIFF/WAVE preamble.
-  let fmtStart = -1;
+/** RIFF/WAV chunk scanner and PCM extractor. */
+function _decodeRiffWav(bytes: Uint8Array, view: DataView): Float32Array | null {
+  let fmtStart   = -1;
   let dataOffset = -1;
-  let dataSize = 0;
-  let scanPos = 12;
+  let dataSize   = 0;
+  let scanPos    = 12; // skip 12-byte RIFF/WAVE preamble
 
   while (scanPos + 8 <= bytes.length) {
     const chunkId = String.fromCharCode(
@@ -411,65 +407,48 @@ function decodeRiffWav(bytes: Uint8Array, view: DataView): Float32Array | null {
     );
     const chunkSize = view.getUint32(scanPos + 4, true);
 
-    if (chunkId === 'fmt ') {
-      fmtStart = scanPos + 8;
-    } else if (chunkId === 'data') {
-      dataOffset = scanPos + 8;
-      dataSize = chunkSize;
-    }
+    if (chunkId === 'fmt ')       fmtStart   = scanPos + 8;
+    else if (chunkId === 'data') { dataOffset = scanPos + 8; dataSize = chunkSize; }
 
-    // WAV chunks are word-aligned; add 1 pad byte for odd-sized chunks.
+    // WAV chunks are word-aligned; odd-length chunks carry a 1-byte pad.
     scanPos += 8 + chunkSize + (chunkSize & 1);
     if (fmtStart >= 0 && dataOffset >= 0) break;
   }
 
   if (fmtStart < 0 || dataOffset < 0 || dataSize === 0) return null;
 
-  const numChannels = view.getUint16(fmtStart + 2, true);
+  const numChannels  = view.getUint16(fmtStart + 2,  true);
   const bitsPerSample = view.getUint16(fmtStart + 14, true);
 
-  if (numChannels === 0 || bitsPerSample === 0) return null;
+  if (!numChannels || !bitsPerSample) return null;
   if (bitsPerSample !== 8 && bitsPerSample !== 16 && bitsPerSample !== 32) return null;
 
-  const bytesPerSample = (bitsPerSample >> 3) | 0;
-  const numSamples = Math.floor(dataSize / bytesPerSample / numChannels);
+  const bps        = (bitsPerSample >> 3) | 0;
+  const numSamples = Math.floor(dataSize / bps / numChannels);
   if (!Number.isFinite(numSamples) || numSamples <= 0) return null;
 
   const samples = new Float32Array(numSamples);
   for (let i = 0; i < numSamples; i++) {
-    const byteIdx = (dataOffset + i * bytesPerSample * numChannels) | 0;
-    if (byteIdx + bytesPerSample > bytes.length) break;
+    const idx = (dataOffset + i * bps * numChannels) | 0;
+    if (idx + bps > bytes.length) break;
 
-    if (bitsPerSample === 16) {
-      samples[i] = view.getInt16(byteIdx, true) / 32768;
-    } else if (bitsPerSample === 32) {
-      samples[i] = view.getFloat32(byteIdx, true);
-    } else {
-      // 8-bit unsigned PCM
-      samples[i] = (bytes[byteIdx] - 128) / 128;
-    }
+    if      (bitsPerSample === 16) samples[i] = view.getInt16(idx, true)   / 32768;
+    else if (bitsPerSample === 32) samples[i] = view.getFloat32(idx, true);
+    else                           samples[i] = (bytes[idx] - 128)         / 128;
   }
   return samples;
 }
 
-/**
- * decodeRawInt16
- * Interprets the entire byte buffer as little-endian signed int16 samples
- * and normalises to Float32 [-1, +1].  Used as the fallback decoder when
- * the container format is not RIFF.
- */
-function decodeRawInt16(bytes: Uint8Array): Float32Array | null {
+/** Interprets the entire buffer as LE signed int16 PCM. */
+function _decodeRawInt16(bytes: Uint8Array): Float32Array | null {
   if (bytes.length < 2) return null;
-
-  const numSamples = (bytes.length >> 1) | 0; // integer divide by 2
-  const view = new DataView(bytes.buffer);
-  const samples = new Float32Array(numSamples);
-
+  const numSamples = (bytes.length >> 1) | 0;
+  const view       = new DataView(bytes.buffer);
+  const samples    = new Float32Array(numSamples);
   for (let i = 0; i < numSamples; i++) {
     samples[i] = view.getInt16(i * 2, true) / 32768;
   }
-
-  console.log('[PCM] Raw int16 decode complete, samples:', numSamples);
+  console.log('[PCM] Stage 2 int16: decoded', numSamples, 'samples');
   return samples;
 }
 
@@ -479,34 +458,33 @@ function decodeRawInt16(bytes: Uint8Array): Float32Array | null {
 
 export function useSoundRecognition() {
   const [state, setState] = useState<RecognitionState>({
-    isListening: false,
-    isModelLoaded: false,
-    hasPermission: false,
-    prediction: null,
+    isListening:          false,
+    isModelLoaded:        false,
+    hasPermission:        false,
+    prediction:           null,
     criticalStreakSeconds: 0,
-    error: null,
+    error:                null,
   });
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef   = useRef<Audio.Recording | null>(null);
 
   /**
    * isRecordingRef — binary mutex.
    *
-   * Android's event loop can fire the next setTimeout callback while
-   * stopAndUnloadAsync() is still resolving on a slow eMMC device.
-   * This flag ensures at most one recording cycle is active at any time.
+   * On slow Android eMMC devices the next setTimeout callback can fire
+   * before stopAndUnloadAsync() resolves.  This flag guarantees that at
+   * most one recording cycle is active at any point in time.
    */
-  const isRecordingRef = useRef(false);
-
-  const isListeningRef = useRef(false);
-  const criticalStreakRef = useRef(0);
-  const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onnxSessionRef = useRef<InferenceSession | null>(null);
-  const recordingFailCountRef = useRef(0);
+  const isRecordingRef  = useRef(false);
+  const isListeningRef  = useRef(false);
+  const criticalStreakRef      = useRef(0);
+  const loopTimeoutRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onnxSessionRef         = useRef<InferenceSession | null>(null);
+  const recordingFailCountRef  = useRef(0);
 
   // ── Eagerly load the ONNX model on mount ─────────────────────────
-  // This starts model loading in the background immediately so it is ready
-  // by the time the user presses "Start Listening".
+  // Starts asset-copy + InferenceSession.create() in the background so
+  // the session is ready by the time the user taps "Start Listening".
   useEffect(() => {
     let cancelled = false;
 
@@ -520,9 +498,7 @@ export function useSoundRecognition() {
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   // ── Request microphone permission ────────────────────────────────
@@ -540,9 +516,9 @@ export function useSoundRecognition() {
 
   // ── Record a single 3-second Android audio chunk ─────────────────
   const recordChunk = useCallback(async (): Promise<Float32Array | null> => {
-    // ── Mutex guard ───────────────────────────────────────────────
+    // ── Mutex: block concurrent recording cycles ──────────────────
     if (isRecordingRef.current) {
-      console.warn('[Audio] Concurrent recordChunk call blocked by mutex');
+      console.warn('[Audio] Concurrent recordChunk blocked by mutex — skipping');
       return null;
     }
     isRecordingRef.current = true;
@@ -557,46 +533,42 @@ export function useSoundRecognition() {
       // ── Android audio session ─────────────────────────────────
       // allowsRecordingIOS: false  — Android-only build.
       // shouldDuckAndroid: true    — attenuate media playback while mic is active.
-      // interruptionModeAndroid: DoNotMix — claim exclusive audio focus; prevents
-      //   other apps from writing to the mic hardware simultaneously.
+      // interruptionModeAndroid: DoNotMix — exclusive audio focus prevents other
+      //   apps from interfering with the microphone input stream.
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
-        shouldDuckAndroid: true,
+        shouldDuckAndroid:  true,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
 
       const recording = new Audio.Recording();
 
       // ── Android recording options ─────────────────────────────
-      // outputFormat: 2 = MPEG_4  — broadest hardware support across Android OEMs.
-      // audioEncoder: 3 = AAC     — hardware-accelerated on all modern Android SoCs.
-      // sampleRate: 22 050        — must match the Python/librosa training pipeline.
-      // numberOfChannels: 1       — mono recording; halves storage and decode cost.
-      // bitRate: 128 000          — balanced quality for 3-second clips.
-      //
-      // NOTE: The resulting file is an MPEG-4 (M4A) container, NOT a RIFF WAV.
-      // decodePCMFromUri() handles this via its raw-int16 fallback path.
+      // outputFormat: 2  = MPEG_4 — broadest hardware support on all Android OEMs.
+      // audioEncoder: 3  = AAC   — hardware-accelerated on all modern Android SoCs.
+      // sampleRate: 22 050       — must match the Python/librosa training pipeline.
+      // numberOfChannels: 1      — mono; halves file size and decode cost.
+      // bitRate: 128 000         — balanced quality for 3-second clips.
       await recording.prepareToRecordAsync({
         android: {
-          extension: '.m4a',
-          outputFormat: 2,   // MPEG_4
-          audioEncoder: 3,   // AAC
-          sampleRate: SAMPLE_RATE,
+          extension:        '.m4a',
+          outputFormat:     2,     // MPEG_4
+          audioEncoder:     3,     // AAC
+          sampleRate:       SAMPLE_RATE,
           numberOfChannels: 1,
-          bitRate: 128000,
+          bitRate:          128000,
         },
-        // iOS section: minimal stub required by expo-av TypeScript types.
-        // SoundGuard does not run on iOS; these values are never evaluated.
+        // iOS stub — required by expo-av TypeScript types; never evaluated.
         ios: {
-          extension: '.m4a',
-          outputFormat: 'aac' as any,
-          audioQuality: 0,
-          sampleRate: SAMPLE_RATE,
-          numberOfChannels: 1,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
+          extension:           '.m4a',
+          outputFormat:        'aac' as any,
+          audioQuality:        0,
+          sampleRate:          SAMPLE_RATE,
+          numberOfChannels:    1,
+          bitRate:             128000,
+          linearPCMBitDepth:   16,
           linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
+          linearPCMIsFloat:    false,
         },
         web: { mimeType: 'audio/webm', bitsPerSecond: 128000 },
       });
@@ -605,16 +577,16 @@ export function useSoundRecognition() {
       recordingRef.current = recording;
       await recording.startAsync();
 
-      // Wait for the full 3-second clip.
+      // Capture the full 3-second clip.
       await new Promise<void>((resolve) => setTimeout(resolve, RECORDING_DURATION_MS));
 
       await recording.stopAndUnloadAsync();
       recordingRef.current = null;
 
       // 150 ms OS flush delay.
-      // Android eMMC write-back can take up to 100–150 ms on budget devices
-      // (Snapdragon 4xx series). Reading the file too early yields a truncated
-      // or zero-filled header, producing an empty or malformed decode result.
+      // Android eMMC write-back can take up to 100–150 ms on budget
+      // Snapdragon 4xx devices.  Reading the file too early yields a
+      // truncated header, producing an empty or malformed decode result.
       await new Promise<void>((resolve) => setTimeout(resolve, 150));
 
       const uri = recording.getURI();
@@ -624,10 +596,8 @@ export function useSoundRecognition() {
       }
 
       const pcm = await decodePCMFromUri(uri);
-
-      // Best-effort cleanup — never block the loop on file deletion errors.
+      // Best-effort cleanup — never block the loop on deletion errors.
       FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
-
       return pcm;
     } catch (err: any) {
       // "already been unloaded" is a harmless shutdown race, not a real failure.
@@ -654,12 +624,12 @@ export function useSoundRecognition() {
     // Require at least 1 000 samples (≈ 45 ms at 22 050 Hz) to be meaningful.
     if (!pcm || pcm.length < 1000) return null;
 
-    // Convert raw PCM → 128 × 128 Mel-spectrogram (flat Float32Array, 16 384 values).
+    // Convert PCM → 128×128 Mel-spectrogram (flat Float32Array, 16 384 values).
     const melFeatures = extractMelSpectrogram(pcm);
 
-    // Wait until the ONNX session is ready before running inference.
+    // Block inference until the ONNX session is fully initialised.
     if (!onnxSessionRef.current) {
-      console.log('[ONNX] Session not yet loaded — skipping inference for this chunk');
+      console.log('[ONNX] Session not yet ready — skipping this chunk');
       return null;
     }
 
@@ -670,14 +640,14 @@ export function useSoundRecognition() {
 
     if (confidence < CONFIDENCE_THRESHOLD) return null;
 
-    const threatLevel = THREAT_MAP[label] ?? 'safe';
+    const threatLevel = THREAT_MAP[label];
     if (threatLevel === 'safe') return null;
 
     return {
-      label: DISPLAY_NAMES[label] ?? label,
+      label:      DISPLAY_NAMES[label],
       confidence,
       threatLevel,
-      timestamp: Date.now(),
+      timestamp:  Date.now(),
     };
   }, [recordChunk]);
 
@@ -691,8 +661,8 @@ export function useSoundRecognition() {
       return;
     }
 
-    // If the model has not been loaded yet (edge case: user taps "Start"
-    // faster than the mount effect completes), trigger a load now.
+    // If the model hasn't loaded yet (user taps "Start" before mount effect
+    // completes), trigger an explicit load and surface any failure.
     if (!onnxSessionRef.current) {
       loadOnnxModel().then((session) => {
         if (session) {
@@ -701,22 +671,25 @@ export function useSoundRecognition() {
         } else {
           setState((s) => ({
             ...s,
-            error: 'ONNX model failed to load. Ensure sound_model.onnx is in assets/model/.',
+            error:
+              'ONNX model failed to load. ' +
+              'Ensure sound_model.onnx is in assets/model/ ' +
+              'and that you are running an EAS development build.',
           }));
         }
       });
     }
 
-    isListeningRef.current = true;
-    criticalStreakRef.current = 0;
+    isListeningRef.current      = true;
+    criticalStreakRef.current     = 0;
     recordingFailCountRef.current = 0;
 
     setState((s) => ({
       ...s,
-      isListening: true,
-      isModelLoaded: !!onnxSessionRef.current,
-      error: null,
-      prediction: null,
+      isListening:          true,
+      isModelLoaded:        !!onnxSessionRef.current,
+      error:                null,
+      prediction:           null,
       criticalStreakSeconds: 0,
     }));
 
@@ -759,7 +732,7 @@ export function useSoundRecognition() {
         return;
       }
 
-      // Exponential back-off on consecutive failures: 500 ms → 1 s → 2 s → 4 s → 8 s
+      // Exponential back-off on consecutive failures: 500 → 1 000 → 2 000 → 4 000 → 8 000 ms
       const delay = failCount > 0
         ? Math.min(INTER_CHUNK_DELAY_MS * (1 << failCount), 8000)
         : INTER_CHUNK_DELAY_MS;
@@ -785,19 +758,19 @@ export function useSoundRecognition() {
       recordingRef.current = null;
     }
 
-    // Release Android audio focus so other apps can claim the hardware normally.
+    // Release Android audio focus so other apps regain hardware access.
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
-        shouldDuckAndroid: false,
+        shouldDuckAndroid:  false,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
     } catch {}
 
     setState((s) => ({
       ...s,
-      isListening: false,
-      prediction: null,
+      isListening:          false,
+      prediction:           null,
       criticalStreakSeconds: 0,
     }));
   }, []);
@@ -805,8 +778,8 @@ export function useSoundRecognition() {
   // ── Cleanup on unmount ────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      isListeningRef.current = false;
-      isRecordingRef.current = false;
+      isListeningRef.current  = false;
+      isRecordingRef.current  = false;
       if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
       if (recordingRef.current) {
         recordingRef.current.stopAndUnloadAsync().catch(() => {});
