@@ -19,12 +19,34 @@ export interface TrackedHand {
 
 /**
  * One frame of tracking output. This is the unit that sign recordings and
- * DTW comparison will operate on — kept plain-JSON-serialisable on purpose
- * so sequences can be saved as reference recordings and replayed.
+ * DTW comparison operate on — kept plain-JSON-serialisable on purpose so
+ * sequences can be saved as reference recordings and replayed.
  */
 export interface HandFrame {
   timestampMs: number
   hands: TrackedHand[]
+}
+
+/**
+ * A recorded sign: a named sequence of frames with timestamps relative to
+ * the recording start (first frame ≈ 0). We store raw image-normalised
+ * landmarks — pose normalisation happens at comparison time, so the
+ * normalisation strategy can evolve without re-recording references.
+ */
+export interface SignRecording {
+  id: string
+  /** Sign gloss, uppercase — e.g. "ME", aligned with the avatar's gloss names. */
+  gloss: string
+  /** Who performed it (team member for now; School for the Deaf later). */
+  signer: string
+  createdAt: string
+  durationMs: number
+  /** Average capture rate, frames per second. */
+  fps: number
+  /** Camera resolution the landmarks were captured at (for replay aspect). */
+  videoWidth: number
+  videoHeight: number
+  frames: HandFrame[]
 }
 
 export function toHandFrame(result: HandLandmarkerResult, timestampMs: number): HandFrame {
@@ -36,4 +58,10 @@ export function toHandFrame(result: HandLandmarkerResult, timestampMs: number): 
       landmarks: landmarks.map(({ x, y, z }) => ({ x, y, z })),
     })),
   }
+}
+
+/** Share of frames in which at least one hand was tracked, 0–1. */
+export function handCoverage(frames: HandFrame[]): number {
+  if (frames.length === 0) return 0
+  return frames.filter((f) => f.hands.length > 0).length / frames.length
 }
