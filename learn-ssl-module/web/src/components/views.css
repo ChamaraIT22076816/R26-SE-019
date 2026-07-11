@@ -1,0 +1,424 @@
+/* ---- camera stage & bar (shared by Practice and Record) ---- */
+
+.camera-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.camera-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #05070f;
+}
+
+.camera-stage video,
+.camera-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror both layers together so the overlay stays aligned with the video. */
+  transform: scaleX(-1);
+}
+
+.camera-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(ellipse at center, rgba(34, 211, 238, 0.06), transparent 70%);
+}
+
+.camera-hint {
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.camera-error {
+  max-width: 420px;
+  margin: 0;
+  color: var(--danger);
+}
+
+.camera-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  min-height: 58px;
+}
+
+.hand-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hand-chip {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.hand-chip-empty {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
+.camera-stats {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ---- record view ---- */
+
+.record-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .record-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.record-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.record-panel h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.gloss-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hint-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.saved-flash {
+  color: var(--accent-2);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rec-facts {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 15, 0.35);
+}
+
+.countdown-overlay span {
+  font: 800 120px var(--sans);
+  color: #fff;
+  text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+}
+
+.rec-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  font: 700 13px var(--mono);
+  color: #fff;
+  background: rgba(220, 38, 38, 0.85);
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.rec-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rec-progress > div {
+  height: 100%;
+  background: #ef4444;
+}
+
+/* ---- library ---- */
+
+.library-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.library-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.library-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.library-count {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.library-head .btn {
+  margin-left: auto;
+}
+
+.rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.rec-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.rec-gloss {
+  font: 700 16px var(--mono);
+}
+
+.rec-meta {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.rec-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.rec-actions .btn {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.badge {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin-left: 8px;
+  vertical-align: 2px;
+}
+
+.rec-player {
+  flex-basis: 100%;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 30px 10px;
+  margin: 0;
+}
+
+/* ---- graded practice result ---- */
+
+.result-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.score-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.score-badge .ring-track {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 10;
+}
+
+.score-badge .ring-value {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 700ms ease;
+}
+
+.score-badge .ring-score {
+  font: 700 34px var(--sans);
+  fill: var(--text);
+}
+
+.score-badge.good .ring-value {
+  stroke: var(--accent-2);
+}
+.score-badge.ok .ring-value {
+  stroke: #fbbf24;
+}
+.score-badge.low .ring-value {
+  stroke: var(--danger);
+}
+
+.score-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.hint-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.finger-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finger-chip {
+  font: 600 13px var(--sans);
+  color: #fbbf24;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 12px;
+  text-transform: capitalize;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.compare-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.reference-preview {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+/* ---- skeleton player ---- */
+
+.skeleton-player {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-player canvas {
+  width: 100%;
+  border-radius: 10px;
+  background: #05070f;
+  border: 1px solid var(--border);
+}
+
+.skeleton-player canvas.mirrored {
+  transform: scaleX(-1);
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-controls .btn {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.player-controls input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 60px;
+}
+
+.player-time {
+  font: 12px var(--mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
