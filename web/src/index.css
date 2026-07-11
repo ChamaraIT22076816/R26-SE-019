@@ -1,0 +1,70 @@
+:root {
+  --bg: #0b1020;
+  --surface: #131a2e;
+  --surface-2: #1b2440;
+  --border: #26304f;
+  --text: #e2e8f0;
+  --text-dim: #8ea0c0;
+  --accent: #22d3ee; /* cyan — also the left-hand overlay colour */
+  --accent-2: #a3e635; /* lime — right-hand overlay colour */
+  --danger: #f87171;
+  --radius: 14px;
+  --sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font: 16px/1.5 var(--sans);
+  color: var(--text);
+  background:
+    radial-gradient(1000px 500px at 70% -10%, rgba(34, 211, 238, 0.08), transparent),
+    radial-gradient(800px 400px at 10% 110%, rgba(163, 230, 53, 0.05), transparent),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+#root {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.app-header h1 {
+  margin: 2px 0 6px;
+  font-size: 34px;
+  letter-spacing: -0.5px;
+}
+
+.app-kicker {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+}
+
+.app-sub {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.app-footer {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
