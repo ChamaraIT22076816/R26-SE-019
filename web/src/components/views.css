@@ -287,6 +287,100 @@
   margin: 0;
 }
 
+/* ---- graded practice result ---- */
+
+.result-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.score-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.score-badge .ring-track {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 10;
+}
+
+.score-badge .ring-value {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 700ms ease;
+}
+
+.score-badge .ring-score {
+  font: 700 34px var(--sans);
+  fill: var(--text);
+}
+
+.score-badge.good .ring-value {
+  stroke: var(--accent-2);
+}
+.score-badge.ok .ring-value {
+  stroke: #fbbf24;
+}
+.score-badge.low .ring-value {
+  stroke: var(--danger);
+}
+
+.score-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.hint-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.finger-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finger-chip {
+  font: 600 13px var(--sans);
+  color: #fbbf24;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 12px;
+  text-transform: capitalize;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.compare-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.reference-preview {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
 /* ---- skeleton player ---- */
 
 .skeleton-player {

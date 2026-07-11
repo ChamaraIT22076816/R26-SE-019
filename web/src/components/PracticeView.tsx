@@ -1,54 +1,335 @@
+import { useEffect, useRef, useState } from 'react'
 import { useHandTracking } from '../vision/useHandTracking'
-import { HAND_COLORS } from '../vision/drawing'
+import type { HandFrame, SignRecording } from '../vision/types'
+import { listRecordings } from '../storage/recordingStore'
+import { loadBundledRecordings } from '../storage/bundledReferences'
+import { scoreAttempt } from '../scoring/score'
+import type { ScoreResult } from '../scoring/score'
+import { FINGER_LABEL } from '../scoring/landmarks'
+import type { Finger } from '../scoring/landmarks'
 import { CameraStage } from './CameraStage'
+import { SkeletonPlayer } from './SkeletonPlayer'
+import { ScoreBadge } from './ScoreBadge'
 
-/** Free practice: live hand tracking with FPS / latency stats. DTW scoring lands here next. */
+const COUNTDOWN_S = 3
+
+type Phase = 'idle' | 'countdown' | 'recording' | 'result'
+
+/** Pick the most recent reference recording for each gloss. */
+function newestPerGloss(recs: SignRecording[]): SignRecording[] {
+  const byGloss = new Map<string, SignRecording>()
+  for (const r of [...recs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+    if (!byGloss.has(r.gloss)) byGloss.set(r.gloss, r)
+  }
+  return [...byGloss.values()].sort((a, b) => a.gloss.localeCompare(b.gloss))
+}
+
+/** Top distinct fingers to correct, from the ranked per-joint deviations. */
+function topFingers(result: ScoreResult): Finger[] {
+  const seen: Finger[] = []
+  for (const j of result.worstJoints) {
+    if (j.finger === 'wrist') continue
+    if (!seen.includes(j.finger)) seen.push(j.finger)
+    if (seen.length === 3) break
+  }
+  return seen
+}
+
+/**
+ * Graded practice: choose a sign, watch the reference, record an attempt, and
+ * get a DTW match score with corrective hints and a side-by-side replay.
+ */
 export function PracticeView() {
-  const { videoRef, canvasRef, status, error, stats, hands, start, stop } = useHandTracking()
+  const [references, setReferences] = useState<SignRecording[]>([])
+  const [selected, setSelected] = useState<SignRecording | null>(null)
+  const [phase, setPhaseState] = useState<Phase>('idle')
+  const [count, setCount] = useState(COUNTDOWN_S)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [result, setResult] = useState<ScoreResult | null>(null)
+  const [attempt, setAttempt] = useState<SignRecording | null>(null)
+
+  const phaseRef = useRef<Phase>('idle')
+  const setPhase = (p: Phase) => {
+    phaseRef.current = p
+    setPhaseState(p)
+  }
+  const selectedRef = useRef<SignRecording | null>(null)
+  selectedRef.current = selected
+  const framesRef = useRef<HandFrame[]>([])
+  const startTsRef = useRef<number | null>(null)
+  const countdownRef = useRef(0)
+
+  // Capture a bit longer than the reference so a slightly slower attempt fits.
+  const captureMs = selected ? Math.max(selected.durationMs + 1500, 2500) : 3500
+
+  const tracking = useHandTracking((frame) => {
+    if (phaseRef.current !== 'recording') return
+    if (startTsRef.current === null) startTsRef.current = frame.timestampMs
+    const rel = frame.timestampMs - startTsRef.current
+    framesRef.current.push({ ...frame, timestampMs: rel })
+    setElapsedMs(rel)
+    if (rel >= captureMs) finishRecording()
+  })
+
+  useEffect(() => {
+    void (async () => {
+      const [loc, bun] = await Promise.all([listRecordings(), loadBundledRecordings()])
+      setReferences(newestPerGloss([...loc, ...bun]))
+    })()
+  }, [])
+
+  // Abandon a take if the camera stops mid-recording.
+  useEffect(() => {
+    if (
+      tracking.status !== 'running' &&
+      (phaseRef.current === 'countdown' || phaseRef.current === 'recording')
+    ) {
+      window.clearInterval(countdownRef.current)
+      setPhase('idle')
+    }
+  }, [tracking.status])
+
+  useEffect(() => () => window.clearInterval(countdownRef.current), [])
+
+  function beginCountdown() {
+    if (tracking.status !== 'running' || !selectedRef.current) return
+    setResult(null)
+    setAttempt(null)
+    setCount(COUNTDOWN_S)
+    setPhase('countdown')
+    countdownRef.current = window.setInterval(() => {
+      setCount((c) => {
+        if (c <= 1) {
+          window.clearInterval(countdownRef.current)
+          framesRef.current = []
+          startTsRef.current = null
+          setElapsedMs(0)
+          setPhase('recording')
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+  }
+
+  function cancelCountdown() {
+    window.clearInterval(countdownRef.current)
+    setPhase('idle')
+  }
+
+  function finishRecording() {
+    if (phaseRef.current !== 'recording') return
+    const reference = selectedRef.current
+    const frames = framesRef.current
+    framesRef.current = []
+    if (!reference) {
+      setPhase('idle')
+      return
+    }
+    const durationMs = Math.max(frames[frames.length - 1]?.timestampMs ?? 0, 1)
+    const video = tracking.videoRef.current
+    const att: SignRecording = {
+      id: crypto.randomUUID(),
+      gloss: reference.gloss,
+      signer: 'learner',
+      createdAt: new Date().toISOString(),
+      durationMs,
+      fps: Math.round((frames.length / durationMs) * 1000),
+      videoWidth: video?.videoWidth || 1280,
+      videoHeight: video?.videoHeight || 720,
+      frames,
+    }
+    setAttempt(att)
+    setResult(scoreAttempt(att, reference))
+    setPhase('result')
+  }
+
+  const noAttemptHands = result != null && result.hands.every((h) => h.missing)
 
   return (
-    <section className="camera-card">
-      <CameraStage
-        videoRef={videoRef}
-        canvasRef={canvasRef}
-        status={status}
-        error={error}
-        onStart={() => void start()}
-        idleHint="Practice signs in front of your camera with live hand tracking."
-      />
-
-      <div className="camera-bar">
-        {status === 'running' ? (
-          <>
-            <button className="btn btn-ghost" onClick={stop}>
-              Stop
-            </button>
-            <div className="hand-chips">
-              {hands.length === 0 ? (
-                <span className="hand-chip hand-chip-empty">No hands in view</span>
-              ) : (
-                hands.map((hand) => (
-                  <span
-                    key={hand.handedness}
-                    className="hand-chip"
-                    style={{ color: HAND_COLORS[hand.handedness] }}
-                  >
-                    {hand.handedness} · {(hand.score * 100).toFixed(0)}%
-                  </span>
-                ))
-              )}
+    <div className="record-layout">
+      <section className="camera-card">
+        <CameraStage
+          videoRef={tracking.videoRef}
+          canvasRef={tracking.canvasRef}
+          status={tracking.status}
+          error={tracking.error}
+          onStart={() => void tracking.start()}
+          idleHint="Start the camera, choose a sign, and record your attempt."
+        >
+          {phase === 'countdown' && (
+            <div className="countdown-overlay">
+              <span>{count}</span>
             </div>
-            {stats && (
-              <span className="camera-stats">
-                {stats.fps.toFixed(0)} fps · {stats.inferenceMs.toFixed(1)} ms inference ·{' '}
-                {stats.width}×{stats.height}
-              </span>
+          )}
+          {phase === 'recording' && (
+            <>
+              <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
+              <div className="rec-progress">
+                <div style={{ width: `${Math.min(elapsedMs / captureMs, 1) * 100}%` }} />
+              </div>
+            </>
+          )}
+        </CameraStage>
+
+        <div className="camera-bar">
+          {tracking.status === 'running' ? (
+            <>
+              <button
+                className="btn btn-ghost"
+                onClick={tracking.stop}
+                disabled={phase === 'countdown' || phase === 'recording'}
+              >
+                Stop camera
+              </button>
+              {tracking.stats && (
+                <span className="camera-stats">
+                  {tracking.stats.fps.toFixed(0)} fps · {tracking.stats.inferenceMs.toFixed(1)} ms
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="camera-stats">Tracking runs entirely in your browser.</span>
+          )}
+        </div>
+      </section>
+
+      <aside className="record-panel">
+        {phase === 'result' && result ? (
+          <>
+            <h2>{selected?.gloss}</h2>
+            <div className="result-top">
+              <ScoreBadge score={result.score} />
+              <ul className="hint-list">
+                {result.hints.map((h, i) => (
+                  <li key={i}>{h}</li>
+                ))}
+              </ul>
+            </div>
+
+            {noAttemptHands ? (
+              <p className="camera-error">
+                No hands were tracked in your attempt — check your framing and lighting, then try
+                again.
+              </p>
+            ) : (
+              topFingers(result).length > 0 && (
+                <div className="finger-chips">
+                  {topFingers(result).map((f) => (
+                    <span key={f} className="finger-chip">
+                      {FINGER_LABEL[f]}
+                    </span>
+                  ))}
+                </div>
+              )
             )}
+
+            <div className="compare-grid">
+              <div>
+                <p className="compare-label">Reference</p>
+                {selected && (
+                  <SkeletonPlayer
+                    frames={selected.frames}
+                    videoWidth={selected.videoWidth}
+                    videoHeight={selected.videoHeight}
+                  />
+                )}
+              </div>
+              <div>
+                <p className="compare-label">Your attempt</p>
+                {attempt && (
+                  <SkeletonPlayer
+                    frames={attempt.frames}
+                    videoWidth={attempt.videoWidth}
+                    videoHeight={attempt.videoHeight}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="row-buttons">
+              <button className="btn" onClick={beginCountdown} disabled={tracking.status !== 'running'}>
+                Try again
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setResult(null)
+                  setAttempt(null)
+                  setPhase('idle')
+                }}
+              >
+                Pick another sign
+              </button>
+            </div>
           </>
         ) : (
-          <span className="camera-stats">Camera off — tracking runs entirely in your browser.</span>
+          <>
+            <h2>Practice a sign</h2>
+            {references.length === 0 ? (
+              <p className="hint-text">
+                No reference signs yet. Record some in the <strong>Record</strong> tab first —
+                start with ME, YOU, NAME.
+              </p>
+            ) : (
+              <>
+                <div className="gloss-chips">
+                  {references.map((r) => (
+                    <button
+                      key={r.id}
+                      className={selected?.id === r.id ? 'chip active' : 'chip'}
+                      onClick={() => setSelected(r)}
+                      disabled={phase === 'countdown' || phase === 'recording'}
+                    >
+                      {r.gloss}
+                    </button>
+                  ))}
+                </div>
+
+                {selected && (
+                  <div className="reference-preview">
+                    <p className="compare-label">Sign this:</p>
+                    <SkeletonPlayer
+                      frames={selected.frames}
+                      videoWidth={selected.videoWidth}
+                      videoHeight={selected.videoHeight}
+                    />
+                  </div>
+                )}
+
+                {phase === 'countdown' ? (
+                  <button className="btn btn-ghost" onClick={cancelCountdown}>
+                    Cancel
+                  </button>
+                ) : phase === 'recording' ? (
+                  <button className="btn" onClick={finishRecording}>
+                    Stop &amp; score
+                  </button>
+                ) : (
+                  <button
+                    className="btn"
+                    onClick={beginCountdown}
+                    disabled={tracking.status !== 'running' || !selected}
+                    title={
+                      tracking.status !== 'running'
+                        ? 'Start the camera first'
+                        : !selected
+                          ? 'Choose a sign first'
+                          : undefined
+                    }
+                  >
+                    Record attempt
+                  </button>
+                )}
+                <p className="hint-text">
+                  Watch the reference, then record yourself signing it. You'll get a match score
+                  and tips on what to fix.
+                </p>
+              </>
+            )}
+          </>
         )}
-      </div>
-    </section>
+      </aside>
+    </div>
   )
 }

@@ -44,10 +44,34 @@ Requires a webcam. `npm run build` produces a static `dist/` deployable anywhere
 Recordings store only landmark coordinates (~200 KB per sign), never video, so
 they're safe to commit and share.
 
+## Sign scoring (DTW)
+
+`src/scoring/` compares a practice attempt to a reference recording:
+
+- `normalize.ts` — turns each hand into per-frame features split into a
+  **handshape** block (21 landmarks made wrist-relative and scaled by hand
+  size → invariant to position and camera distance) and a **trajectory** block
+  (the wrist path, centred and scaled → captures how the hand moves). Includes
+  aspect-ratio correction so distances aren't distorted by the 16:9 frame.
+- `dtw.ts` — classic dynamic time warping; aligns two sequences in time so
+  attempts signed faster/slower than the reference still match.
+- `score.ts` — `scoreAttempt(attempt, reference)` → overall 0–100 score,
+  per-hand breakdown, per-landmark deviations mapped to fingers, and corrective
+  hints. Handles one- and two-handed signs.
+
+Tested with `npm test` (vitest): self-match → 100; invariant to translation,
+zoom, signing speed and capture resolution; discriminates wrong handshapes and
+trajectories; points feedback at the finger that deviates.
+
+> **Calibration TODO:** the distance→score anchors (`D_PERFECT`, `D_ZERO` in
+> `score.ts`) and the shape/trajectory weights are provisional. Calibrate them
+> against real reference recordings + expert judgement for the ≥90%-accuracy
+> target.
+
 ## Roadmap (PP2)
 
 1. ~~In-browser hand tracking~~ ✅
 2. ~~Reference-recording tool (landmark sequences saved/shared as JSON)~~ ✅
-3. DTW scoring of practice attempts vs references + corrective feedback
+3. ~~DTW scoring of practice attempts vs references + corrective feedback~~ ✅
 4. Learner model v1 (mastery tracking, weighted practice selection) + dashboard
 5. Restaurant scenario; integration with the team platform

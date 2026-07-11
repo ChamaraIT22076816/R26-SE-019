@@ -21,8 +21,8 @@ function App() {
         <p className="app-kicker">R26-SE-019 · Component 4 — Learning &amp; Practice Module</p>
         <h1>SSL Learn</h1>
         <p className="app-sub">
-          Sri Lankan Sign Language practice · dev build — weeks 1–2: hand tracking + reference
-          recorder
+          Sri Lankan Sign Language practice · dev build — weeks 1–3: tracking, recorder, DTW
+          scoring
         </p>
         <nav className="tabs">
           {TABS.map((t) => (
