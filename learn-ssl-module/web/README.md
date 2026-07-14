@@ -68,10 +68,27 @@ trajectories; points feedback at the finger that deviates.
 > against real reference recordings + expert judgement for the ≥90%-accuracy
 > target.
 
+## Learner model v1 (heuristic)
+
+`src/learner/` tracks the learner and picks what to practise next:
+
+- `attemptLog.ts` — every scored attempt is persisted (gloss, score, worst
+  fingers, timestamp; no frames). This log is also the input the deferred
+  error-mining work (K-means/PrefixSpan, Sep–Oct) will consume.
+- `mastery.ts` — per-sign mastery as a recency-weighted score average (newest
+  attempt counts half), banded New / Learning / Improving / Mastered
+  (mastered needs ≥ 3 attempts). Practice selection ranks signs by
+  *need* = unseen first, then weakness (75%) + staleness (25%, full after
+  5 days). Deliberately simple and explainable; BKT + RL replaces it in the
+  final phase without changing the attempt log.
+
+The Practice tab logs every attempt and pre-selects the suggested sign (★);
+the Progress tab shows summary tiles and per-sign mastery, weakest first.
+
 ## Roadmap (PP2)
 
 1. ~~In-browser hand tracking~~ ✅
 2. ~~Reference-recording tool (landmark sequences saved/shared as JSON)~~ ✅
 3. ~~DTW scoring of practice attempts vs references + corrective feedback~~ ✅
-4. Learner model v1 (mastery tracking, weighted practice selection) + dashboard
-5. Restaurant scenario; integration with the team platform
+4. ~~Learner model v1 (mastery tracking, weighted practice selection) + dashboard~~ ✅
+5. Restaurant scenario; vocabulary to 20–30 signs; integration with the team platform

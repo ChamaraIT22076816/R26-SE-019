@@ -3,6 +3,9 @@ import { useHandTracking } from '../vision/useHandTracking'
 import type { HandFrame, SignRecording } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
+import { addAttempt, listAttempts } from '../learner/attemptLog'
+import type { AttemptLogEntry } from '../learner/attemptLog'
+import { suggestNext, summarizeAll } from '../learner/mastery'
 import { scoreAttempt } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
@@ -47,6 +50,8 @@ export function PracticeView() {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [result, setResult] = useState<ScoreResult | null>(null)
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
+  const [entries, setEntries] = useState<AttemptLogEntry[]>([])
+  const [suggested, setSuggested] = useState<string | null>(null)
 
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (p: Phase) => {
@@ -73,8 +78,18 @@ export function PracticeView() {
 
   useEffect(() => {
     void (async () => {
-      const [loc, bun] = await Promise.all([listRecordings(), loadBundledRecordings()])
-      setReferences(newestPerGloss([...loc, ...bun]))
+      const [loc, bun, log] = await Promise.all([
+        listRecordings(),
+        loadBundledRecordings(),
+        listAttempts(),
+      ])
+      const refs = newestPerGloss([...loc, ...bun])
+      setReferences(refs)
+      setEntries(log)
+      const next = suggestNext(summarizeAll(refs.map((r) => r.gloss), log))
+      setSuggested(next)
+      // Pre-select the model's suggestion so the learner can start right away.
+      setSelected((cur) => cur ?? refs.find((r) => r.gloss === next) ?? null)
     })()
   }, [])
 
@@ -139,9 +154,24 @@ export function PracticeView() {
       videoHeight: video?.videoHeight || 720,
       frames,
     }
+    const scored = scoreAttempt(att, reference)
     setAttempt(att)
-    setResult(scoreAttempt(att, reference))
+    setResult(scored)
     setPhase('result')
+
+    // Log the attempt: feeds mastery/suggestions now, error mining later.
+    const entry: AttemptLogEntry = {
+      id: att.id,
+      gloss: reference.gloss,
+      referenceId: reference.id,
+      score: scored.score,
+      worstFingers: topFingers(scored),
+      createdAt: att.createdAt,
+    }
+    void addAttempt(entry)
+    const nextEntries = [...entries, entry]
+    setEntries(nextEntries)
+    setSuggested(suggestNext(summarizeAll(references.map((r) => r.gloss), nextEntries)))
   }
 
   const noAttemptHands = result != null && result.hands.every((h) => h.missing)
@@ -273,6 +303,11 @@ export function PracticeView() {
               </p>
             ) : (
               <>
+                {suggested && (
+                  <p className="hint-text">
+                    Suggested next: <strong>{suggested}</strong>
+                  </p>
+                )}
                 <div className="gloss-chips">
                   {references.map((r) => (
                     <button
@@ -281,7 +316,7 @@ export function PracticeView() {
                       onClick={() => setSelected(r)}
                       disabled={phase === 'countdown' || phase === 'recording'}
                     >
-                      {r.gloss}
+                      {r.gloss === suggested ? `${r.gloss} ★` : r.gloss}
                     </button>
                   ))}
                 </div>
