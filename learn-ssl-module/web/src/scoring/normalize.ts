@@ -66,6 +66,25 @@ function findHand(frame: HandFrame, handedness: 'Left' | 'Right'): TrackedHand |
   return frame.hands.find((h) => h.handedness === handedness)
 }
 
+/**
+ * Reflect a hand sequence left↔right. Because the feature space is linear in
+ * the (aspect-corrected) image x axis, mirroring the image is exactly negating
+ * the x component of both blocks — and it swaps which hand you're looking at.
+ *
+ * Sign languages let the signer choose their dominant hand, so a left-dominant
+ * learner performs a right-handed reference mirrored. Scoring both orientations
+ * (see score.ts) is what keeps that from reading as a total miss.
+ */
+export function mirrorHandFeatures(seq: HandFeatureSequence): HandFeatureSequence {
+  return {
+    handedness: seq.handedness === 'Left' ? 'Right' : 'Left',
+    frames: seq.frames.map((f) => ({
+      shape: f.shape.map((v, i) => (i % 3 === 0 ? -v : v)),
+      traj: [-f.traj[0], f.traj[1], f.traj[2]],
+    })),
+  }
+}
+
 /** Distinct handednesses that appear anywhere in the recording. */
 export function handednessesIn(frames: HandFrame[]): Array<'Left' | 'Right'> {
   const seen = new Set<'Left' | 'Right'>()

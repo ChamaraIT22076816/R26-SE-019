@@ -37,12 +37,17 @@ Requires a webcam. `npm run build` produces a static `dist/` deployable anywhere
 1. Open the **Record** tab, enter your name, pick a gloss (start with the seven
    avatar glosses: ME, YOU, NAME, WHAT, WHERE, CAN, YOUR).
 2. Record → review the replay → **Save to library**.
-3. In **Library**, use **Export** to download the JSON and send it to kvn.
-4. Committed references go in `public/references/` + an entry in
-   `public/references/manifest.json` — they then ship bundled for everyone.
+3. In **Library**, hit **Export all for repo** — it downloads every recording
+   plus a `manifest.json`.
+4. Move those files into `public/references/` and commit. They then ship bundled
+   with the app, so the whole team (and any demo machine) gets the same
+   reference set.
 
 Recordings store only landmark coordinates (~200 KB per sign), never video, so
 they're safe to commit and share.
+
+> Until you do step 3–4, your recordings live **only in your own browser's
+> IndexedDB** — a cache clear loses them and nobody else can see them.
 
 ## Sign scoring (DTW)
 
@@ -58,6 +63,12 @@ they're safe to commit and share.
 - `score.ts` — `scoreAttempt(attempt, reference)` → overall 0–100 score,
   per-hand breakdown, per-landmark deviations mapped to fingers, and corrective
   hints. Handles one- and two-handed signs.
+
+**Handedness.** Every attempt is scored twice — as performed and mirrored — and
+the better result wins (`result.mirrored` says which). Sign languages let the
+signer choose their dominant hand, so a left-dominant learner performing a
+right-handed reference is signing *correctly* and must not be scored as a
+missing hand.
 
 Tested with `npm test` (vitest): self-match → 100; invariant to translation,
 zoom, signing speed and capture resolution; discriminates wrong handshapes and

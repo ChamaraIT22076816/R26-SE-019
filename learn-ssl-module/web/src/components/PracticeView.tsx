@@ -52,6 +52,7 @@ export function PracticeView() {
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
+  const [logFailed, setLogFailed] = useState(false)
 
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (p: Phase) => {
@@ -63,6 +64,7 @@ export function PracticeView() {
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
+  const didPreselectRef = useRef(false)
 
   // Capture a bit longer than the reference so a slightly slower attempt fits.
   const captureMs = selected ? Math.max(selected.durationMs + 1500, 2500) : 3500
@@ -83,15 +85,24 @@ export function PracticeView() {
         loadBundledRecordings(),
         listAttempts(),
       ])
-      const refs = newestPerGloss([...loc, ...bun])
-      setReferences(refs)
+      setReferences(newestPerGloss([...loc, ...bun]))
       setEntries(log)
-      const next = suggestNext(summarizeAll(refs.map((r) => r.gloss), log))
-      setSuggested(next)
-      // Pre-select the model's suggestion so the learner can start right away.
-      setSelected((cur) => cur ?? refs.find((r) => r.gloss === next) ?? null)
     })()
   }, [])
+
+  // Keep the suggestion in step with the log — it changes on load and after
+  // every scored attempt.
+  useEffect(() => {
+    if (references.length === 0) return
+    const next = suggestNext(summarizeAll(references.map((r) => r.gloss), entries))
+    setSuggested(next)
+    // Pre-select the suggestion once, so the learner can start straight away
+    // without stealing their choice on later re-ranks.
+    if (!didPreselectRef.current) {
+      didPreselectRef.current = true
+      setSelected((cur) => cur ?? references.find((r) => r.gloss === next) ?? null)
+    }
+  }, [references, entries])
 
   // Abandon a take if the camera stops mid-recording.
   useEffect(() => {
@@ -168,10 +179,14 @@ export function PracticeView() {
       worstFingers: topFingers(scored),
       createdAt: att.createdAt,
     }
-    void addAttempt(entry)
-    const nextEntries = [...entries, entry]
-    setEntries(nextEntries)
-    setSuggested(suggestNext(summarizeAll(references.map((r) => r.gloss), nextEntries)))
+    setLogFailed(false)
+    addAttempt(entry).catch((e: unknown) => {
+      // Never fail silently: a lost attempt means wrong mastery and progress.
+      console.error('Failed to save attempt to the log', e)
+      setLogFailed(true)
+    })
+    // The suggestion effect re-ranks off the new log.
+    setEntries((prev) => [...prev, entry])
   }
 
   const noAttemptHands = result != null && result.hands.every((h) => h.missing)
@@ -236,6 +251,17 @@ export function PracticeView() {
                 ))}
               </ul>
             </div>
+
+            {result.mirrored && (
+              <p className="hint-text">
+                Scored as a mirrored (left-dominant) rendition — that's a valid way to sign it.
+              </p>
+            )}
+            {logFailed && (
+              <p className="camera-error">
+                This attempt couldn't be saved, so it won't count towards your progress.
+              </p>
+            )}
 
             {noAttemptHands ? (
               <p className="camera-error">

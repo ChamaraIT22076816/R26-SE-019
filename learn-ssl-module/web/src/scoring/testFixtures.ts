@@ -123,6 +123,30 @@ export function zoom(rec: SignRecording, factor: number, cx = 0.5, cy = 0.5): Si
   }
 }
 
+/**
+ * Reflect the recording left↔right — what a left-dominant learner produces when
+ * imitating a right-handed reference. MediaPipe reports the flipped handedness.
+ */
+export function mirrorRecording(rec: SignRecording): SignRecording {
+  return {
+    ...rec,
+    id: rec.id + '-m',
+    frames: rec.frames.map((f) => ({
+      ...f,
+      hands: f.hands.map((h) => ({
+        ...h,
+        handedness: h.handedness === 'Left' ? ('Right' as const) : ('Left' as const),
+        landmarks: h.landmarks.map((l) => ({ x: 1 - l.x, y: l.y, z: l.z })),
+      })),
+    })),
+  }
+}
+
+/** Strip all hands — models an attempt where tracking never caught a hand. */
+export function withoutHands(rec: SignRecording): SignRecording {
+  return { ...rec, id: rec.id + '-e', frames: rec.frames.map((f) => ({ ...f, hands: [] })) }
+}
+
 /** Duplicate every frame — a crude "signed at half speed" time warp. */
 export function timeWarp(rec: SignRecording): SignRecording {
   const frames: HandFrame[] = []

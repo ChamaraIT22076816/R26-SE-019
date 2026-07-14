@@ -30,16 +30,23 @@ export function LibraryView() {
     })()
   }, [])
 
+  function isRecording(value: unknown): value is SignRecording {
+    const rec = value as SignRecording
+    return !!rec && typeof rec.gloss === 'string' && Array.isArray(rec.frames)
+  }
+
   async function handleImport(files: FileList | null) {
     if (!files) return
     for (const file of Array.from(files)) {
       try {
-        const rec = JSON.parse(await file.text()) as SignRecording
-        if (typeof rec.gloss !== 'string' || !Array.isArray(rec.frames)) {
-          throw new Error('not a recording')
+        const parsed: unknown = JSON.parse(await file.text())
+        // Accept a single recording or an array of them (an exported bundle).
+        const recs = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecording)
+        if (recs.length === 0) throw new Error('not a recording')
+        for (const rec of recs) {
+          rec.id ||= crypto.randomUUID()
+          await saveRecording(rec)
         }
-        rec.id ||= crypto.randomUUID()
-        await saveRecording(rec)
       } catch {
         window.alert(`"${file.name}" doesn't look like a sign recording JSON.`)
       }
@@ -48,14 +55,52 @@ export function LibraryView() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  function exportRecording(rec: SignRecording) {
-    const blob = new Blob([JSON.stringify(rec)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+  function download(filename: string, contents: string) {
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `${rec.gloss}_${rec.signer}`.replace(/[^\w-]+/g, '_') + '.json'
+    a.download = filename
+    document.body.appendChild(a)
     a.click()
-    URL.revokeObjectURL(url)
+    a.remove()
+    // Revoking synchronously can cancel the download in some browsers — give it
+    // a moment to start reading the blob first.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
+  function fileNameFor(rec: SignRecording, taken: Set<string>): string {
+    const base = `${rec.gloss}_${rec.signer}`.replace(/[^\w-]+/g, '_')
+    let name = `${base}.json`
+    let n = 2
+    while (taken.has(name)) name = `${base}_${n++}.json`
+    taken.add(name)
+    return name
+  }
+
+  function exportRecording(rec: SignRecording) {
+    download(fileNameFor(rec, new Set()), JSON.stringify(rec))
+  }
+
+  /**
+   * Export every local recording as its own file, plus the manifest.json that
+   * lists them — exactly the shape public/references/ expects, so the whole
+   * library can be committed to the repo instead of living in one browser.
+   */
+  async function exportAll() {
+    if (local.length === 0) return
+    const taken = new Set<string>()
+    const files = local.map((rec) => ({ rec, name: fileNameFor(rec, taken) }))
+    for (const { rec, name } of files) {
+      download(name, JSON.stringify(rec))
+      // Browsers throttle rapid-fire downloads; space them out.
+      await new Promise((r) => setTimeout(r, 300))
+    }
+    download('manifest.json', JSON.stringify({ files: files.map((f) => f.name) }, null, 2))
+    window.alert(
+      `Exported ${files.length} recording(s) + manifest.json.\n\n` +
+        'Move them all into learn-ssl-module/web/public/references/ and commit — ' +
+        'they then ship with the app for the whole team.',
+    )
   }
 
   async function handleDelete(rec: SignRecording) {
@@ -80,6 +125,18 @@ export function LibraryView() {
         <span className="library-count">
           {local.length} local · {bundled.length} bundled
         </span>
+        <button
+          className="btn btn-ghost"
+          onClick={() => void exportAll()}
+          disabled={local.length === 0}
+          title={
+            local.length === 0
+              ? 'No local recordings to export'
+              : 'Download every recording + manifest.json for committing to public/references/'
+          }
+        >
+          Export all for repo
+        </button>
         <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>
           Import JSON
         </button>

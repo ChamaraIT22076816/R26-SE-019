@@ -39,6 +39,10 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   const drawerRef = useRef<DrawingUtils | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
+  // Guards the frame loop. processFrame awaits the landmarker, so a stop() that
+  // lands during that await would otherwise be followed by the continuation
+  // scheduling a fresh rAF that nothing cancels — a loop that survives stop().
+  const activeRef = useRef(false)
   const lastVideoTimeRef = useRef(-1)
   const emaRef = useRef({ fps: 0, inferenceMs: 0, lastFrameAt: 0, lastUiPush: 0 })
   const onFrameRef = useRef(onFrame)
@@ -50,10 +54,12 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   const [hands, setHands] = useState<TrackedHand[]>([])
 
   const processFrame = useCallback(async () => {
+    if (!activeRef.current) return
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
     const landmarker = await getHandLandmarker()
+    if (!activeRef.current) return // stopped while we were awaiting the landmarker
 
     // Only run inference when the camera has produced a new frame.
     if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
@@ -101,6 +107,7 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
       }
     }
 
+    if (!activeRef.current) return
     rafRef.current = requestAnimationFrame(() => void processFrame())
   }, [])
 
@@ -129,8 +136,10 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
       lastVideoTimeRef.current = -1
       emaRef.current = { fps: 0, inferenceMs: 0, lastFrameAt: 0, lastUiPush: 0 }
       setStatus('running')
+      activeRef.current = true
       rafRef.current = requestAnimationFrame(() => void processFrame())
     } catch (e) {
+      activeRef.current = false
       stream?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
       landmarkerPromise.catch(() => {}) // camera may have failed first; silence the pair
@@ -140,6 +149,7 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   }, [processFrame])
 
   const stop = useCallback(() => {
+    activeRef.current = false
     cancelAnimationFrame(rafRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
@@ -155,6 +165,7 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   // Release the camera on unmount. The landmarker is shared, so it stays up.
   useEffect(() => {
     return () => {
+      activeRef.current = false
       cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null

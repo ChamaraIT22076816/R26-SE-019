@@ -1,6 +1,6 @@
-import type { HandFrame, SignRecording } from '../vision/types'
+import type { SignRecording } from '../vision/types'
 import { dtw } from './dtw'
-import { extractHandFeatures, handednessesIn } from './normalize'
+import { extractHandFeatures, handednessesIn, mirrorHandFeatures } from './normalize'
 import type { FrameFeature, HandFeatureSequence } from './normalize'
 import { FINGER_LABEL, LANDMARK_FINGER, NUM_LANDMARKS } from './landmarks'
 import type { Finger } from './landmarks'
@@ -52,6 +52,11 @@ export interface ScoreResult {
   worstJoints: JointDeviation[]
   /** Human-readable corrective hints, most important first. */
   hints: string[]
+  /** True when the learner signed mirrored (e.g. left-dominant) and we scored
+   *  them against the reflected reference. */
+  mirrored: boolean
+  /** True if the reference itself uses both hands. */
+  twoHanded: boolean
 }
 
 /** Root-mean-square distance between two equal-length vectors. */
@@ -117,14 +122,20 @@ function scoreHand(attempt: HandFeatureSequence, reference: HandFeatureSequence)
   }
 }
 
-function buildHints(hands: HandScore[], worstJoints: JointDeviation[]): string[] {
+function buildHints(
+  hands: HandScore[],
+  worstJoints: JointDeviation[],
+  twoHanded: boolean,
+): string[] {
   const hints: string[] = []
-  const twoHanded = hands.length > 1
 
   for (const hand of hands) {
-    if (hand.missing) {
-      hints.push(`Use your ${hand.handedness.toLowerCase()} hand too — this sign is two-handed.`)
-    }
+    if (!hand.missing) continue
+    hints.push(
+      twoHanded
+        ? `Use your ${hand.handedness.toLowerCase()} hand too — this sign is two-handed.`
+        : 'No hand was tracked in your attempt — check your framing and lighting.',
+    )
   }
 
   // Group the worst joints by finger so we don't repeat "index finger" 4 times,
@@ -148,47 +159,65 @@ function buildHints(hands: HandScore[], worstJoints: JointDeviation[]): string[]
   return hints
 }
 
+/** Score every reference hand against the attempt hand of the same handedness. */
+function evaluate(
+  refSeqs: HandFeatureSequence[],
+  attemptSeqs: HandFeatureSequence[],
+): { hands: HandScore[]; score: number } {
+  const hands = refSeqs.map((ref) => {
+    const att = attemptSeqs.find((a) => a.handedness === ref.handedness)
+    return scoreHand(att ?? { handedness: ref.handedness, frames: [] }, ref)
+  })
+
+  // Weight each hand by how many reference frames it appears in, so the
+  // dominant hand of the sign counts for more.
+  const weights = refSeqs.map((r) => Math.max(r.frames.length, 1))
+  const totalWeight = weights.reduce((a, b) => a + b, 0)
+  const score = Math.round(
+    hands.reduce((acc, h, i) => acc + h.score * weights[i], 0) / totalWeight,
+  )
+  return { hands, score }
+}
+
 /**
  * Score a practice attempt against a reference recording of the same sign.
  * Both are run through the identical normalisation pipeline (each with its own
  * capture resolution), then aligned per hand with DTW.
+ *
+ * The attempt is scored twice — as performed, and mirrored — and the better of
+ * the two wins. Sign languages let the signer pick their dominant hand, so a
+ * left-dominant learner performing a right-handed reference is correct, not
+ * wrong, and must not be scored as a missing hand.
  */
 export function scoreAttempt(attempt: SignRecording, reference: SignRecording): ScoreResult {
-  const refHands = handednessesIn(reference.frames)
-
-  const hands: HandScore[] = []
-  for (const handedness of refHands) {
-    const ref = extractHandFeatures(
-      reference.frames,
-      handedness,
-      reference.videoWidth,
-      reference.videoHeight,
+  const refSeqs = handednessesIn(reference.frames)
+    .map((h) =>
+      extractHandFeatures(reference.frames, h, reference.videoWidth, reference.videoHeight),
     )
-    if (ref.frames.length === 0) continue // reference didn't really track this hand
-    const att = extractHandFeatures(
-      attempt.frames,
-      handedness,
-      attempt.videoWidth,
-      attempt.videoHeight,
-    )
-    hands.push(scoreHand(att, ref))
-  }
+    .filter((s) => s.frames.length > 0) // reference may label a hand it never really tracked
 
-  if (hands.length === 0) {
-    return { score: 0, hands: [], worstJoints: [], hints: ['No hands were tracked in the reference.'] }
+  if (refSeqs.length === 0) {
+    return {
+      score: 0,
+      hands: [],
+      worstJoints: [],
+      hints: ['No hands were tracked in the reference.'],
+      mirrored: false,
+      twoHanded: false,
+    }
   }
+  const twoHanded = refSeqs.length > 1
 
-  // Overall score weighted by how many reference frames each hand appears in,
-  // so the dominant hand in the sign matters more.
-  const refFrameCount = (handedness: 'Left' | 'Right') =>
-    reference.frames.filter((f: HandFrame) => f.hands.some((h) => h.handedness === handedness)).length
-  const weights = hands.map((h) => Math.max(refFrameCount(h.handedness), 1))
-  const totalWeight = weights.reduce((a, b) => a + b, 0)
-  const score = Math.round(
-    hands.reduce((acc, h, idx) => acc + h.score * weights[idx], 0) / totalWeight,
+  const attemptSeqs = (['Left', 'Right'] as const).map((h) =>
+    extractHandFeatures(attempt.frames, h, attempt.videoWidth, attempt.videoHeight),
   )
+  const direct = evaluate(refSeqs, attemptSeqs)
+  const flipped = evaluate(refSeqs, attemptSeqs.map(mirrorHandFeatures))
 
-  // Collect per-joint deviations across all present hands, worst first.
+  const mirrored = flipped.score > direct.score
+  const { hands, score } = mirrored ? flipped : direct
+
+  // Collect per-joint deviations across the hands we actually scored, worst first.
   const worstJoints: JointDeviation[] = []
   for (const hand of hands) {
     if (hand.missing) continue
@@ -198,5 +227,12 @@ export function scoreAttempt(attempt: SignRecording, reference: SignRecording): 
   }
   worstJoints.sort((a, b) => b.deviation - a.deviation)
 
-  return { score, hands, worstJoints, hints: buildHints(hands, worstJoints) }
+  return {
+    score,
+    hands,
+    worstJoints,
+    hints: buildHints(hands, worstJoints, twoHanded),
+    mirrored,
+    twoHanded,
+  }
 }

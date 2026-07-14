@@ -3,9 +3,11 @@ import { scoreAttempt } from './score'
 import {
   buildRecording,
   canonicalHand,
+  mirrorRecording,
   rotatedHand,
   timeWarp,
   translate,
+  withoutHands,
   zoom,
 } from './testFixtures'
 
@@ -78,6 +80,31 @@ describe('scoreAttempt — discrimination', () => {
     const attempt = buildRecording({ pose: bent })
     const worst = scoreAttempt(attempt, ref).worstJoints[0]
     expect(worst.finger).toBe('index')
+  })
+})
+
+describe('scoreAttempt — handedness', () => {
+  it('accepts a left-dominant learner signing a right-handed reference', () => {
+    const ref = buildRecording({ handedness: 'Right' })
+    const leftDominant = mirrorRecording(ref) // same sign, mirrored — a valid rendition
+    const result = scoreAttempt(leftDominant, ref)
+    expect(result.score).toBe(100)
+    expect(result.mirrored).toBe(true)
+    expect(result.hands.some((h) => h.missing)).toBe(false)
+  })
+
+  it('does not flag a mirror when the learner matches the reference hand', () => {
+    const ref = buildRecording({ handedness: 'Right' })
+    expect(scoreAttempt(ref, ref).mirrored).toBe(false)
+  })
+
+  it('tells a learner with no tracked hands about framing, not about two hands', () => {
+    const ref = buildRecording() // one-handed
+    const result = scoreAttempt(withoutHands(ref), ref)
+    expect(result.score).toBe(0)
+    expect(result.twoHanded).toBe(false)
+    expect(result.hints.some((h) => /two-handed/.test(h))).toBe(false)
+    expect(result.hints.some((h) => /framing and lighting/.test(h))).toBe(true)
   })
 })
 

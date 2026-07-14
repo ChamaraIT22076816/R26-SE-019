@@ -214,7 +214,8 @@
   font-size: 14px;
 }
 
-.library-head .btn {
+/* Push the action buttons as a group to the right edge of the header. */
+.library-head .btn:first-of-type {
   margin-left: auto;
 }
 

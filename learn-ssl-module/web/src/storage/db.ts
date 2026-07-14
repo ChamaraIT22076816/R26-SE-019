@@ -17,6 +17,14 @@ function openDb(): Promise<IDBDatabase> {
         }
       }
     }
+    // Another tab holding the old version open would otherwise stall the upgrade
+    // forever with no error — surface it instead of hanging.
+    req.onblocked = () =>
+      reject(
+        new Error(
+          'Database upgrade is blocked. Close other tabs running SSL Learn, then reload.',
+        ),
+      )
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })

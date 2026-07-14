@@ -32,10 +32,12 @@ export function RecordView() {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [review, setReview] = useState<SignRecording | null>(null)
   const [justSaved, setJustSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
+  const savedFlashRef = useRef(0)
   const glossRef = useRef(gloss)
   glossRef.current = gloss
   const signerRef = useRef(signer)
@@ -61,7 +63,13 @@ export function RecordView() {
     }
   }, [tracking.status])
 
-  useEffect(() => () => window.clearInterval(countdownRef.current), [])
+  useEffect(
+    () => () => {
+      window.clearInterval(countdownRef.current)
+      window.clearTimeout(savedFlashRef.current)
+    },
+    [],
+  )
 
   function beginCountdown() {
     if (tracking.status !== 'running' || !gloss.trim()) return
@@ -114,12 +122,20 @@ export function RecordView() {
 
   async function save() {
     if (!review) return
-    await saveRecording(review)
+    try {
+      await saveRecording(review)
+    } catch (e) {
+      // Keep the take on screen so a storage failure can't quietly discard it.
+      console.error('Failed to save recording', e)
+      setSaveError('Could not save to the library. Your recording is still here — try again.')
+      return
+    }
+    setSaveError('')
     localStorage.setItem(SIGNER_KEY, signerRef.current)
     setReview(null)
     setPhase('idle')
     setJustSaved(true)
-    window.setTimeout(() => setJustSaved(false), 2500)
+    savedFlashRef.current = window.setTimeout(() => setJustSaved(false), 2500)
   }
 
   const inputsLocked = phase === 'countdown' || phase === 'recording'
@@ -260,6 +276,7 @@ export function RecordView() {
                   re-record.
                 </p>
               )}
+              {saveError && <p className="camera-error">{saveError}</p>}
               <div className="row-buttons">
                 <button className="btn" onClick={() => void save()}>
                   Save to library
