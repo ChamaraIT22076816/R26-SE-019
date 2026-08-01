@@ -6,10 +6,9 @@ import { loadBundledRecordings } from '../storage/bundledReferences'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { suggestNext, summarizeAll } from '../learner/mastery'
-import { scoreAttempt } from '../scoring/score'
+import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
-import type { Finger } from '../scoring/landmarks'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
@@ -25,17 +24,6 @@ function newestPerGloss(recs: SignRecording[]): SignRecording[] {
     if (!byGloss.has(r.gloss)) byGloss.set(r.gloss, r)
   }
   return [...byGloss.values()].sort((a, b) => a.gloss.localeCompare(b.gloss))
-}
-
-/** Top distinct fingers to correct, from the ranked per-joint deviations. */
-function topFingers(result: ScoreResult): Finger[] {
-  const seen: Finger[] = []
-  for (const j of result.worstJoints) {
-    if (j.finger === 'wrist') continue
-    if (!seen.includes(j.finger)) seen.push(j.finger)
-    if (seen.length === 3) break
-  }
-  return seen
 }
 
 /**

@@ -96,10 +96,56 @@ trajectories; points feedback at the finger that deviates.
 The Practice tab logs every attempt and pre-selects the suggested sign (★);
 the Progress tab shows summary tiles and per-sign mastery, weakest first.
 
+## Scenario: Social Gathering (Introductions)
+
+`src/scenario/` + `src/data/scenarios/` run a scripted conversation where each
+turn asks for **one** sign, scored through the existing DTW path.
+
+- **Data-driven.** A scenario is a JSON file listing turns
+  (`partnerLine`, `prompt`, `gloss`, `hint`). Adding another of the five
+  proposal-approved scenarios means authoring JSON and listing it in
+  `src/data/scenarios/index.ts` — no engine changes.
+- **Graceful degradation.** Turns whose gloss has no reference recording are
+  shown as *reference pending* and skipped, so the scenario runs with partial
+  vocabulary and grows automatically as references land.
+- **No silo.** Every turn logs to the same `attemptLog` as the Practice tab, so
+  mastery and the progress dashboard cover scenario work too. The logged score
+  is the **DTW accuracy**, not the rubric total, so "mastery" means one thing
+  everywhere.
+
+### Rubric, and one honest deviation
+
+The proposal scores accuracy 40% / appropriateness 30% / fluency-timing 20% /
+**non-manual markers 10%**. This build captures *hand landmarks only*, so
+non-manual markers (facial expression, head and body movement) **cannot be
+measured at all**. That 10% is folded into accuracy → **50 / 30 / 20**. The
+deviation is stated in `src/scenario/rubric.ts` and shown in the scenario
+summary UI, so it is visible to a reader rather than buried in code.
+
+What each component actually measures — all three are proxies, documented as such:
+
+| Component | Basis |
+|---|---|
+| Accuracy 50% | DTW match against the reference for that gloss. |
+| Appropriateness 30% | Whether the attempt matches the requested gloss better than every *other* gloss in the library — i.e. did you sign the right thing. |
+| Fluency & timing 20% | Pace vs the reference (symmetric in log-space; DTW deliberately ignores speed, so it is judged here). |
+
+A component with no data (e.g. appropriateness when the library holds only one
+sign) reports **n/a** and its weight is shared across the rest — never scored as
+zero, which would be a silent penalty.
+
+> The conversational order in `introductions.json` is a **draft pending
+> validation by an SSL teacher** (School for the Deaf, Ratmalana). Each turn
+> asks for a single gloss; the surrounding text is English context, never a
+> claim about SSL word order.
+
 ## Roadmap (PP2)
 
 1. ~~In-browser hand tracking~~ ✅
 2. ~~Reference-recording tool (landmark sequences saved/shared as JSON)~~ ✅
 3. ~~DTW scoring of practice attempts vs references + corrective feedback~~ ✅
 4. ~~Learner model v1 (mastery tracking, weighted practice selection) + dashboard~~ ✅
-5. Restaurant scenario; vocabulary to 20–30 signs; integration with the team platform
+5. ~~Social Gathering (Introductions) scenario~~ ✅ *(retargeted from Restaurant —
+   see the handoff; Restaurant needs food/drink vocabulary we have no references for)*
+6. Real reference data from the public Kaggle SSL dataset (`tools/convert_references.py`)
+7. Integration with the team platform; pilot test; PP2 slides

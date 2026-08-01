@@ -3,12 +3,14 @@ import { PracticeView } from './components/PracticeView'
 import { RecordView } from './components/RecordView'
 import { LibraryView } from './components/LibraryView'
 import { ProgressView } from './components/ProgressView'
+import { ScenarioView } from './components/ScenarioView'
 import './components/views.css'
 
-type Tab = 'practice' | 'record' | 'library' | 'progress'
+type Tab = 'practice' | 'scenario' | 'record' | 'library' | 'progress'
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'practice', label: 'Practice' },
+  { id: 'scenario', label: 'Scenario' },
   { id: 'record', label: 'Record' },
   { id: 'library', label: 'Library' },
   { id: 'progress', label: 'Progress' },
@@ -41,6 +43,7 @@ function App() {
 
       <main>
         {tab === 'practice' && <PracticeView />}
+        {tab === 'scenario' && <ScenarioView />}
         {tab === 'record' && <RecordView />}
         {tab === 'library' && <LibraryView />}
         {tab === 'progress' && <ProgressView />}

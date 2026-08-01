@@ -59,6 +59,17 @@ export interface ScoreResult {
   twoHanded: boolean
 }
 
+/** The distinct fingers most in need of correction, worst first. */
+export function topFingers(result: ScoreResult, limit = 3): Finger[] {
+  const seen: Finger[] = []
+  for (const j of result.worstJoints) {
+    if (j.finger === 'wrist') continue
+    if (!seen.includes(j.finger)) seen.push(j.finger)
+    if (seen.length === limit) break
+  }
+  return seen
+}
+
 /** Root-mean-square distance between two equal-length vectors. */
 function rms(a: number[], b: number[]): number {
   let sum = 0
