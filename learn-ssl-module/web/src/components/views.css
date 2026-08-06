@@ -277,6 +277,18 @@
   vertical-align: 2px;
 }
 
+/* Provisional = a team stand-in, not authoritative SSL. Deliberately styled to
+   catch the eye so it cannot be mistaken for a verified reference. */
+.badge-warn {
+  color: #fbbf24;
+}
+
+.provisional-note {
+  margin: 0;
+  font-size: 12px;
+  color: #fbbf24;
+}
+
 .rec-player {
   flex-basis: 100%;
 }
@@ -634,6 +646,34 @@
   border-radius: 12px;
   padding: 14px 16px;
   line-height: 1.55;
+}
+
+.rubric-note p {
+  margin: 0;
+}
+
+.rubric-note-head {
+  color: var(--text);
+  margin-bottom: 8px !important;
+}
+
+.rubric-defs {
+  margin: 0 0 10px;
+}
+
+.rubric-defs dt {
+  color: var(--text);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.rubric-defs dd {
+  margin: 2px 0 0;
+}
+
+.rubric-note-foot {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 /* ---- skeleton player ---- */

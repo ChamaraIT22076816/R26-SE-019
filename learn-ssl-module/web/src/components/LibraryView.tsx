@@ -165,6 +165,14 @@ export function LibraryView() {
                 <span className="rec-gloss">
                   {rec.gloss}
                   {isBundled && <em className="badge">bundled</em>}
+                  {rec.provisional && (
+                    <em
+                      className="badge badge-warn"
+                      title="Team recording — a stand-in for development, not authoritative SSL"
+                    >
+                      provisional
+                    </em>
+                  )}
                 </span>
                 <span className="rec-meta">
                   {rec.signer} · {(rec.durationMs / 1000).toFixed(1)} s · {rec.frames.length}{' '}

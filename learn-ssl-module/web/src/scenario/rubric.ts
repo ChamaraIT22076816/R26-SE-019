@@ -124,9 +124,13 @@ export interface TurnScore {
 /**
  * Score one scenario turn.
  *
- * Note on cost: appropriateness requires re-scoring the attempt against every
- * other gloss in the library, so this runs (1 + others) DTW alignments. That is
- * post-attempt work, not the live feedback path the ≤300 ms target governs.
+ * `otherReferences` should be the *scenario's own vocabulary*, not the whole
+ * library. Two reasons:
+ *  - Meaning: "did you sign YOU when asked for ME" is the confusion worth
+ *    reporting; whether the attempt resembles an unrelated verb is noise.
+ *  - Cost: appropriateness runs one DTW alignment per competitor. Against the
+ *    full library that grows without bound as vocabulary grows (~490 ms at 80
+ *    references); against a scenario's handful of signs it stays small.
  */
 export function scoreTurn(
   attempt: SignRecording,

@@ -4,6 +4,7 @@ import type { CapturedTake } from '../vision/useSignCapture'
 import type { SignRecording } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
+import { pickReferences } from '../storage/references'
 import { addAttempt } from '../learner/attemptLog'
 import { topFingers } from '../scoring/score'
 import { RUBRIC_BASIS, RUBRIC_LABEL, scoreTurn } from '../scenario/rubric'
@@ -20,15 +21,6 @@ interface TurnOutcome {
   turn: ScenarioTurn
   score: TurnScore
   attempt: SignRecording
-}
-
-/** Newest reference per gloss, matching the Practice tab's selection rule. */
-function newestPerGloss(recs: SignRecording[]): Map<string, SignRecording> {
-  const byGloss = new Map<string, SignRecording>()
-  for (const r of [...recs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
-    if (!byGloss.has(r.gloss)) byGloss.set(r.gloss, r)
-  }
-  return byGloss
 }
 
 const RUBRIC_ORDER: RubricComponent[] = ['accuracy', 'appropriateness', 'fluency']
@@ -71,7 +63,7 @@ export function ScenarioView() {
   useEffect(() => {
     void (async () => {
       const [local, bundled] = await Promise.all([listRecordings(), loadBundledRecordings()])
-      setReferences(newestPerGloss([...local, ...bundled]))
+      setReferences(pickReferences([...local, ...bundled]))
       setLoading(false)
     })()
   }, [])
@@ -88,6 +80,14 @@ export function ScenarioView() {
   const reference = turn ? references.get(turn.gloss) : undefined
   const captureMs = reference ? Math.max(reference.durationMs + 1500, 2500) : 3500
 
+  // Appropriateness is judged against this scenario's own vocabulary — the
+  // signs the learner could plausibly have confused this turn with — not the
+  // whole library. See scoreTurn for why.
+  const scenarioVocabulary = useMemo(() => {
+    const glosses = new Set(scenario.turns.map((t) => t.gloss))
+    return [...references.values()].filter((r) => glosses.has(r.gloss))
+  }, [scenario.turns, references])
+
   const handleCaptured = useCallback(
     (take: CapturedTake) => {
       if (!turn || !reference) return
@@ -102,7 +102,7 @@ export function ScenarioView() {
         videoHeight: take.videoHeight,
         frames: take.frames,
       }
-      const score = scoreTurn(attempt, reference, [...references.values()])
+      const score = scoreTurn(attempt, reference, scenarioVocabulary)
       setCurrent(score)
       setOutcomes((prev) => [...prev.filter((o) => o.turn.id !== turn.id), { turn, score, attempt }])
 
@@ -117,7 +117,7 @@ export function ScenarioView() {
         createdAt: attempt.createdAt,
       }).catch((e: unknown) => console.error('Failed to log scenario attempt', e))
     },
-    [turn, reference, references],
+    [turn, reference, scenarioVocabulary],
   )
 
   const capture = useSignCapture(handleCaptured)
@@ -242,19 +242,42 @@ export function ScenarioView() {
         </ul>
 
         <div className="rubric-note">
-          <strong>How this is scored.</strong> The proposal's rubric is accuracy 40% /
-          appropriateness 30% / fluency &amp; timing 20% / non-manual markers 10%. This build
-          captures <em>hand landmarks only</em>, so non-manual markers (facial expression, head
-          and body movement) cannot be measured; that 10% is folded into accuracy, giving
-          50 / 30 / 20.
-          {anyUnmeasured && (
-            <>
-              {' '}
-              Where a component still could not be measured for a turn it is shown as
-              &ldquo;n/a&rdquo; and its weight is shared across the rest, rather than counted as
-              zero.
-            </>
-          )}
+          <p className="rubric-note-head">
+            <strong>How this is scored</strong>
+          </p>
+          <dl className="rubric-defs">
+            <dt>Accuracy — 50%</dt>
+            <dd>
+              How closely your hand movement matches the reference recording of this sign,
+              compared frame by frame with time warping.
+            </dd>
+            <dt>Appropriateness — 30%</dt>
+            <dd>
+              Whether you produced the sign that was asked for rather than a different one. Your
+              attempt is also scored against every other sign in the library; if another sign
+              matches better, this drops. It can only spot confusion with signs we hold
+              references for.
+            </dd>
+            <dt>Fluency &amp; timing — 20%</dt>
+            <dd>
+              How close your pace was to the reference. Judged separately because the accuracy
+              measure deliberately ignores speed, so signing slowly is not penalised twice.
+            </dd>
+          </dl>
+          <p className="rubric-note-foot">
+            <strong>Not scored: non-manual markers.</strong> The proposal allots 10% to facial
+            expression and head/body movement. This build tracks hand landmarks only, so that
+            signal is not captured and no score for it would be honest. Its 10% is reallocated
+            to accuracy — hence 50 / 30 / 20 rather than the proposal's 40 / 30 / 20 / 10.
+            Scoring it needs face and pose tracking, and is future work.
+            {anyUnmeasured && (
+              <>
+                {' '}
+                Components shown as &ldquo;n/a&rdquo; had no data for that turn; their weight was
+                shared across the rest rather than counted as zero.
+              </>
+            )}
+          </p>
         </div>
 
         <div className="row-buttons">
@@ -369,6 +392,11 @@ export function ScenarioView() {
           <>
             <div className="reference-preview">
               <p className="compare-label">Reference</p>
+              {reference.provisional && (
+                <p className="provisional-note">
+                  Provisional reference — a team stand-in, not verified SSL.
+                </p>
+              )}
               <SkeletonPlayer
                 frames={reference.frames}
                 videoWidth={reference.videoWidth}

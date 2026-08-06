@@ -39,6 +39,16 @@ export interface SignRecording {
   gloss: string
   /** Who performed it (team member for now; School for the Deaf later). */
   signer: string
+  /** Where the recording came from. Dataset conversions set 'kaggle-dataset'. */
+  source?: 'kaggle-dataset' | 'team-recording' | string
+  /**
+   * True for references that are not authoritative SSL — team members signing
+   * to unblock development. CLAUDE.md is explicit that team recordings are test
+   * attempts for calibration, not ground truth, so they are labelled wherever
+   * they are shown and lose to a non-provisional reference for the same gloss.
+   * Replaced by School-for-the-Deaf recordings in the final phase.
+   */
+  provisional?: boolean
   createdAt: string
   durationMs: number
   /** Average capture rate, frames per second. */

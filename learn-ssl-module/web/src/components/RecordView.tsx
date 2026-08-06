@@ -110,6 +110,10 @@ export function RecordView() {
       id: crypto.randomUUID(),
       gloss: glossRef.current.trim().toUpperCase(),
       signer: signerRef.current.trim() || 'unknown',
+      // Team recordings unblock development but are not authoritative SSL, so
+      // they are marked here and labelled wherever they surface.
+      source: 'team-recording',
+      provisional: true,
       createdAt: new Date().toISOString(),
       durationMs,
       fps: Math.round((frames.length / durationMs) * 1000),

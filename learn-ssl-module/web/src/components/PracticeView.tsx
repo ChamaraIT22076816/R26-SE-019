@@ -3,6 +3,7 @@ import { useHandTracking } from '../vision/useHandTracking'
 import type { HandFrame, SignRecording } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
+import { pickReferenceList } from '../storage/references'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { suggestNext, summarizeAll } from '../learner/mastery'
@@ -16,15 +17,6 @@ import { ScoreBadge } from './ScoreBadge'
 const COUNTDOWN_S = 3
 
 type Phase = 'idle' | 'countdown' | 'recording' | 'result'
-
-/** Pick the most recent reference recording for each gloss. */
-function newestPerGloss(recs: SignRecording[]): SignRecording[] {
-  const byGloss = new Map<string, SignRecording>()
-  for (const r of [...recs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
-    if (!byGloss.has(r.gloss)) byGloss.set(r.gloss, r)
-  }
-  return [...byGloss.values()].sort((a, b) => a.gloss.localeCompare(b.gloss))
-}
 
 /**
  * Graded practice: choose a sign, watch the reference, record an attempt, and
@@ -73,7 +65,7 @@ export function PracticeView() {
         loadBundledRecordings(),
         listAttempts(),
       ])
-      setReferences(newestPerGloss([...loc, ...bun]))
+      setReferences(pickReferenceList([...loc, ...bun]))
       setEntries(log)
     })()
   }, [])
@@ -338,6 +330,12 @@ export function PracticeView() {
                 {selected && (
                   <div className="reference-preview">
                     <p className="compare-label">Sign this:</p>
+                    {selected.provisional && (
+                      <p className="provisional-note">
+                        Provisional reference — recorded by the team to unblock development, not
+                        verified SSL.
+                      </p>
+                    )}
                     <SkeletonPlayer
                       frames={selected.frames}
                       videoWidth={selected.videoWidth}
