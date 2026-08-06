@@ -20,6 +20,9 @@ Teammates and their repos in this folder:
 - PP1 (May) prototype in `learn-ssl-module/`: Python/OpenCV desktop demo — MediaPipe hand landmarks, normalisation, **static single-frame** pose comparison (Euclidean), colour-coded feedback, per-finger hints, CSV logging. Limits: no motion/trajectory, one hand, desktop-only, not integrated. kvn's PP1 was judged the weakest part; PP2 must be a step change.
 - README there mentions `sign_learning_demo.py` but only `feedback_demo.py` is committed.
 - Malkith's avatar has gloss JSONs: ME, YOU, NAME, WHAT, WHERE, CAN, YOUR (`SSL-Transformer/signs/`). Align kvn's first practice vocabulary with these to make the learn↔communicate integration demo trivial.
+  - **Correction (6 Aug 2026):** those avatar poses are `"source": "Blender manual pose"` — hand-authored by a hearing student, **not** derived from the Kaggle corpus and not validated by a Deaf signer. They are an illustration, never scoring ground truth. State this whenever the avatar appears next to a score.
+  - Malkith's FastAPI backend runs on Colab behind an ngrok URL that changes every session. **Never make a demo depend on it** — commit the `signs/*.json` and `character.fbx` we need.
+  - Chamara's app is Flask + OpenCV MJPEG (`/video_feed`) + SocketIO with a server-side webcam — there is no JSON API to integrate with. Out of scope for PP2.
 
 ## Agreed PP2 plan (deadline ~end Aug 2026, ≈7 weeks from July 11)
 
