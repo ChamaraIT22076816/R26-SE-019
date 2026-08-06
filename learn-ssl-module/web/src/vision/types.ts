@@ -41,6 +41,8 @@ export interface SignRecording {
   signer: string
   /** Where the recording came from. Dataset conversions set 'kaggle-dataset'. */
   source?: 'kaggle-dataset' | 'team-recording' | string
+  /** Dataset folder a converted reference came from, e.g. 'A-Z' or 'Verbs'. */
+  sourceCategory?: string
   /**
    * True for references that are not authoritative SSL — team members signing
    * to unblock development. CLAUDE.md is explicit that team recordings are test

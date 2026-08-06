@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useHandTracking } from '../vision/useHandTracking'
 import type { HandFrame, SignRecording } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
+import { categoriesIn, categoryOf } from '../data/categories'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { suggestNext, summarizeAll } from '../learner/mastery'
@@ -33,6 +34,8 @@ export function PracticeView() {
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
   const [logFailed, setLogFailed] = useState(false)
+  const [query, setQuery] = useState('')
+  const [category, setCategory] = useState<string | null>(null)
 
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (p: Phase) => {
@@ -170,6 +173,19 @@ export function PracticeView() {
   }
 
   const noAttemptHands = result != null && result.hands.every((h) => h.missing)
+  const inputsLocked = phase === 'countdown' || phase === 'recording'
+
+  // The picker holds every reference (80+ once more of the dataset is
+  // converted), so it is searchable and grouped rather than one flat list.
+  const categories = useMemo(() => categoriesIn(references), [references])
+  const visible = useMemo(() => {
+    const needle = query.trim().toUpperCase()
+    return references.filter(
+      (r) =>
+        (category === null || categoryOf(r) === category) &&
+        (needle === '' || r.gloss.includes(needle)),
+    )
+  }, [references, query, category])
 
   return (
     <div className="record-layout">
@@ -311,21 +327,70 @@ export function PracticeView() {
               <>
                 {suggested && (
                   <p className="hint-text">
-                    Suggested next: <strong>{suggested}</strong>
+                    Suggested next:{' '}
+                    <button
+                      className="link-button"
+                      onClick={() => {
+                        const next = references.find((r) => r.gloss === suggested)
+                        if (next) setSelected(next)
+                      }}
+                      disabled={inputsLocked}
+                      title="Jump to the suggested sign"
+                    >
+                      {suggested} ★
+                    </button>
                   </p>
                 )}
-                <div className="gloss-chips">
-                  {references.map((r) => (
-                    <button
-                      key={r.id}
-                      className={selected?.id === r.id ? 'chip active' : 'chip'}
-                      onClick={() => setSelected(r)}
-                      disabled={phase === 'countdown' || phase === 'recording'}
-                    >
-                      {r.gloss === suggested ? `${r.gloss} ★` : r.gloss}
-                    </button>
-                  ))}
+
+                <div className="picker-filters">
+                  <input
+                    type="search"
+                    className="picker-search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={`Search ${references.length} signs…`}
+                    disabled={inputsLocked}
+                    aria-label="Search signs"
+                  />
+                  {categories.length > 1 && (
+                    <div className="category-chips">
+                      <button
+                        className={category === null ? 'chip active' : 'chip'}
+                        onClick={() => setCategory(null)}
+                        disabled={inputsLocked}
+                      >
+                        All {references.length}
+                      </button>
+                      {categories.map((name) => (
+                        <button
+                          key={name}
+                          className={category === name ? 'chip active' : 'chip'}
+                          onClick={() => setCategory(name)}
+                          disabled={inputsLocked}
+                        >
+                          {name} {references.filter((r) => categoryOf(r) === name).length}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {visible.length === 0 ? (
+                  <p className="hint-text">No signs match “{query}”.</p>
+                ) : (
+                  <div className="gloss-chips gloss-chips-scroll">
+                    {visible.map((r) => (
+                      <button
+                        key={r.id}
+                        className={selected?.id === r.id ? 'chip active' : 'chip'}
+                        onClick={() => setSelected(r)}
+                        disabled={inputsLocked}
+                      >
+                        {r.gloss === suggested ? `${r.gloss} ★` : r.gloss}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {selected && (
                   <div className="reference-preview">

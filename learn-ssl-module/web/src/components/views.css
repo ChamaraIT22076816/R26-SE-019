@@ -127,6 +127,68 @@
   color: var(--text-dim);
 }
 
+/* ---- sign picker (search + category filter) ---- */
+
+.picker-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.picker-search {
+  font: 14px var(--sans);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  outline: none;
+  width: 100%;
+}
+
+.picker-search:focus {
+  border-color: var(--accent);
+}
+
+.picker-search:disabled {
+  opacity: 0.5;
+}
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.category-chips .chip {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* Cap the picker's height so a long vocabulary cannot push the reference
+   preview and the record button off screen. */
+.gloss-chips-scroll {
+  max-height: 168px;
+  overflow-y: auto;
+  align-content: flex-start;
+  padding-right: 4px;
+}
+
+.link-button {
+  font: 600 13px var(--sans);
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .saved-flash {
   color: var(--accent-2);
   font-weight: 600;
