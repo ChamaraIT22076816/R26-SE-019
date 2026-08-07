@@ -167,7 +167,7 @@ const RESAMPLE_RATIO = SAMPLE_RATE / CAPTURE_RATE;
 // ONNX constants
 // ─────────────────────────────────────────────────────────────────
 
-/** Node names validated via Netron on sound_model.onnx (tf2onnx SavedModel export). */
+/** Node names validated via Netron on sound_model.onnx (PyTorch → ONNX export). */
 const ONNX_INPUT_NAME  = 'serving_default_input_layer:0';
 const ONNX_OUTPUT_NAME = 'StatefulPartitionedCall:1_0';
 
@@ -283,10 +283,6 @@ function resampleLinear(
   return out;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// ONNX Model Loader
-// ─────────────────────────────────────────────────────────────────
-
 /**
  * loadOnnxModel
  *
@@ -296,7 +292,15 @@ function resampleLinear(
  * The ONNX C++ backend cannot read Metro asset-server URLs; it requires a
  * plain file-system path — hence the copy step.
  *
- * Idempotent: returns the cached session on all subsequent calls.
+ * MODEL FRESHNESS CHECK:
+ *   A plain `if (!exists)` guard is insufficient after a model update: the old
+ *   binary would stay in documentDirectory forever.  Instead we compare the
+ *   byte size of the bundled asset against the cached file.  If they differ,
+ *   the new model is force-copied.  Size comparison is O(1) (just a stat call)
+ *   and works fully offline — no hash computation or version file needed.
+ *
+ * Idempotent within a single JS session: returns the cached InferenceSession
+ * on all subsequent calls without touching the filesystem again.
  */
 async function loadOnnxModel(): Promise<InferenceSession | null> {
   if (_onnxSession)            return _onnxSession;
@@ -318,13 +322,29 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
     if (!asset.localUri) await asset.downloadAsync();
     if (!asset.localUri) throw new Error('expo-asset: localUri null after downloadAsync()');
 
-    const destUri  = `${FileSystem.documentDirectory}sound_model.onnx`;
-    const destInfo = await FileSystem.getInfoAsync(destUri);
-    if (!destInfo.exists) {
+    const destUri = `${FileSystem.documentDirectory}sound_model.onnx`;
+
+    // ── Freshness check ──────────────────────────────────────────
+    // Compare the byte size of the bundled asset (from the APK)
+    // against the cached file in documentDirectory.
+    // If they differ, the APK contains a newer model — force-copy it.
+    const [cachedInfo, bundledInfo] = await Promise.all([
+      FileSystem.getInfoAsync(destUri,             { size: true }),
+      FileSystem.getInfoAsync(asset.localUri,      { size: true }),
+    ]);
+
+    const cachedSize  = cachedInfo.exists  ? (cachedInfo  as any).size ?? -1 : -1;
+    const bundledSize = bundledInfo.exists ? (bundledInfo as any).size ?? -2 : -2;
+    const needsCopy   = !cachedInfo.exists || cachedSize !== bundledSize;
+
+    if (needsCopy) {
       await FileSystem.copyAsync({ from: asset.localUri, to: destUri });
-      console.log('[ONNX] Model copied to documentDirectory');
+      console.log(
+        `[ONNX] Model ${cachedInfo.exists ? 'updated' : 'installed'} →`,
+        `${bundledSize} bytes`,
+      );
     } else {
-      console.log('[ONNX] Model already present — skipping copy');
+      console.log('[ONNX] Cached model is current — skipping copy', `(${cachedSize} bytes)`);
     }
 
     // ONNX C++ backend requires a plain POSIX path, not a file:// URI.
