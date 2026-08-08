@@ -6,61 +6,37 @@
  * Feature pipeline  : LiveAudioStream → Int16 PCM → resample 16k→22.05k
  *                     → Silence Gate → Rolling buffer → Mel-spectrogram → ONNX
  *
- * SILENCE GATE (the key addition in this version):
- *   Android's AudioRecord at audioSource=6 (VOICE_RECOGNITION) captures the raw
- *   microphone ADC output with no AGC or noise suppression.  In a quiet room the
- *   microphone still produces low-level quantisation noise / thermal noise, which
- *   when normalised and fed to the Mel-spectrogram pipeline produces a spectrogram
- *   that strongly resembles broadband transient sounds, causing the ONNX model to
- *   output near-1.0 confidence for classes like 'glass_breaking' or 'car_horn'.
+ * SILENCE GATE RECALIBRATION (v2):
  *
- *   The gate operates in two complementary stages:
+ *   The previous Stage A threshold (0.012) was over-aggressive.  It was resetting
+ *   the rolling buffer on EVERY silent chunk, which is fatal for sounds with quiet
+ *   onsets: a dog bark's attack begins at RMS ~0.005–0.010 for the first 50–100 ms
+ *   before the primary body arrives.  With the old gate, the buffer was wiped
+ *   mid-event so the complete 3-second window was never assembled.
  *
- *   STAGE A — Chunk-level RMS gate  (runs on every incoming PCM chunk):
- *     After resampling, the RMS energy of the float32 chunk is computed.
- *     If RMS < SILENCE_CHUNK_RMS_THRESHOLD the chunk is discarded and NOT
- *     appended to the rolling buffer.  This prevents the buffer from filling
- *     with silence data, naturally pausing the pipeline until real sound arrives.
- *     The buffer is also cleared so the next real-sound chunk starts a fresh window
- *     rather than being mixed with stale near-silence data.
+ *   New strategy:
  *
- *   STAGE B — Window-level RMS gate  (runs just before spectrogram/inference):
- *     Even if individual chunks pass Stage A, the full 3-second window is re-checked
- *     before the expensive Mel-spectrogram and ONNX inference are invoked.
- *     If the window RMS < SILENCE_WINDOW_RMS_THRESHOLD inference is skipped,
- *     criticalStreak is reset, and the UI is reset to "safe/monitoring" state.
+ *   STAGE A — Chunk-level gate (per ~256 ms chunk, before buffer append):
+ *     Threshold lowered to 0.004 — comfortably above digital silence
+ *     (thermal + quantisation noise: RMS ≈ 0.001–0.003) while passing the quiet
+ *     onset of dog barks, door knocks, and footsteps.
  *
- *   RMS is the correct DSP primitive for this task: it measures the average power
- *   of the signal (RMS = √(Σxᵢ²/N)), which is proportional to perceptual loudness
- *   and maps directly to the energy scale the Mel-spectrogram normalises.
- *   O(n) complexity — safe to run synchronously on the JS event loop per chunk.
+ *     *** CRITICAL CHANGE: Stage A no longer RESETS the ring buffer. ***
+ *     It simply skips accumulation for that chunk.  The buffer retains any samples
+ *     already written.  This lets the next loud chunk continue filling from where
+ *     it left off.  Buffer is only reset when a window is dispatched or listening stops.
  *
- * RING BUFFER:
- *   The previous implementation accumulated samples into a plain number[] with
- *   repeated push() calls inside a loop, which is O(n²) for large n due to repeated
- *   array resizing.  This version uses a pre-allocated Float32Array ring buffer with
- *   a single write-pointer, giving O(1) amortised append and zero GC pressure.
+ *   STAGE B — Window-level gate (full 3 s window, before spectrogram + ONNX):
+ *     Base threshold 0.005.  Modulated by the user's sensitivity setting (1–5).
+ *     Sensitivity 1 = ×2.0 (conservative), Sensitivity 5 = ×0.3 (aggressive).
  *
- * MUTEX CORRECTNESS:
- *   inferenceActiveRef gates re-entrant inference calls.  It is set to true
- *   exactly once before the async pipeline runs and unconditionally released in the
- *   finally block — covering every code path (success, inference error, null result,
- *   confidence below threshold, and safe class).  The chunk-level data handler is
- *   kept synchronous (no async/await) so it cannot race with itself.
+ *   CONFIDENCE THRESHOLD:
+ *     Lowered from 0.65 → 0.52.  Freshly-trained models peak at 0.55–0.75 for
+ *     correct predictions; confused outputs sit near 0.143 (1/7 classes).
  *
- * SAMPLE RATE STRATEGY:
- *   LiveAudioStream captures at 16 000 Hz (universal Android hardware guarantee).
- *   A pure-JS linear-interpolation resampler converts each PCM chunk from 16 000 Hz
- *   → 22 050 Hz so the Mel-spectrogram pipeline receives correctly-pitched features.
- *
- * LABELS (from assets/model/labels.txt):
- *   0: car_horn       → WARNING
- *   1: crying_baby    → WARNING
- *   2: dog            → safe
- *   3: door_wood_knock→ safe
- *   4: footsteps      → safe
- *   5: glass_breaking → CRITICAL
- *   6: siren          → CRITICAL
+ * HISTORY LOGGING:
+ *   Every warning/critical detection is persisted via saveDetectionEvent().
+ *   Safe-class events are intentionally not logged.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -76,6 +52,7 @@ import {
   CLIP_DURATION,
   CLIP_SAMPLES,
 } from '@/utils/audio/melSpectrogram';
+import { getSettings, saveDetectionEvent } from '@/utils/storage';
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -139,35 +116,23 @@ const THREAT_MAP: Record<SoundLabel, ThreatLevel> = {
 // Audio capture constants
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * 16 000 Hz: the guaranteed-working capture rate on all Android OEMs.
- * 22 050 Hz may throw AudioRecord init errors on certain MediaTek SoCs.
- */
+/** 16 000 Hz: universal Android hardware guarantee. */
 const CAPTURE_RATE = 16000;
 
 /**
- * MediaRecorder.AudioSource.VOICE_RECOGNITION — disables Android system-level
- * AGC, echo cancellation, and noise suppression.  We need the raw acoustic
- * signal for the environmental sound CNN; pre-processed audio distorts the
- * spectral features the model was trained on.
+ * MediaRecorder.AudioSource.VOICE_RECOGNITION — disables system AGC,
+ * echo cancellation, and noise suppression.  Raw acoustic signal needed
+ * for the environmental sound CNN.
  */
 const AUDIO_SOURCE = 6;
 
-/**
- * 4096 samples ≈ 256 ms at 16 kHz.  Chosen for efficient JNI bridge throughput;
- * large enough to amortise the base64 decode overhead, small enough that the
- * rolling buffer fills in roughly 3 real-time seconds.
- */
+/** 4096 samples ≈ 256 ms at 16 kHz. */
 const BUFFER_SIZE_SAMPLES = 4096;
-
-/** Ratio used by the linear-interpolation resampler: 22050 / 16000 = 1.378125 */
-const RESAMPLE_RATIO = SAMPLE_RATE / CAPTURE_RATE;
 
 // ─────────────────────────────────────────────────────────────────
 // ONNX constants
 // ─────────────────────────────────────────────────────────────────
 
-/** Node names validated via Netron on sound_model.onnx (PyTorch → ONNX export). */
 const ONNX_INPUT_NAME  = 'serving_default_input_layer:0';
 const ONNX_OUTPUT_NAME = 'StatefulPartitionedCall:1_0';
 
@@ -175,36 +140,40 @@ const ONNX_OUTPUT_NAME = 'StatefulPartitionedCall:1_0';
 const ONNX_INPUT_DIMS: readonly number[] = [1, 128, 128, 1];
 
 // ─────────────────────────────────────────────────────────────────
-// Silence Gate thresholds
+// Silence Gate thresholds  (recalibrated v2)
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * SILENCE_CHUNK_RMS_THRESHOLD  — Stage A gate (per-chunk, before buffer append).
+ * SILENCE_CHUNK_RMS_THRESHOLD — Stage A gate.
  *
- * Android microphone noise floor (VOICE_RECOGNITION source, quiet room):
- *   RMS ≈ 0.002 – 0.007  (quantisation noise + thermal noise)
+ * Lowered to 0.004 to capture quiet sound onsets.
+ * Digital noise floor (VOICE_RECOGNITION source): RMS ≈ 0.001–0.003.
  *
- * Lightest real-world sound events:
- *   footsteps at 2 m: RMS ≈ 0.020 – 0.040
- *   distant speech:   RMS ≈ 0.015 – 0.030
- *
- * Threshold at 0.012 leaves an ~80 % margin above the noise floor and catches
- * all real sound events comfortably.  Increase toward 0.025 in noisier
- * deployment environments if needed.
+ * IMPORTANT: Stage A now only SKIPS accumulation — it does NOT reset
+ * the ring buffer.  This preserves data from quiet-onset transients
+ * already accumulated in the buffer.
  */
-const SILENCE_CHUNK_RMS_THRESHOLD = 0.012;
+const SILENCE_CHUNK_RMS_THRESHOLD = 0.004;
 
 /**
- * SILENCE_WINDOW_RMS_THRESHOLD  — Stage B gate (full 3-second window, before inference).
+ * SILENCE_WINDOW_RMS_THRESHOLD_BASE — Stage B base gate.
  *
- * Set slightly lower than Stage A to catch windows where a few loud chunks
- * slipped through Stage A but the overall window is still mostly silent.
- * This is the last defence before the expensive spectrogram + ONNX pipeline.
+ * Applied to the full 3-second window before spectrogram + inference.
+ * Effective threshold = base × SENSITIVITY_MULTIPLIERS[sensitivity - 1].
  */
-const SILENCE_WINDOW_RMS_THRESHOLD = 0.008;
+const SILENCE_WINDOW_RMS_THRESHOLD_BASE = 0.005;
 
-/** ONNX classification confidence floor — predictions below this are discarded. */
-const CONFIDENCE_THRESHOLD = 0.65;
+/**
+ * Per-sensitivity multipliers for Stage B.
+ * Index 0 = sensitivity 1 (Conservative) … index 4 = sensitivity 5 (Aggressive).
+ */
+const SENSITIVITY_MULTIPLIERS = [2.0, 1.5, 1.0, 0.6, 0.3] as const;
+
+/**
+ * Confidence floor — lowered from 0.65 to 0.52 to accommodate freshly-trained
+ * model output ranges while still suppressing uniform/confused outputs (~0.143).
+ */
+const CONFIDENCE_THRESHOLD = 0.52;
 
 // ─────────────────────────────────────────────────────────────────
 // Module-level ONNX session cache
@@ -219,46 +188,24 @@ let _onnxSessionLoadAttempted = false;
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * computeRMS
- *
- * Computes the Root Mean Square energy of a Float32 PCM buffer.
- *
+ * computeRMS — Root Mean Square energy of a Float32 PCM buffer.
  *   RMS = √( (1/N) · Σᵢ xᵢ² )
- *
- * This is the standard DSP measure for signal power / perceptual loudness.
- * For normalised [-1, +1] PCM:
- *   - Digital silence / noise floor: RMS ≈ 0.002 – 0.008
- *   - Quiet room ambient:            RMS ≈ 0.008 – 0.015
- *   - Speech / footsteps:            RMS ≈ 0.015 – 0.060
- *   - Horn / siren:                  RMS ≈ 0.060 – 0.300
- *   - Glass breaking (impact):       RMS ≈ 0.100 – 0.500 (short burst)
- *
- * Complexity: O(n) — runs synchronously on the JS thread without blocking.
- *
- * @param samples Float32Array of PCM samples in [-1, +1]
- * @returns RMS energy in [0, 1]
+ * O(n) complexity, synchronous.
  */
 function computeRMS(samples: Float32Array): number {
   const n = samples.length;
   if (n === 0) return 0;
-
   let sumOfSquares = 0;
   for (let i = 0; i < n; i++) {
     const s = samples[i] ?? 0;
     sumOfSquares += s * s;
   }
-
   return Math.sqrt(sumOfSquares / n);
 }
 
 /**
- * resampleLinear
- *
- * Resamples a Float32Array from srcRate to dstRate using linear interpolation.
- * Equivalent to SciPy's resample_poly for the frequency bands relevant to
- * environmental sound classification (< 8 kHz).
- *
- * Complexity: O(n_out) — safe to run synchronously per chunk.
+ * resampleLinear — linear-interpolation resampler.
+ * O(n_out) — safe to run synchronously per chunk.
  */
 function resampleLinear(
   samples: Float32Array,
@@ -266,12 +213,10 @@ function resampleLinear(
   dstRate: number,
 ): Float32Array {
   if (srcRate === dstRate) return samples;
-
-  const ratio    = dstRate / srcRate;
-  const outLen   = Math.floor(samples.length * ratio);
-  const out      = new Float32Array(outLen);
-  const lastIdx  = samples.length - 1;
-
+  const ratio   = dstRate / srcRate;
+  const outLen  = Math.floor(samples.length * ratio);
+  const out     = new Float32Array(outLen);
+  const lastIdx = samples.length - 1;
   for (let i = 0; i < outLen; i++) {
     const srcPos = i / ratio;
     const lo     = Math.floor(srcPos);
@@ -279,33 +224,27 @@ function resampleLinear(
     const frac   = srcPos - lo;
     out[i] = (samples[lo] ?? 0) * (1 - frac) + (samples[hi] ?? 0) * frac;
   }
-
   return out;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// ONNX Model Loader
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * loadOnnxModel
  *
  * Copies sound_model.onnx from the Metro asset bundle to documentDirectory
- * (a guaranteed POSIX-writable path), then opens an InferenceSession.
+ * (guaranteed POSIX-writable), then opens an InferenceSession.
  *
- * The ONNX C++ backend cannot read Metro asset-server URLs; it requires a
- * plain file-system path — hence the copy step.
+ * MODEL FRESHNESS CHECK: compares byte sizes (O(1) stat call).
+ * If sizes differ, the APK contains a newer model — force-copy it.
  *
- * MODEL FRESHNESS CHECK:
- *   A plain `if (!exists)` guard is insufficient after a model update: the old
- *   binary would stay in documentDirectory forever.  Instead we compare the
- *   byte size of the bundled asset against the cached file.  If they differ,
- *   the new model is force-copied.  Size comparison is O(1) (just a stat call)
- *   and works fully offline — no hash computation or version file needed.
- *
- * Idempotent within a single JS session: returns the cached InferenceSession
- * on all subsequent calls without touching the filesystem again.
+ * Idempotent within a single JS session.
  */
 async function loadOnnxModel(): Promise<InferenceSession | null> {
   if (_onnxSession)            return _onnxSession;
   if (_onnxSessionLoading) {
-    // Another concurrent call is mid-load — poll briefly then return.
     await new Promise<void>((r) => setTimeout(r, 250));
     return _onnxSession;
   }
@@ -324,13 +263,9 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
 
     const destUri = `${FileSystem.documentDirectory}sound_model.onnx`;
 
-    // ── Freshness check ──────────────────────────────────────────
-    // Compare the byte size of the bundled asset (from the APK)
-    // against the cached file in documentDirectory.
-    // If they differ, the APK contains a newer model — force-copy it.
     const [cachedInfo, bundledInfo] = await Promise.all([
-      FileSystem.getInfoAsync(destUri,             { size: true }),
-      FileSystem.getInfoAsync(asset.localUri,      { size: true }),
+      FileSystem.getInfoAsync(destUri,        { size: true }),
+      FileSystem.getInfoAsync(asset.localUri, { size: true }),
     ]);
 
     const cachedSize  = cachedInfo.exists  ? (cachedInfo  as any).size ?? -1 : -1;
@@ -339,15 +274,11 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
 
     if (needsCopy) {
       await FileSystem.copyAsync({ from: asset.localUri, to: destUri });
-      console.log(
-        `[ONNX] Model ${cachedInfo.exists ? 'updated' : 'installed'} →`,
-        `${bundledSize} bytes`,
-      );
+      console.log(`[ONNX] Model ${cachedInfo.exists ? 'updated' : 'installed'} → ${bundledSize} bytes`);
     } else {
       console.log('[ONNX] Cached model is current — skipping copy', `(${cachedSize} bytes)`);
     }
 
-    // ONNX C++ backend requires a plain POSIX path, not a file:// URI.
     const nativePath = destUri.replace(/^file:\/\//, '');
 
     _onnxSession = await InferenceSession.create(nativePath, {
@@ -358,7 +289,7 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
     return _onnxSession;
   } catch (err) {
     console.warn('[ONNX] Model load failed:', err);
-    _onnxSessionLoadAttempted = false; // allow a retry on next startListening()
+    _onnxSessionLoadAttempted = false;
     return null;
   } finally {
     _onnxSessionLoading = false;
@@ -369,23 +300,6 @@ async function loadOnnxModel(): Promise<InferenceSession | null> {
 // ONNX Inference
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * runOnnxInference
- *
- * Executes a single forward pass through the ONNX model.
- *
- * Input tensor:  Float32Array [128 × 128] flat row-major Mel-spectrogram,
- *                reshaped to [1, 128, 128, 1] via ONNX_INPUT_DIMS.
- * Output tensor: Float32Array [7] — softmax class probabilities.
- *
- * Metro log format per inference:
- *   [ONNX Live] class=siren            prob=0.9200  ◀ TOP
- *   [ONNX Live] class=glass_breaking   prob=0.0412
- *   ...
- *
- * Falls back to the first available output key if ONNX_OUTPUT_NAME is not
- * found in the results map — prevents silent failures after model re-exports.
- */
 async function runOnnxInference(
   session: InferenceSession,
   melFeatures: Float32Array,
@@ -401,16 +315,13 @@ async function runOnnxInference(
         console.warn('[ONNX] session.run() returned no output tensors');
         return null;
       }
-      console.warn(
-        `[ONNX] Output key "${ONNX_OUTPUT_NAME}" not found — using "${firstKey}". Verify with Netron.`,
-      );
+      console.warn(`[ONNX] Output key "${ONNX_OUTPUT_NAME}" not found — using "${firstKey}".`);
       outputTensor = results[firstKey]!;
     }
 
     const probs = outputTensor.data as Float32Array;
     if (!probs?.length) return null;
 
-    // Argmax
     let maxIdx = 0;
     let maxVal = probs[0] ?? 0;
     for (let i = 1; i < probs.length; i++) {
@@ -420,10 +331,9 @@ async function runOnnxInference(
 
     const topLabel = LABELS[maxIdx] ?? 'footsteps';
 
-    // Live Metro probability log — all classes, winner highlighted
     LABELS.forEach((lbl, i) => {
-      const p     = (probs[i] ?? 0).toFixed(4);
-      const mark  = i === maxIdx ? '  ◀ TOP' : '';
+      const p    = (probs[i] ?? 0).toFixed(4);
+      const mark = i === maxIdx ? '  ◀ TOP' : '';
       console.log(`[ONNX Live] class=${lbl.padEnd(16)} prob=${p}${mark}`);
     });
 
@@ -473,11 +383,7 @@ export function useSoundRecognition() {
 
   /**
    * Pre-allocated ring buffer holding resampled PCM at 22 050 Hz.
-   *
-   * Using a typed Float32Array of fixed capacity CLIP_SAMPLES eliminates
-   * the O(n²) resizing cost of the previous number[]/push() approach and
-   * produces zero GC pressure during the hot path.  writePtr tracks the
-   * next write position; when it reaches CLIP_SAMPLES the window is ready.
+   * writePtr tracks the next write position.
    */
   const ringBufferRef = useRef<Float32Array>(new Float32Array(CLIP_SAMPLES));
   const writePtrRef   = useRef<number>(0);
@@ -486,17 +392,7 @@ export function useSoundRecognition() {
 
   /**
    * inferenceActiveRef — strict boolean mutex.
-   *
-   * Set to true immediately before the async inference pipeline begins.
-   * Released unconditionally in the finally block — covers every exit path:
-   *   · Successful prediction (warning / critical / safe)
-   *   · Confidence below threshold
-   *   · Null result from ONNX (model error)
-   *   · Exception anywhere in the pipeline
-   *   · Silence gate rejection at window level
-   *
-   * The chunk-level data handler is synchronous, so it never contends with
-   * itself.  The only contention point is this flag guarding runOnnxInference.
+   * Released unconditionally in the finally block of runInferencePipeline.
    */
   const inferenceActiveRef = useRef(false);
 
@@ -504,20 +400,13 @@ export function useSoundRecognition() {
   const onnxSessionRef     = useRef<InferenceSession | null>(null);
 
   /**
-   * consecutiveSilentWindowsRef — counts consecutive windows dropped by the
-   * silence gate.  Used solely for Metro diagnostic logging.
+   * sensitivityRef — current sensitivity level (1–5) read from Settings.
+   * Updated on every startListening() call so slider changes take effect
+   * on the next session without requiring a hook remount.
    */
-  const consecutiveSilentWindowsRef = useRef(0);
+  const sensitivityRef = useRef(3);
 
-  // ── Helper: synchronous reset of rolling buffer ───────────────────
-  // Called both when a silent chunk is detected (Stage A) and when inference
-  // begins (to start a fresh window for the next 3 seconds).
-  const resetRingBuffer = useCallback(() => {
-    // Overwriting writePtr to 0 is sufficient — the old data will be overwritten
-    // by incoming chunks.  No need to zero-fill; CLIP_SAMPLES is always written
-    // completely before inference fires.
-    writePtrRef.current = 0;
-  }, []);
+  const consecutiveSilentWindowsRef = useRef(0);
 
   // ── Eagerly load the ONNX model on mount ─────────────────────────
   useEffect(() => {
@@ -534,68 +423,44 @@ export function useSoundRecognition() {
   }, []);
 
   // ── Core inference pipeline ───────────────────────────────────────
-  /**
-   * runInferencePipeline
-   *
-   * Called with a full CLIP_SAMPLES window of resampled PCM.
-   * Responsibilities (in order):
-   *   1. Stage B silence gate (window-level RMS check)
-   *   2. Acquire inferenceActiveRef mutex
-   *   3. Mel-spectrogram extraction
-   *   4. ONNX forward pass
-   *   5. Threshold + threat classification
-   *   6. State update
-   *   7. Release inferenceActiveRef in finally (always)
-   *
-   * This function is fire-and-forget (not awaited by the caller).
-   */
   const runInferencePipeline = useCallback(async (
     window: Float32Array,
   ): Promise<void> => {
-    // ── Guard: session must be ready ────────────────────────────────
-    // Do NOT hold the mutex here — if the session isn't ready we just skip
-    // and the next window will retry.  No deadlock risk.
     if (!onnxSessionRef.current) {
       console.log('[Pipeline] ONNX session not ready — skipping window');
       return;
     }
 
-    // ── Guard: prevent re-entrant inference ─────────────────────────
     if (inferenceActiveRef.current) {
-      console.log('[Pipeline] Inference in progress — dropping window (budget device detected)');
+      console.log('[Pipeline] Previous inference still running — dropping window');
       return;
     }
 
-    // ── Stage B: Window-level RMS silence gate ───────────────────────
+    // ── Stage B: Window-level RMS silence gate ────────────────────
+    const multiplierIdx = Math.max(0, Math.min(4, sensitivityRef.current - 1));
+    const multiplier    = SENSITIVITY_MULTIPLIERS[multiplierIdx] ?? 1.0;
+    const effectiveWindowThreshold = SILENCE_WINDOW_RMS_THRESHOLD_BASE * multiplier;
+
     const windowRMS = computeRMS(window);
-    if (windowRMS < SILENCE_WINDOW_RMS_THRESHOLD) {
+    if (windowRMS < effectiveWindowThreshold) {
       consecutiveSilentWindowsRef.current += 1;
       console.log(
-        `[SilenceGate B] Window dropped — RMS=${windowRMS.toFixed(5)} < threshold=${SILENCE_WINDOW_RMS_THRESHOLD}` +
-        ` (consecutive silent windows: ${consecutiveSilentWindowsRef.current})`,
+        `[SilenceGate B] Window dropped — RMS=${windowRMS.toFixed(5)} < ` +
+        `threshold=${effectiveWindowThreshold.toFixed(5)} ` +
+        `(sensitivity=${sensitivityRef.current}, consecutive=${consecutiveSilentWindowsRef.current})`,
       );
-      // Reset UI to safe/monitoring state — the environment is silent.
       criticalStreakRef.current = 0;
-      setState((s) => ({
-        ...s,
-        prediction:           null,
-        criticalStreakSeconds: 0,
-      }));
+      setState((s) => ({ ...s, prediction: null, criticalStreakSeconds: 0 }));
       return;
     }
 
-    // Window has real signal — reset silence counter and acquire mutex.
     consecutiveSilentWindowsRef.current = 0;
     inferenceActiveRef.current = true;
 
     try {
-      // ── Mel-spectrogram extraction ─────────────────────────────────
       const melFeatures = extractMelSpectrogram(window);
+      const result      = await runOnnxInference(onnxSessionRef.current, melFeatures);
 
-      // ── ONNX inference ─────────────────────────────────────────────
-      const result = await runOnnxInference(onnxSessionRef.current, melFeatures);
-
-      // ── Result: null (model error) ────────────────────────────────
       if (!result) {
         criticalStreakRef.current = 0;
         setState((s) => ({ ...s, prediction: null, criticalStreakSeconds: 0 }));
@@ -604,7 +469,6 @@ export function useSoundRecognition() {
 
       const { label, confidence } = result;
 
-      // ── Result: below confidence threshold ────────────────────────
       if (confidence < CONFIDENCE_THRESHOLD) {
         criticalStreakRef.current = 0;
         setState((s) => ({ ...s, prediction: null, criticalStreakSeconds: 0 }));
@@ -613,40 +477,48 @@ export function useSoundRecognition() {
 
       const threatLevel = THREAT_MAP[label];
 
-      // ── Result: safe class ────────────────────────────────────────
+      // Safe classes: reset streak, clear prediction, do NOT log to history.
       if (threatLevel === 'safe') {
         criticalStreakRef.current = 0;
         setState((s) => ({ ...s, prediction: null, criticalStreakSeconds: 0 }));
         return;
       }
 
-      // ── Result: warning or critical ───────────────────────────────
+      // Warning / Critical: update streak and persist to history log.
       if (threatLevel === 'critical') {
         criticalStreakRef.current += CLIP_DURATION;
       } else {
-        // 'warning' — reset streak; warnings don't accumulate toward SOS.
         criticalStreakRef.current = 0;
       }
 
+      const prediction: SoundPrediction = {
+        label:      DISPLAY_NAMES[label],
+        confidence,
+        threatLevel,
+        timestamp:  Date.now(),
+      };
+
+      // Persist to history (fire-and-forget, non-blocking, non-fatal).
+      saveDetectionEvent({
+        id:         `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        soundName:  DISPLAY_NAMES[label],
+        rawLabel:   label,
+        confidence,
+        threatLevel,
+        timestamp:  Date.now(),
+      }).catch(() => {/* storage errors are non-fatal */});
+
       setState((s) => ({
         ...s,
-        prediction: {
-          label:      DISPLAY_NAMES[label],
-          confidence,
-          threatLevel,
-          timestamp:  Date.now(),
-        },
+        prediction,
         criticalStreakSeconds: criticalStreakRef.current,
       }));
     } catch (err) {
       console.warn('[Pipeline] Unhandled error in inference:', err);
-      // Safe reset — don't leave stale predictions on screen.
       criticalStreakRef.current = 0;
       setState((s) => ({ ...s, prediction: null, criticalStreakSeconds: 0 }));
     } finally {
-      // UNCONDITIONAL release — this is the only place that sets this to false.
-      // Every code path above (early returns via return, exceptions) falls through
-      // here because finally always executes.
+      // UNCONDITIONAL release — every code path exits through here.
       inferenceActiveRef.current = false;
     }
   }, []);
@@ -662,13 +534,20 @@ export function useSoundRecognition() {
   const startListening = useCallback(async () => {
     if (isListeningRef.current) return;
 
+    // Read current sensitivity from persisted settings before starting.
+    try {
+      const settings = await getSettings();
+      sensitivityRef.current = settings.sensitivity ?? 3;
+    } catch {
+      sensitivityRef.current = 3;
+    }
+
     const granted = await requestPermission();
     if (!granted) {
       setState((s) => ({ ...s, error: 'Microphone permission denied' }));
       return;
     }
 
-    // Trigger model load if the mount effect hasn't resolved yet.
     if (!onnxSessionRef.current) {
       loadOnnxModel().then((session) => {
         if (session) {
@@ -684,13 +563,13 @@ export function useSoundRecognition() {
     }
 
     // ── Reset all mutable state for the new session ───────────────
-    isListeningRef.current                  = true;
-    inferenceActiveRef.current              = false;
-    criticalStreakRef.current               = 0;
-    consecutiveSilentWindowsRef.current     = 0;
-    writePtrRef.current                     = 0;
-    // Zero-fill the ring buffer so stale data from a previous session cannot
-    // leak into the first window of the new session.
+    isListeningRef.current              = true;
+    inferenceActiveRef.current          = false;
+    criticalStreakRef.current           = 0;
+    consecutiveSilentWindowsRef.current = 0;
+    writePtrRef.current                 = 0;
+    // Zero-fill to prevent stale data from a previous session leaking into
+    // the first window.
     ringBufferRef.current.fill(0);
 
     setState((s) => ({
@@ -702,7 +581,6 @@ export function useSoundRecognition() {
       criticalStreakSeconds: 0,
     }));
 
-    // ── Configure LiveAudioStream ─────────────────────────────────
     LiveAudioStream.init({
       sampleRate:    CAPTURE_RATE,       // 16 000 Hz
       channels:      1,                  // mono
@@ -711,74 +589,44 @@ export function useSoundRecognition() {
       bufferSize:    BUFFER_SIZE_SAMPLES,
     });
 
-    // ── 'data' event handler ─────────────────────────────────────
+    // ── 'data' event handler (synchronous body) ───────────────────
     //
-    // Design rationale for keeping this handler SYNCHRONOUS:
-    //   The 'data' event is emitted by DeviceEventEmitter on the JS thread.
-    //   If the handler is async, multiple invocations can be scheduled and
-    //   interleave in the microtask queue, causing concurrent writes to the
-    //   ring buffer.  By keeping all buffer manipulation synchronous and only
-    //   fire-and-forgetting the async inference call, we guarantee that buffer
-    //   writes are serialised by the JS event loop.
-    //
-    // Steps per chunk:
-    //   1. Guard: stop processing immediately if listening has been cancelled.
-    //   2. Decode base64 → Int16 → Float32 normalised PCM.
-    //   3. Resample from 16 000 Hz → 22 050 Hz.
-    //   4. Stage A silence gate: compute chunk RMS; drop + reset buffer if silent.
-    //   5. Append chunk to ring buffer.
-    //   6. When ring buffer is full, slice window and fire inference.
+    // Kept synchronous so buffer writes are serialised by the JS event loop.
+    // Only the async inference is fire-and-forgotten.
     LiveAudioStream.on('data', (base64Chunk: string) => {
-      // ── Guard ──────────────────────────────────────────────────
       if (!isListeningRef.current) return;
 
       try {
-        // ── Step 2: Decode ────────────────────────────────────────
+        // Step 1: Decode base64 → Int16 → Float32 normalised PCM
         const rawBytes   = Buffer.from(base64Chunk, 'base64');
         const numSamples = Math.floor(rawBytes.length / 2);
         if (numSamples === 0) return;
 
-        // Int16Array view over the raw byte buffer — zero-copy
         const int16View    = new Int16Array(rawBytes.buffer, rawBytes.byteOffset, numSamples);
         const float32Chunk = new Float32Array(numSamples);
         for (let i = 0; i < numSamples; i++) {
           float32Chunk[i] = (int16View[i] ?? 0) / 32768;
         }
 
-        // ── Step 3: Resample 16 kHz → 22.05 kHz ──────────────────
+        // Step 2: Resample 16 kHz → 22.05 kHz
         const resampled = resampleLinear(float32Chunk, CAPTURE_RATE, SAMPLE_RATE);
 
-        // ── Step 4: Stage A — Chunk-level RMS silence gate ────────
+        // Step 3: Stage A — Chunk-level RMS gate
+        // *** Only SKIP accumulation — do NOT reset the buffer. ***
+        // Retaining partial buffer data allows quiet-onset transients (dog barks,
+        // door knocks) to be completed by the next loud chunk.
         const chunkRMS = computeRMS(resampled);
         if (chunkRMS < SILENCE_CHUNK_RMS_THRESHOLD) {
-          // This chunk is below the noise floor — discard it and reset the
-          // ring buffer so we don't mix silent chunks with future real audio.
-          if (writePtrRef.current > 0) {
-            // Only log + reset if the buffer had accumulated some data;
-            // avoids flooding Metro during extended silence.
-            console.log(
-              `[SilenceGate A] Chunk dropped — RMS=${chunkRMS.toFixed(5)} < threshold=${SILENCE_CHUNK_RMS_THRESHOLD}. Buffer reset.`,
-            );
-            writePtrRef.current = 0;
-          }
-          // Also ensure the UI shows "monitoring" after a brief silence
-          // by resetting the critical streak (but NOT the prediction yet —
-          // Stage B / inference completion handles that to avoid UI flicker
-          // during momentary gaps in a real sound event).
           criticalStreakRef.current = 0;
-          return;
+          return; // ← no buffer reset here (key change from v1)
         }
 
-        // ── Step 5: Append resampled chunk to ring buffer ─────────
-        const ring      = ringBufferRef.current;
-        const chunkLen  = resampled.length;
-        let   ptr       = writePtrRef.current;
-        const capacity  = CLIP_SAMPLES;
+        // Step 4: Append resampled chunk to ring buffer
+        const ring     = ringBufferRef.current;
+        const chunkLen = resampled.length;
+        let   ptr      = writePtrRef.current;
+        const capacity = CLIP_SAMPLES;
 
-        // Copy as many samples as fit before the buffer is full.
-        // If the chunk would overflow, we take only what fits and let Step 6
-        // handle the full window immediately; the remaining samples will be
-        // the start of the next window after the pointer resets.
         const spaceLeft = capacity - ptr;
         const toCopy    = Math.min(chunkLen, spaceLeft);
 
@@ -788,26 +636,20 @@ export function useSoundRecognition() {
         ptr += toCopy;
         writePtrRef.current = ptr;
 
-        // ── Step 6: Full window ready — fire inference ────────────
+        // Step 5: Full window ready — dispatch to inference pipeline
         if (ptr >= capacity) {
-          // Take a snapshot of exactly CLIP_SAMPLES frames.
-          // slice() allocates a new Float32Array, which is passed to the
-          // async pipeline.  The ring buffer pointer is reset immediately so
-          // accumulation for the next window begins right away without waiting
-          // for inference to complete.
           const windowSnapshot = ring.slice(0, capacity) as Float32Array;
-          writePtrRef.current  = 0;
+          writePtrRef.current  = 0;  // reset pointer immediately (not the data)
 
           console.log(
             `[Audio] Window ready: ${capacity} samples @ ${SAMPLE_RATE} Hz`,
             `(captured @ ${CAPTURE_RATE} Hz, resampled)`,
           );
 
-          // Fire-and-forget — inferenceActiveRef guards re-entry.
           runInferencePipeline(windowSnapshot);
 
-          // If the chunk had leftover samples beyond CLIP_SAMPLES, seed the
-          // next window with them so we don't lose audio continuity.
+          // Seed next window with any leftover samples from this chunk
+          // so we don't lose audio continuity at window boundaries.
           if (chunkLen > toCopy) {
             const remaining = chunkLen - toCopy;
             for (let i = 0; i < remaining && i < capacity; i++) {
@@ -817,29 +659,27 @@ export function useSoundRecognition() {
           }
         }
       } catch (err) {
-        // Catch-all — a decode or buffer error should never crash the listener.
         console.warn('[Audio] Chunk processing error:', err);
       }
     });
 
     LiveAudioStream.start();
     console.log('[Audio] LiveAudioStream started at', CAPTURE_RATE, 'Hz');
-    console.log('[SilenceGate] Chunk RMS threshold:', SILENCE_CHUNK_RMS_THRESHOLD);
-    console.log('[SilenceGate] Window RMS threshold:', SILENCE_WINDOW_RMS_THRESHOLD);
-  }, [requestPermission, runInferencePipeline, resetRingBuffer]);
+    console.log('[SilenceGate] Chunk RMS threshold (skip-only, no reset):', SILENCE_CHUNK_RMS_THRESHOLD);
+    console.log('[SilenceGate] Window RMS base threshold:', SILENCE_WINDOW_RMS_THRESHOLD_BASE);
+    console.log('[SilenceGate] Sensitivity level:', sensitivityRef.current);
+  }, [requestPermission, runInferencePipeline]);
 
   // ── Stop listening ────────────────────────────────────────────────
   const stopListening = useCallback(() => {
     if (!isListeningRef.current) return;
 
-    isListeningRef.current = false;
-    criticalStreakRef.current = 0;
+    isListeningRef.current              = false;
+    criticalStreakRef.current           = 0;
     consecutiveSilentWindowsRef.current = 0;
 
-    // Stop the native AudioRecord thread — this terminates data event emission.
     try { LiveAudioStream.stop(); } catch {}
 
-    // Clear ring buffer and release inference mutex.
     writePtrRef.current        = 0;
     inferenceActiveRef.current = false;
 
