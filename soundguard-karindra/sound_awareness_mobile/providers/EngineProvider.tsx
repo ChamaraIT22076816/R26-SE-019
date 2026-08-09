@@ -42,7 +42,9 @@ export type EngineActions = {
   undoDismiss: () => void;
   reset: () => void;
   simulate: (label: SoundLabel) => void;
-  /** Subscribe to one-shot events (detection, dismissal, reset). */
+  /** Fire the screen strobe on demand, bypassing the `visualFlash` setting. */
+  testFlash: () => void;
+  /** Subscribe to one-shot events (detection, flash, dismissal, reset). */
   onEvent: (listener: (e: EngineEvent) => void) => () => void;
 };
 
@@ -63,6 +65,7 @@ const FALLBACK_CONTEXT: EngineContextValue = {
     undoDismiss: noop,
     reset: noop,
     simulate: noop,
+    testFlash: noop,
     onEvent: () => noop,
   },
   // Replaced by the provider; never read before it mounts.
@@ -138,6 +141,7 @@ export function EngineProvider({ children }: PropsWithChildren) {
         undoDismiss: () => soundEngine.undoDismiss(),
         reset: () => soundEngine.reset(),
         simulate: (label: SoundLabel) => soundEngine.simulate(label),
+        testFlash: () => soundEngine.testFlash(),
         onEvent: (listener: (e: EngineEvent) => void) => soundEngine.onEvent(listener),
       }),
     }),

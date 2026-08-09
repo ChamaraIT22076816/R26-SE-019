@@ -1,18 +1,30 @@
 /**
  * SoundGuard — Root layout
  * ─────────────────────────────────────────────────────────────────────────────
- * Provider order matters:
+ * Expo Router owns the one and only NavigationContainer. This file therefore
+ * obeys two hard rules:
  *
- *   SettingsProvider → ThemeProvider → EngineProvider
+ *   1. THE NAVIGATOR IS RENDERED UNCONDITIONALLY. The previous version returned
+ *      a plain <View> while settings hydrated, so the root layout produced no
+ *      navigator on its first render and a <Stack> on a later one. Expo Router
+ *      mounts its container around whatever the root layout returns; swapping a
+ *      non-navigator for a navigator re-runs container and linking setup, which
+ *      is what raised "you have configured linking in multiple places". Boot
+ *      gating is now a cosmetic overlay painted *over* a live navigator, never
+ *      a substitute for one.
  *
- * Theme reads `themeMode` from settings, and the engine reads sensitivity,
- * haptics and background behaviour from the same object. Settings must
- * therefore hydrate first; the splash screen is held until it has, so no screen
- * ever renders with default values and then snaps to the user's real
- * preferences.
+ *   2. NO NavigationContainer, and no navigation state, is created here. The
+ *      only @react-navigation import is ThemeProvider, which is a plain context
+ *      provider carrying colours — it holds no navigation state.
+ *
+ * Onboarding is a real route (`app/onboarding.tsx`) gated with the router's own
+ * <Stack.Protected> primitive rather than an ad-hoc overlay. A guarded screen is
+ * removed from the route tree entirely, so the router resolves straight to the
+ * correct screen instead of mounting the wrong one and redirecting — there is no
+ * redirect race and no flash of the wrong screen.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import {
   DarkTheme,
@@ -20,7 +32,7 @@ import {
   ThemeProvider as NavigationThemeProvider,
   type Theme,
 } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -28,7 +40,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { FlashOverlay } from '@/components/FlashOverlay';
-import { Onboarding } from '@/components/Onboarding';
 import { SosWatcher } from '@/components/SosWatcher';
 import { EngineProvider } from '@/providers/EngineProvider';
 import { SettingsProvider, useSettings } from '@/providers/SettingsProvider';
@@ -40,7 +51,9 @@ export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
 
-void SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  /* Already hidden, or the module is unavailable in this environment. */
+});
 
 export default function RootLayout() {
   return (
@@ -61,10 +74,34 @@ export default function RootLayout() {
 function AppShell() {
   const { settings, ready } = useSettings();
   const { colors, scheme } = useTheme();
+  const pathname = usePathname();
+
+  const [booted, setBooted] = useState(false);
+
+  // The correct route is live once hydration has finished *and* the router has
+  // actually resolved to the side of the guard the settings ask for. Waiting
+  // for both means the first-run route swap happens entirely behind the cover.
+  const onOnboardingRoute = pathname === '/onboarding';
+  const routeSettled =
+    ready && (settings.onboardingComplete ? !onOnboardingRoute : onOnboardingRoute);
 
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (booted || !routeSettled) return;
+    setBooted(true);
+  }, [booted, routeSettled]);
+
+  // Safety net: never leave the user staring at a splash screen because a route
+  // failed to resolve for some unforeseen reason.
+  useEffect(() => {
+    if (booted) return;
+    const timer = setTimeout(() => setBooted(true), 2500);
+    return () => clearTimeout(timer);
+  }, [booted]);
+
+  useEffect(() => {
+    if (!booted) return;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, [booted]);
 
   const navigationTheme = useMemo<Theme>(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
@@ -83,10 +120,11 @@ function AppShell() {
     };
   }, [colors, scheme]);
 
-  // Hold a themed blank canvas rather than rendering the app with defaults.
-  if (!ready) {
-    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
-  }
+  // Before hydration the app group stays mounted so the navigator always has a
+  // route. A returning user therefore never swaps screens at all; a first-run
+  // user swaps once, underneath the boot cover.
+  const showOnboarding = ready && !settings.onboardingComplete;
+  const showApp = !ready || settings.onboardingComplete;
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
@@ -98,23 +136,47 @@ function AppShell() {
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="sos-alert"
-          options={{
-            presentation: 'fullScreenModal',
-            animation: 'fade',
-            gestureEnabled: false,
-          }}
-        />
-        <Stack.Screen name="+not-found" options={{ title: 'Not found' }} />
+        <Stack.Protected guard={showOnboarding}>
+          <Stack.Screen name="onboarding" options={{ animation: 'fade', gestureEnabled: false }} />
+        </Stack.Protected>
+
+        <Stack.Protected guard={showApp}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="sos-alert"
+            options={{
+              // A native fullScreenModal opens its own container above the root
+              // view, which would hide the flash overlay. A faded card keeps the
+              // whole app in one hierarchy.
+              animation: 'fade',
+              gestureEnabled: false,
+            }}
+          />
+        </Stack.Protected>
       </Stack>
 
-      {/* Global, route-independent behaviour. */}
+      {/* Route-independent behaviour. Plain siblings of the navigator — neither
+          creates navigation state. */}
       <SosWatcher />
       <FlashOverlay />
 
-      {settings.onboardingComplete ? null : <Onboarding />}
+      {/* Cosmetic boot cover. Painted over a live navigator so the first-run
+          route swap is never visible, without ever withholding the navigator. */}
+      {booted ? null : (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: colors.bg,
+            zIndex: 400,
+            elevation: 400,
+          }}
+        />
+      )}
     </NavigationThemeProvider>
   );
 }

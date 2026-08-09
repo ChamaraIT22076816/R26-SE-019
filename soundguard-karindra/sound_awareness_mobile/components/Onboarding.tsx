@@ -3,10 +3,12 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * A four-page introduction shown once, before the tab bar is ever reachable.
  *
- * Implemented as a full-screen overlay above the navigator rather than as a
- * route. That removes the redirect race that a routed gate always has — there
- * is no frame in which the tabs are mounted and then replaced, so no flash of
- * the wrong screen on a cold start.
+ * Rendered by the `app/onboarding.tsx` route, which the root layout gates with
+ * <Stack.Protected guard={!onboardingComplete}>. A guarded screen is absent from
+ * the route tree entirely, so the router resolves straight here on first run
+ * instead of mounting the tabs and redirecting — no redirect race, and no flash
+ * of the wrong screen. Completing the flow just flips the setting; the router
+ * removes this route on its own.
  *
  * The final page requests microphone permission in context, with the reason
  * already explained, which is both better UX and a materially better grant rate
@@ -20,7 +22,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -28,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { alpha, radius, space, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import { useSettings } from '@/providers/SettingsProvider';
 import { requestMicrophonePermission } from '@/utils/soundEngine';
@@ -79,15 +81,14 @@ const PAGES: Page[] = [
 ];
 
 const useStyles = makeStyles((c) => ({
-  // `elevation` as well as `zIndex`: on Android, sibling stacking order is
-  // decided by elevation, and the tab bar inside the navigator has its own.
-  root: { ...StyleSheet.absoluteFillObject, backgroundColor: c.bg, zIndex: 500, elevation: 500 },
+  // A real route now, so it is an ordinary full-height screen rather than an
+  // absolutely positioned overlay competing with the navigator for z-order.
+  root: { flex: 1, backgroundColor: c.bg },
 
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space.xxl,
     paddingTop: space.md,
     height: 52,
   },
@@ -106,12 +107,7 @@ const useStyles = makeStyles((c) => ({
   pager: { flex: 1 },
   // Each page scrolls vertically inside the horizontal pager, so long copy on a
   // short screen scrolls instead of clipping.
-  page: {
-    paddingHorizontal: space.xxl,
-    paddingVertical: space.xl,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
+  page: { paddingVertical: space.xl, flexGrow: 1, justifyContent: 'center' },
   iconWrap: {
     width: 84,
     height: 84,
@@ -124,7 +120,7 @@ const useStyles = makeStyles((c) => ({
     marginBottom: space.xxl,
   },
   eyebrow: { ...typeScale.overline, color: c.primary, textTransform: 'uppercase', marginBottom: space.sm },
-  title: { fontSize: 32, fontWeight: '700', letterSpacing: -0.9, lineHeight: 39, color: c.text },
+  title: { fontWeight: '700', letterSpacing: -0.9, color: c.text },
   body: { ...typeScale.body, color: c.textSecondary, lineHeight: 23, marginTop: space.md },
 
   points: { marginTop: space.xl, gap: space.md },
@@ -140,7 +136,7 @@ const useStyles = makeStyles((c) => ({
   },
   pointText: { flex: 1, ...typeScale.caption, color: c.textSecondary, lineHeight: 20 },
 
-  footer: { paddingHorizontal: space.xxl, gap: space.lg },
+  footer: { gap: space.lg },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 7 },
   dot: { height: 6, borderRadius: 3, backgroundColor: c.borderStrong },
   dotActive: { backgroundColor: c.primary },
@@ -151,7 +147,8 @@ export function Onboarding() {
   const styles = useStyles();
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const r = useResponsive();
+  const { width } = r;
   const { update } = useSettings();
 
   const scrollRef = useRef<ScrollView>(null);
@@ -159,6 +156,8 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false);
 
   const isLast = index === PAGES.length - 1;
+  // The headlines are two or three lines; on a 320 dp screen 32 pt wraps badly.
+  const titleSize = r.isCompact ? 25 : r.isNarrow ? 28 : 32;
 
   const onScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -197,7 +196,7 @@ export function Onboarding() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingHorizontal: r.hPadding }]}>
         <View style={styles.brand}>
           <View style={styles.brandMark}>
             <Ionicons name="pulse" size={15} color={c.primary} />
@@ -224,7 +223,7 @@ export function Onboarding() {
           <ScrollView
             key={page.title}
             style={{ width }}
-            contentContainerStyle={styles.page}
+            contentContainerStyle={[styles.page, { paddingHorizontal: r.hPadding }]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.iconWrap}>
@@ -232,7 +231,9 @@ export function Onboarding() {
             </View>
 
             <Text style={styles.eyebrow}>{page.eyebrow}</Text>
-            <Text style={styles.title}>{page.title}</Text>
+            <Text style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.22 }]}>
+              {page.title}
+            </Text>
             <Text style={styles.body}>{page.body}</Text>
 
             {page.points ? (
@@ -251,7 +252,15 @@ export function Onboarding() {
         ))}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, space.lg) + space.lg }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            paddingHorizontal: r.hPadding,
+            paddingBottom: Math.max(insets.bottom, space.lg) + space.lg,
+          },
+        ]}
+      >
         <View style={styles.dots}>
           {PAGES.map((page, i) => (
             <View

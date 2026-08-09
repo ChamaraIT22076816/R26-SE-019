@@ -20,6 +20,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { alpha, elevation, radius, space, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -417,6 +418,11 @@ export function SegmentedControl<T extends string | number>({
 }) {
   const styles = useSegmentStyles();
   const c = useColors();
+  const { isNarrow } = useResponsive();
+
+  // On narrow screens the icon and the label compete for the same ~90 dp and
+  // the label loses. The label carries the meaning, so the icon goes.
+  const showIcons = !isNarrow;
 
   return (
     <View style={styles.track} accessibilityRole="tablist">
@@ -435,14 +441,15 @@ export function SegmentedControl<T extends string | number>({
               pressed && !active && { opacity: 0.6 },
             ]}
           >
-            {option.icon ? (
-              <Ionicons
-                name={option.icon}
-                size={14}
-                color={active ? c.text : c.textMuted}
-              />
+            {showIcons && option.icon ? (
+              <Ionicons name={option.icon} size={14} color={active ? c.text : c.textMuted} />
             ) : null}
-            <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
+            <Text
+              style={[styles.label, active && styles.labelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
               {option.label}
             </Text>
           </Pressable>

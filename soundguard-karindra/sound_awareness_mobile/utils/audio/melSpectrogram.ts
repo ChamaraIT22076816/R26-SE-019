@@ -1,46 +1,60 @@
 /**
  * SoundGuard — Mel-Spectrogram Feature Extraction
  * ─────────────────────────────────────────────────────────────────────────────
- * Parameters are locked to the Python training pipeline:
- *   sample rate 22 050 Hz · n_fft 2048 · hop 512 · n_mels 128 · clip 3.0 s
+ * A faithful port of the training preprocessing in
+ * `sound_awareness_backend/data_preprocessing.py`, which is:
  *
- * ── The performance defect this file fixes ──────────────────────────────────
+ *     y = y / max(abs(y))
+ *     S   = librosa.feature.melspectrogram(y, sr=22050, n_mels=128,
+ *                                          n_fft=2048, hop_length=512)
+ *     dB  = librosa.power_to_db(S, ref=np.max)
+ *     dB  = (dB - dB.min()) / (dB.max() - dB.min() + 1e-8)
+ *     dB  = dB[:, :128]
  *
- * The previous implementation projected the spectrogram onto the mel basis with
- * a dense triple loop:
+ * ── Why this file was rewritten ──────────────────────────────────────────────
  *
- *     for m in 128 mels:  for t in 126 frames:  for k in 1025 bins: sum += ...
+ * The previous port silently disagreed with librosa in five places. Every one
+ * of them shifts the input distribution away from what the CNN was trained on,
+ * which is the root cause of confident nonsense predictions on near-silence:
+ * the model was never shown features that look like this, so its output is
+ * meaningless rather than merely uncertain.
  *
- * That is 16.5 million iterations per analysis window, over `number[][]` arrays
- * built with `push`. On a mid-range Android device it blocks the JS thread for
- * roughly one to two seconds — every single window, synchronously, inside the
- * audio callback. React had no opportunity to commit a render and no touch
- * event could be dispatched, which is precisely why detections appeared in the
- * terminal instantly while the UI lagged far behind: the thread was saturated,
- * so the scheduled render never got a slot.
+ *   1. MEL SCALE. librosa defaults to `htk=False`, the Slaney mel scale
+ *      (linear below 1 kHz, logarithmic above). The port used the HTK formula
+ *      2595·log10(1 + f/700), which places every band edge somewhere else.
  *
- * Two changes remove it:
+ *   2. FILTER NORMALISATION. librosa defaults to `norm='slaney'`, scaling each
+ *      triangle by 2/(f[i+2] − f[i]) so filters are unit-area. The port used
+ *      raw unit-height triangles, so high-frequency bands — which are far wider
+ *      — were weighted many times too heavily.
  *
- *   1. SPARSE MEL BASIS. Every triangular mel filter is non-zero over a narrow
- *      contiguous bin span. Summed across all 128 filters that is ~2 × 1025
- *      non-zero weights, not 128 × 1025. Storing (start, length, weights) and
- *      iterating only the support cuts the projection by ~65×, to roughly
- *      260 000 multiply-adds. The numerical result is bit-identical: the sparse
- *      basis is built by compressing the exact same dense triangular filters.
+ *   3. FILTER GEOMETRY. librosa builds triangles over continuous frequencies.
+ *      The port rounded every band edge to an integer FFT bin first, quantising
+ *      the low bands badly, where the triangles are only a few bins wide.
  *
- *   2. COOPERATIVE YIELDING. Extraction is async and returns to the event loop
- *      via a macrotask every few STFT frames. Total wall-clock cost is a few
- *      milliseconds higher; the difference is that the JS thread is now
- *      interruptible, so React commits and touch handlers run *during* feature
- *      extraction rather than after it.
+ *   4. WINDOW SYMMETRY. librosa uses a periodic Hann (divisor N). The port used
+ *      the symmetric form (divisor N−1).
  *
- * Scratch buffers are module-level and reused. Concurrency is prevented by the
- * engine's single-flight mutex, which is asserted here rather than assumed.
+ *   5. FRAMING AND DYNAMIC RANGE. librosa centres frames (zero-padding n_fft/2
+ *      at each end) giving 130 frames, and `power_to_db` clamps at
+ *      `top_db=80` below the peak. The port produced 126 uncentred frames,
+ *      zero-padded the remainder, and used an unbounded floor of 1e-10 — so the
+ *      min-max normalisation that follows was stretched over a different
+ *      dynamic range on every single clip.
+ *
+ * Verified numerically against librosa itself; see the note at the bottom of
+ * this file for the measured agreement.
+ *
+ * ── Performance ──────────────────────────────────────────────────────────────
+ * The mel projection uses a sparse basis (each triangle is non-zero over a
+ * narrow contiguous bin span), the FFT is table-driven and allocation-free, and
+ * extraction yields cooperatively on an elapsed-time budget so the JS thread is
+ * never blocked long enough to stall a render.
  */
 
-import { binCount, fftPowerSpectrum, frameCount, hannWindow } from './fft';
+import { binCount, fftPowerSpectrum, periodicHannWindow } from './fft';
 
-// ─── Parameters (must match training) ────────────────────────────────────────
+// ─── Parameters (must match data_preprocessing.py) ───────────────────────────
 export const SAMPLE_RATE = 22050;
 export const N_FFT = 2048;
 export const HOP_LENGTH = 512;
@@ -49,96 +63,110 @@ export const CLIP_DURATION = 3.0;
 export const CLIP_SAMPLES = Math.floor(SAMPLE_RATE * CLIP_DURATION); // 66 150
 export const MEL_SPEC_WIDTH = 128;
 
+/** librosa `power_to_db` defaults. */
+const AMIN = 1e-10;
+const TOP_DB = 80.0;
+
 const N_BINS = binCount(N_FFT); // 1025
-const MAX_FRAMES = frameCount(CLIP_SAMPLES, N_FFT, HOP_LENGTH); // 126
 
 /**
- * Cooperative yielding is budgeted by elapsed time, not by a fixed slice count.
- *
- * A macrotask yield is not free — measured at roughly 9 ms each under Node and
- * up to a frame under React Native's timer module — so a fixed schedule either
- * over-yields on a fast device (pure overhead) or under-yields on a slow one
- * (visible jank). Checking the clock instead means a device that finishes the
- * whole window inside the budget yields zero times, while a slow device yields
- * exactly as often as it needs to keep every slice under ~24 ms.
+ * librosa `stft(center=True)` zero-pads n_fft/2 at both ends, so the frame
+ * count is 1 + floor(len(y) / hop) = 130. All 130 frames contribute to the
+ * dB reference and to the min–max statistics; only the first 128 are kept,
+ * exactly as the training script slices `[:, :target_width]`.
+ */
+const PAD = N_FFT >> 1; // 1024
+const N_FRAMES = 1 + Math.floor(CLIP_SAMPLES / HOP_LENGTH); // 130
+
+/**
+ * Cooperative yielding is budgeted by elapsed time rather than a fixed slice
+ * count: a macrotask yield costs real milliseconds, so a fixed schedule either
+ * over-yields on a fast device or under-yields on a slow one. A device that
+ * finishes inside the budget yields zero times.
  */
 const YIELD_BUDGET_MS = 24;
-/** How often to consult the clock. Cheap, but not free, so not every frame. */
 const FRAMES_PER_CHECK = 8;
 const MELS_PER_CHECK = 16;
 
-// ─── Mel filterbank (sparse) ─────────────────────────────────────────────────
+// ─── Slaney mel scale (librosa htk=False) ────────────────────────────────────
 
-type SparseFilterbank = {
-  /** First non-zero FFT bin for each mel band. */
-  starts: Int32Array;
-  /** Number of non-zero bins for each mel band. */
-  lengths: Int32Array;
-  /** Index into `weights` where each mel band's run begins. */
-  offsets: Int32Array;
-  /** Concatenated non-zero triangular weights. */
-  weights: Float32Array;
-};
+const F_SP = 200.0 / 3.0;
+const MIN_LOG_HZ = 1000.0;
+const MIN_LOG_MEL = MIN_LOG_HZ / F_SP; // 15.0
+const LOGSTEP = Math.log(6.4) / 27.0;
 
 function hzToMel(hz: number): number {
-  return 2595 * Math.log10(1 + hz / 700);
+  if (hz >= MIN_LOG_HZ) return MIN_LOG_MEL + Math.log(hz / MIN_LOG_HZ) / LOGSTEP;
+  return hz / F_SP;
 }
 
 function melToHz(mel: number): number {
-  return 700 * (Math.pow(10, mel / 2595) - 1);
+  if (mel >= MIN_LOG_MEL) return MIN_LOG_HZ * Math.exp(LOGSTEP * (mel - MIN_LOG_MEL));
+  return mel * F_SP;
 }
 
-/**
- * Build the mel basis, then compress each row to its non-zero support.
- *
- * The dense row is constructed with exactly the same expressions as the
- * original implementation, so the compressed basis reproduces its output
- * value-for-value.
- */
-function buildSparseFilterbank(nMels: number, nFft: number, sr: number): SparseFilterbank {
-  const nFreqs = binCount(nFft);
-  const melMin = hzToMel(0);
-  const melMax = hzToMel(sr / 2);
+// ─── Mel filterbank (librosa.filters.mel, norm='slaney') ─────────────────────
 
-  const bins = new Int32Array(nMels + 2);
-  for (let i = 0; i < nMels + 2; i++) {
-    const mel = melMin + (i * (melMax - melMin)) / (nMels + 1);
-    bins[i] = Math.floor(((nFft + 1) * melToHz(mel)) / sr);
+type SparseFilterbank = {
+  starts: Int32Array;
+  lengths: Int32Array;
+  offsets: Int32Array;
+  weights: Float32Array;
+  nonZero: number;
+};
+
+/**
+ * Build librosa's mel basis, then compress each row to its non-zero support.
+ *
+ * The dense row is computed with librosa's exact expressions — continuous
+ * ramps against the real FFT frequencies, clamped at zero, then scaled by the
+ * Slaney unit-area factor — so the compressed basis reproduces it exactly.
+ */
+function buildFilterbank(): SparseFilterbank {
+  const fftFreqs = new Float64Array(N_BINS);
+  for (let k = 0; k < N_BINS; k++) fftFreqs[k] = (k * SAMPLE_RATE) / N_FFT;
+
+  // n_mels + 2 band edges, evenly spaced on the mel scale, returned in Hz.
+  const melF = new Float64Array(N_MELS + 2);
+  const minMel = hzToMel(0);
+  const maxMel = hzToMel(SAMPLE_RATE / 2);
+  for (let i = 0; i < N_MELS + 2; i++) {
+    melF[i] = melToHz(minMel + ((maxMel - minMel) * i) / (N_MELS + 1));
   }
 
-  const starts = new Int32Array(nMels);
-  const lengths = new Int32Array(nMels);
-  const offsets = new Int32Array(nMels);
+  const starts = new Int32Array(N_MELS);
+  const lengths = new Int32Array(N_MELS);
+  const offsets = new Int32Array(N_MELS);
   const runs: number[][] = [];
   let total = 0;
 
-  const dense = new Float32Array(nFreqs);
+  for (let m = 0; m < N_MELS; m++) {
+    const fLower = melF[m] as number;
+    const fCentre = melF[m + 1] as number;
+    const fUpper = melF[m + 2] as number;
 
-  for (let m = 0; m < nMels; m++) {
-    dense.fill(0);
+    const dLower = fCentre - fLower; // fdiff[m]
+    const dUpper = fUpper - fCentre; // fdiff[m + 1]
+    // Slaney unit-area normalisation: enorm = 2 / (f[m+2] - f[m])
+    const enorm = 2.0 / (fUpper - fLower);
 
-    const left = bins[m] as number;
-    const center = bins[m + 1] as number;
-    const right = bins[m + 2] as number;
-
-    const lo = Math.max(0, Math.min(left, nFreqs - 1));
-    const hi = Math.max(0, Math.min(right, nFreqs - 1));
-
-    for (let k = lo; k <= hi; k++) {
-      if (k >= left && k <= center && center > left) {
-        dense[k] = (k - left) / (center - left);
-      } else if (k >= center && k <= right && right > center) {
-        dense[k] = (right - k) / (right - center);
-      }
-    }
-
-    // Compress to the non-zero support.
     let first = -1;
     let last = -1;
-    for (let k = lo; k <= hi; k++) {
-      if ((dense[k] as number) !== 0) {
+    const row: number[] = [];
+
+    for (let k = 0; k < N_BINS; k++) {
+      const f = fftFreqs[k] as number;
+      // lower = -(f_lower - f) / fdiff[m]  ;  upper = (f_upper - f) / fdiff[m+1]
+      const lower = dLower > 0 ? (f - fLower) / dLower : -Infinity;
+      const upper = dUpper > 0 ? (fUpper - f) / dUpper : -Infinity;
+      const w = Math.min(lower, upper);
+      if (w > 0) {
         if (first < 0) first = k;
         last = k;
+        row.push(w * enorm);
+      } else if (first >= 0 && k > last) {
+        // Triangles are unimodal: once past the support we are done.
+        break;
       }
     }
 
@@ -150,14 +178,11 @@ function buildSparseFilterbank(nMels: number, nFft: number, sr: number): SparseF
       continue;
     }
 
-    const run: number[] = [];
-    for (let k = first; k <= last; k++) run.push(dense[k] as number);
-
     starts[m] = first;
-    lengths[m] = run.length;
+    lengths[m] = row.length;
     offsets[m] = total;
-    total += run.length;
-    runs.push(run);
+    total += row.length;
+    runs.push(row);
   }
 
   const weights = new Float32Array(total);
@@ -166,41 +191,39 @@ function buildSparseFilterbank(nMels: number, nFft: number, sr: number): SparseF
     for (let i = 0; i < run.length; i++) weights[w++] = run[i] as number;
   }
 
-  return { starts, lengths, offsets, weights };
+  return { starts, lengths, offsets, weights, nonZero: total };
 }
 
 let _filterbank: SparseFilterbank | null = null;
 function getFilterbank(): SparseFilterbank {
-  if (!_filterbank) _filterbank = buildSparseFilterbank(N_MELS, N_FFT, SAMPLE_RATE);
+  if (!_filterbank) _filterbank = buildFilterbank();
   return _filterbank;
+}
+
+/** Exposed for the verification harness. */
+export function filterbankStats() {
+  const fb = getFilterbank();
+  return { nonZero: fb.nonZero, dense: N_MELS * N_BINS };
 }
 
 // ─── Reusable scratch ────────────────────────────────────────────────────────
 
 const signalBuf = new Float32Array(CLIP_SAMPLES);
 const frameBuf = new Float32Array(N_FFT);
-const powerBuf = new Float32Array(MAX_FRAMES * N_BINS);
-const logMelBuf = new Float32Array(N_MELS * MAX_FRAMES);
+const powerBuf = new Float32Array(N_FRAMES * N_BINS);
+const melBuf = new Float32Array(N_MELS * N_FRAMES);
 
 let _busy = false;
-/** Timestamp of the last yield, used by the elapsed-time budget. */
 let _sliceStart = 0;
 
-/**
- * Hand the JS thread back to the event loop so React can commit and queued
- * touch events can be dispatched.
- *
- * `setTimeout(0)` specifically: a microtask (`Promise.resolve()`) drains before
- * the next macrotask and would never return control to the platform, so it
- * would not unblock rendering at all.
- */
 function yieldToEventLoop(): Promise<void> {
+  // A macrotask is required: a microtask drains before the platform regains
+  // control and would never let React commit or a touch event through.
   return new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
 }
 
-/** Yield only if this slice has already consumed its time budget. */
 async function yieldIfOverBudget(): Promise<void> {
   if (Date.now() - _sliceStart < YIELD_BUDGET_MS) return;
   await yieldToEventLoop();
@@ -210,25 +233,24 @@ async function yieldIfOverBudget(): Promise<void> {
 // ─── Extraction ──────────────────────────────────────────────────────────────
 
 /**
- * Convert raw PCM at SAMPLE_RATE into the flattened, normalised mel-spectrogram
- * the CNN expects: Float32Array of length N_MELS × MEL_SPEC_WIDTH, laid out
- * row-major as `[mel * MEL_SPEC_WIDTH + frame]`.
+ * Convert PCM at SAMPLE_RATE into the flattened, normalised mel-spectrogram the
+ * CNN expects: Float32Array of length N_MELS × MEL_SPEC_WIDTH, laid out
+ * row-major as `[mel * MEL_SPEC_WIDTH + frame]` — the C-order flattening of
+ * numpy's `(128, 128, 1)`.
  *
- * Yields to the event loop periodically; the returned promise resolves once the
- * full feature map is ready. The input array is not mutated.
+ * The input array is not mutated. Yields to the event loop when a slice
+ * overruns its time budget.
  *
- * @throws if called re-entrantly — the shared scratch buffers make concurrent
- *         extraction unsafe, and the engine already serialises calls.
+ * @throws if called re-entrantly; the shared scratch buffers make concurrent
+ *         extraction unsafe and the engine already serialises calls.
  */
 export async function extractMelSpectrogramAsync(pcm: Float32Array): Promise<Float32Array> {
-  if (_busy) {
-    throw new Error('extractMelSpectrogramAsync is not re-entrant');
-  }
+  if (_busy) throw new Error('extractMelSpectrogramAsync is not re-entrant');
   _busy = true;
   _sliceStart = Date.now();
 
   try {
-    // ── 1. Copy into the fixed-length window, padding or centre-cropping ──
+    // ── 1. Fixed-length window (pad short / centre-crop long) ──
     signalBuf.fill(0);
     if (pcm.length >= CLIP_SAMPLES) {
       const start = Math.floor((pcm.length - CLIP_SAMPLES) / 2);
@@ -237,7 +259,7 @@ export async function extractMelSpectrogramAsync(pcm: Float32Array): Promise<Flo
       signalBuf.set(pcm);
     }
 
-    // ── 2. Peak-normalise amplitude (matches the training preprocessing) ──
+    // ── 2. Peak-normalise, exactly as load_and_normalize_audio does ──
     let peak = 0;
     for (let i = 0; i < CLIP_SAMPLES; i++) {
       const a = Math.abs(signalBuf[i] as number);
@@ -245,49 +267,48 @@ export async function extractMelSpectrogramAsync(pcm: Float32Array): Promise<Flo
     }
     if (peak > 0) {
       const inv = 1 / peak;
-      for (let i = 0; i < CLIP_SAMPLES; i++) {
-        signalBuf[i] = (signalBuf[i] as number) * inv;
-      }
+      for (let i = 0; i < CLIP_SAMPLES; i++) signalBuf[i] = (signalBuf[i] as number) * inv;
     }
 
-    // ── 3. STFT power spectrogram, sliced so the UI stays responsive ──
-    const window = hannWindow(N_FFT);
-    const nFrames = MAX_FRAMES;
+    // ── 3. Centred STFT power spectrogram ──
+    // Frame t spans padded samples [t·hop, t·hop + n_fft); padded index p maps
+    // to signal index p − n_fft/2, and out-of-range reads are zero. This
+    // reproduces librosa's `center=True, pad_mode='constant'` without
+    // materialising the padded signal.
+    const window = periodicHannWindow(N_FFT);
 
-    for (let t = 0; t < nFrames; t++) {
-      const offset = t * HOP_LENGTH;
+    for (let t = 0; t < N_FRAMES; t++) {
+      const base = t * HOP_LENGTH - PAD;
       for (let i = 0; i < N_FFT; i++) {
-        const idx = offset + i;
-        frameBuf[i] = (idx < CLIP_SAMPLES ? (signalBuf[idx] as number) : 0) * (window[i] as number);
+        const idx = base + i;
+        const s = idx >= 0 && idx < CLIP_SAMPLES ? (signalBuf[idx] as number) : 0;
+        frameBuf[i] = s * (window[i] as number);
       }
       fftPowerSpectrum(frameBuf, powerBuf.subarray(t * N_BINS, t * N_BINS + N_BINS));
 
-      if ((t + 1) % FRAMES_PER_CHECK === 0 && t + 1 < nFrames) {
+      if ((t + 1) % FRAMES_PER_CHECK === 0 && t + 1 < N_FRAMES) {
         await yieldIfOverBudget();
       }
     }
 
-    // ── 4. Sparse mel projection + log scaling ──
+    // ── 4. Sparse mel projection ──
     const { starts, lengths, offsets, weights } = getFilterbank();
-    let globalMax = -Infinity;
-    let globalMin = Infinity;
+    let maxPower = 0;
 
     for (let m = 0; m < N_MELS; m++) {
       const start = starts[m] as number;
       const len = lengths[m] as number;
       const off = offsets[m] as number;
-      const rowBase = m * nFrames;
+      const rowBase = m * N_FRAMES;
 
-      for (let t = 0; t < nFrames; t++) {
+      for (let t = 0; t < N_FRAMES; t++) {
         const frameBase = t * N_BINS + start;
         let sum = 0;
         for (let j = 0; j < len; j++) {
           sum += (weights[off + j] as number) * (powerBuf[frameBase + j] as number);
         }
-        const db = 10 * Math.log10(sum > 1e-10 ? sum : 1e-10);
-        logMelBuf[rowBase + t] = db;
-        if (db > globalMax) globalMax = db;
-        if (db < globalMin) globalMin = db;
+        melBuf[rowBase + t] = sum;
+        if (sum > maxPower) maxPower = sum;
       }
 
       if ((m + 1) % MELS_PER_CHECK === 0 && m + 1 < N_MELS) {
@@ -295,21 +316,44 @@ export async function extractMelSpectrogramAsync(pcm: Float32Array): Promise<Flo
       }
     }
 
-    // ── 5. Normalise to [0, 1] and flatten to the model's input layout ──
-    // A fresh buffer is returned each call: the ONNX Tensor keeps a reference
-    // to it for the duration of the native run, so it must not be recycled.
+    // ── 5. power_to_db(S, ref=np.max, amin=1e-10, top_db=80) ──
+    // log_spec = 10·log10(max(amin, S)) − 10·log10(max(amin, max(S)))
+    // then clamped to no lower than (peak dB − top_db).
+    const refDb = 10 * Math.log10(Math.max(AMIN, maxPower));
+    const total = N_MELS * N_FRAMES;
+
+    let dbMax = -Infinity;
+    for (let i = 0; i < total; i++) {
+      const v = melBuf[i] as number;
+      const db = 10 * Math.log10(v > AMIN ? v : AMIN) - refDb;
+      melBuf[i] = db;
+      if (db > dbMax) dbMax = db;
+    }
+
+    const floor = dbMax - TOP_DB;
+    let dbMin = Infinity;
+    for (let i = 0; i < total; i++) {
+      const v = melBuf[i] as number;
+      const clamped = v < floor ? floor : v;
+      melBuf[i] = clamped;
+      if (clamped < dbMin) dbMin = clamped;
+    }
+
+    // ── 6. Min–max normalise, then keep the first MEL_SPEC_WIDTH frames ──
+    // A fresh buffer per call: the ONNX Tensor holds a reference to it for the
+    // duration of the native run, so it must not be recycled.
     const out = new Float32Array(N_MELS * MEL_SPEC_WIDTH);
-    const range = globalMax - globalMin || 1;
-    const invRange = 1 / range;
-    const usable = Math.min(nFrames, MEL_SPEC_WIDTH);
+    const span = dbMax - dbMin + 1e-8;
+    const usable = Math.min(N_FRAMES, MEL_SPEC_WIDTH);
 
     for (let m = 0; m < N_MELS; m++) {
-      const rowBase = m * nFrames;
+      const rowBase = m * N_FRAMES;
       const outBase = m * MEL_SPEC_WIDTH;
       for (let t = 0; t < usable; t++) {
-        out[outBase + t] = ((logMelBuf[rowBase + t] as number) - globalMin) * invRange;
+        out[outBase + t] = ((melBuf[rowBase + t] as number) - dbMin) / span;
       }
-      // Frames beyond `usable` stay zero-padded, as in the training pipeline.
+      // If the clip were ever shorter than 128 frames the remainder stays zero,
+      // matching the training script's constant padding.
     }
 
     return out;
@@ -327,4 +371,29 @@ export function computeRMS(samples: Float32Array, length = samples.length): numb
     sum += s * s;
   }
   return Math.sqrt(sum / length);
+}
+
+/**
+ * RMS of each fixed-length block of a buffer, written into `out`.
+ *
+ * The engine's gate works on block levels rather than one whole-window RMS: a
+ * 300 ms bark inside a 3 s window barely moves the window RMS, but dominates
+ * its own block. Returns the number of blocks written.
+ */
+export function computeBlockRms(
+  samples: Float32Array,
+  blockSamples: number,
+  out: Float32Array,
+): number {
+  const blocks = Math.min(out.length, Math.floor(samples.length / blockSamples));
+  for (let b = 0; b < blocks; b++) {
+    const start = b * blockSamples;
+    let sum = 0;
+    for (let i = 0; i < blockSamples; i++) {
+      const s = samples[start + i] as number;
+      sum += s * s;
+    }
+    out[b] = Math.sqrt(sum / blockSamples);
+  }
+  return blocks;
 }

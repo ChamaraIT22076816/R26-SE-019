@@ -47,6 +47,21 @@ export const SOUND_DISPLAY_NAMES: Record<SoundLabel, string> = {
   siren: 'Emergency Siren',
 };
 
+/**
+ * One-word labels for tight layouts. On a 360 dp screen a three-across row
+ * gives each cell about 100 dp, which truncates "Glass Breaking" but fits
+ * "Glass" comfortably.
+ */
+export const SOUND_SHORT_NAMES: Record<SoundLabel, string> = {
+  car_horn: 'Horn',
+  crying_baby: 'Baby',
+  dog: 'Dog',
+  door_wood_knock: 'Knock',
+  footsteps: 'Steps',
+  glass_breaking: 'Glass',
+  siren: 'Siren',
+};
+
 export const SOUND_THREAT: Record<SoundLabel, ThreatLevel> = {
   car_horn: 'warning',
   crying_baby: 'warning',
@@ -160,10 +175,18 @@ const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
 /**
  * Coerce an arbitrary persisted blob into a valid AppSettings object.
  *
- * This is deliberately total: every field is validated and clamped, and the
- * two renamed v1 keys (`flashlight` → `visualFlash`, `autoCall` → `autoSos`)
- * are migrated. A corrupt or partial record can therefore never crash a screen
- * or feed an out-of-range value into the detection engine.
+ * Deliberately total: every field is validated and clamped, so a corrupt or
+ * partial record can never crash a screen or feed an out-of-range value into
+ * the detection engine.
+ *
+ * NOTE ON THE v1 KEYS. An earlier revision carried `flashlight` forward into
+ * `visualFlash` and `autoCall` into `autoSos`, treating them as renames. They
+ * are not renames — they are different features (a camera LED versus a screen
+ * strobe; auto-dialling emergency services versus opening a cancellable SOS
+ * countdown). Both v1 keys defaulted to `false`, so the migration silently
+ * shipped every existing install with the visual flash and the SOS escalation
+ * switched off, which is why the strobe appeared to be dead code. The v1 keys
+ * are now ignored and both features take their own defaults.
  */
 function normaliseSettings(raw: unknown): AppSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -192,14 +215,12 @@ function normaliseSettings(raw: unknown): AppSettings {
     sensitivity: num('sensitivity', DEFAULT_SETTINGS.sensitivity, 1, 5),
     nightMode: bool('nightMode', DEFAULT_SETTINGS.nightMode),
     hapticFeedback: bool('hapticFeedback', DEFAULT_SETTINGS.hapticFeedback),
-    // v1 key was `flashlight`.
-    visualFlash: bool('visualFlash', bool('flashlight', DEFAULT_SETTINGS.visualFlash)),
+    visualFlash: bool('visualFlash', DEFAULT_SETTINGS.visualFlash),
     backgroundListening: bool('backgroundListening', DEFAULT_SETTINGS.backgroundListening),
     mutedSounds: muted,
     logSafeEvents: bool('logSafeEvents', DEFAULT_SETTINGS.logSafeEvents),
 
-    // v1 key was `autoCall`.
-    autoSos: bool('autoSos', bool('autoCall', DEFAULT_SETTINGS.autoSos)),
+    autoSos: bool('autoSos', DEFAULT_SETTINGS.autoSos),
     criticalHoldSeconds: num('criticalHoldSeconds', DEFAULT_SETTINGS.criticalHoldSeconds, 2, 30),
     sosCountdown: num('sosCountdown', DEFAULT_SETTINGS.sosCountdown, 3, 60),
     shareLocation: bool('shareLocation', DEFAULT_SETTINGS.shareLocation),

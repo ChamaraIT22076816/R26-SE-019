@@ -27,6 +27,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppButton, Card, Divider, EmptyState, ScreenHeader, SectionLabel, SettingRow } from '@/components/ui';
 import { alpha, radius, space, typography as typeScale } from '@/constants/theme';
 import { useSettings } from '@/providers/SettingsProvider';
+import { useResponsive } from '@/hooks/useResponsive';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import {
   deleteContact,
@@ -53,7 +54,7 @@ function initials(name: string): string {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  scroll: { paddingHorizontal: space.xxl },
+  scroll: {},
 
   addCard: {
     flexDirection: 'row',
@@ -102,7 +103,6 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.bgElevated,
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
-    paddingHorizontal: space.xxl,
     paddingTop: space.md,
   },
   grabber: {
@@ -137,6 +137,7 @@ export default function CircleScreen() {
   const styles = useStyles();
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const r = useResponsive();
   const { settings, update } = useSettings();
 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
@@ -215,7 +216,10 @@ export default function CircleScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingHorizontal: r.hPadding, paddingBottom: insets.bottom + 120 },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -325,7 +329,15 @@ export default function CircleScreen() {
           style={styles.backdrop}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, space.lg) + space.xl }]}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                paddingHorizontal: Math.max(space.lg, r.hPadding),
+                paddingBottom: Math.max(insets.bottom, space.lg) + space.xl,
+              },
+            ]}
+          >
             <View style={styles.grabber} />
             <Text style={styles.sheetTitle}>Add a contact</Text>
             <Text style={styles.sheetDesc}>

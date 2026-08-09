@@ -1,45 +1,46 @@
 /**
  * SoundGuard — Real-Time Sound Recognition Engine
  * ─────────────────────────────────────────────────────────────────────────────
- * A framework-free singleton that owns audio capture, feature extraction, ONNX
+ * A framework-free singleton owning audio capture, feature extraction, ONNX
  * inference and detection state. React binds to it through EngineProvider via
- * `useSyncExternalStore`; the engine itself imports nothing from React.
+ * `useSyncExternalStore`; nothing here imports React.
  *
  * Pipeline
  *   LiveAudioStream (16 kHz Int16 PCM, VOICE_RECOGNITION source)
- *     → Float32 normalise → linear resample to 22.05 kHz
- *     → continuous 3 s circular buffer
- *     → every `hop` seconds: linearise → RMS gate → mel-spectrogram → ONNX
- *     → suppression / mute filtering → publish → history
+ *     → Float32 → resample to 22.05 kHz → 3 s circular buffer
+ *     → every hop: block-level gate → mel-spectrogram → ONNX
+ *     → prediction gate → suppression / mute → publish → history
  *
- * ── Why detections used to reach the UI late ────────────────────────────────
+ * ── Why it used to hallucinate in silence ────────────────────────────────────
  *
- * Four separate defects compounded:
+ * Three independent faults stacked up.
  *
- *   1. Feature extraction blocked the JS thread for 1–2 s per window (see
- *      melSpectrogram.ts). React could not commit a render, so state written by
- *      the pipeline sat in the queue behind the next window's DSP. Fixed by the
- *      sparse mel basis plus cooperative yielding.
+ *   1. The model has no "background" class. Given any input it must return a
+ *      distribution over seven sounds, so on silence it returns *something*.
+ *      Everything below exists to make sure that something never reaches the
+ *      user. The permanent fix is a background/negative class at training
+ *      time; this is the correct client-side mitigation until then.
  *
- *   2. The buffer only advanced on chunks that passed the chunk-level silence
- *      gate, so in a quiet room a 3 s window took far longer than 3 s of
- *      wall-clock to assemble. A bark could be classified ten seconds after it
- *      happened. Replaced with a true circular buffer that always advances, and
- *      an analysis cadence measured in samples: a detection is now surfaced
- *      within one hop (0.6–1.5 s, sensitivity-dependent) of the sound.
+ *   2. Feature extraction did not match training (see melSpectrogram.ts). The
+ *      network was being fed out-of-distribution input on every single window,
+ *      which produces arbitrary — and often confident — output.
  *
- *   3. Windows arriving while an inference was in flight were dropped
- *      entirely. The hop schedule now resynchronises after each analysis
- *      instead of discarding audio.
+ *   3. The gate was an absolute RMS threshold. Microphone gain varies by an
+ *      order of magnitude across Android devices, so one fixed number is
+ *      simultaneously too high on a quiet handset and far too low on a loud
+ *      one. On a device whose idle noise sits above the threshold, *every*
+ *      sensitivity level passed every window — which is exactly why the
+ *      sensitivity slider appeared to do nothing.
  *
- *   4. Seven `console.log` lines per inference crossed the bridge on every
- *      window. With a debugger attached that alone costs tens of milliseconds.
- *      All diagnostics are now behind `DEBUG`, off by default.
+ * The gate is now relative to a learned noise floor, and sensitivity moves five
+ * parameters at once, all of them surfaced live in the UI so the effect is
+ * directly observable:
  *
- * State is published immutably and only when a value actually changes, so a
- * render is scheduled for real transitions and never for steady-state noise.
- * The audio level meter deliberately bypasses React entirely — it is pushed to
- * a Reanimated shared value by the provider.
+ *      trigger margin over the noise floor   (dB)
+ *      absolute minimum block level          (guards a silent room)
+ *      softmax confidence floor
+ *      top-1 vs top-2 margin
+ *      consecutive agreeing windows required
  */
 
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -53,9 +54,17 @@ import { Buffer } from 'buffer';
 import {
   CLIP_SAMPLES,
   SAMPLE_RATE,
+  computeBlockRms,
   computeRMS,
   extractMelSpectrogramAsync,
 } from './audio/melSpectrogram';
+import {
+  GATE_BLOCK_SECONDS,
+  createGateState,
+  evaluateGate,
+  resetGateState,
+  toDb,
+} from './audio/gate';
 import {
   DEFAULT_SETTINGS,
   SOUND_DISPLAY_NAMES,
@@ -67,7 +76,7 @@ import {
   type ThreatLevel,
 } from './storage';
 
-/** Flip to true to restore verbose pipeline diagnostics. */
+/** Flip to true to restore verbose pipeline diagnostics in Metro. */
 const DEBUG = false;
 const log = (...args: unknown[]) => {
   if (DEBUG) console.log('[SoundGuard]', ...args);
@@ -75,11 +84,9 @@ const log = (...args: unknown[]) => {
 
 // ─── Capture configuration ───────────────────────────────────────────────────
 
-/** 16 kHz is the one sample rate every Android device is guaranteed to support. */
 const CAPTURE_RATE = 16000;
 /** MediaRecorder.AudioSource.VOICE_RECOGNITION — no AGC, no noise suppression. */
 const AUDIO_SOURCE = 6;
-/** ~256 ms per chunk at 16 kHz. */
 const CAPTURE_BUFFER = 4096;
 
 // ─── ONNX configuration ──────────────────────────────────────────────────────
@@ -88,33 +95,39 @@ const ONNX_INPUT_NAME = 'serving_default_input_layer:0';
 const ONNX_OUTPUT_NAME = 'StatefulPartitionedCall:1_0';
 const ONNX_INPUT_DIMS = [1, 128, 128, 1];
 
-// ─── Detection tuning ────────────────────────────────────────────────────────
+// ─── Gate tuning ─────────────────────────────────────────────────────────────
+
+/** Level analysis block: 125 ms, so a short transient dominates its own block. */
+const BLOCK_SAMPLES = Math.round(SAMPLE_RATE * GATE_BLOCK_SECONDS);
+const MAX_BLOCKS = Math.floor(CLIP_SAMPLES / BLOCK_SAMPLES); // 24
 
 /**
- * Sensitivity profile, indexed 0–4 for levels 1–5.
+ * Sensitivity profile, index 0–4 for levels 1–5.
  *
- * windowGate  multiplier on the window RMS floor (0.005)
- * confidence  softmax floor below which the prediction is discarded
- * hopSeconds  how often a fresh 3 s window is analysed — this is the dominant
- *             term in end-to-end detection latency
+ * triggerDb    how far the loudest block must sit above the learned noise floor
+ * absMinLevel  absolute block RMS floor, so a silent room cannot trigger even
+ *              when the learned floor approaches zero
+ * confidence   softmax floor for the winning class
+ * margin       required gap between the top two classes; a diffuse output is
+ *              the signature of an input the model has no answer for
+ * agree        consecutive windows that must name the same class
+ * hopSeconds   analysis cadence — the dominant term in detection latency
  */
 const SENSITIVITY_PROFILE = [
-  { windowGate: 2.0, confidence: 0.62, hopSeconds: 1.5 },
-  { windowGate: 1.5, confidence: 0.58, hopSeconds: 1.25 },
-  { windowGate: 1.0, confidence: 0.52, hopSeconds: 1.0 },
-  { windowGate: 0.6, confidence: 0.46, hopSeconds: 0.8 },
-  { windowGate: 0.3, confidence: 0.4, hopSeconds: 0.6 },
+  { triggerDb: 15.0, absMinLevel: 0.02, confidence: 0.8, margin: 0.45, agree: 3, hopSeconds: 1.5 },
+  { triggerDb: 12.0, absMinLevel: 0.014, confidence: 0.72, margin: 0.36, agree: 2, hopSeconds: 1.25 },
+  { triggerDb: 9.0, absMinLevel: 0.01, confidence: 0.65, margin: 0.28, agree: 2, hopSeconds: 1.0 },
+  { triggerDb: 6.5, absMinLevel: 0.007, confidence: 0.58, margin: 0.2, agree: 2, hopSeconds: 0.85 },
+  { triggerDb: 4.5, absMinLevel: 0.0045, confidence: 0.5, margin: 0.12, agree: 1, hopSeconds: 0.7 },
 ] as const;
 
-const WINDOW_RMS_BASE = 0.005;
+/** An unmistakable single window publishes without waiting for agreement. */
+const INSTANT_CONFIDENCE = 0.92;
+const INSTANT_MARGIN = 0.55;
 
-/** A detection stays on screen this long after its last confirming window. */
 const DETECTION_HOLD_MS = 5000;
-/** How long a dismissed sound class stays suppressed. */
 const DISMISS_SUPPRESS_MS = 25000;
-/** Minimum gap between history entries for the same class. */
 const HISTORY_DEDUPE_MS = 8000;
-/** Safety valve for a wedged analysis (see the watchdog in `appendToRing`). */
 const ANALYSIS_TIMEOUT_MS = 15000;
 
 // ─── Public types ────────────────────────────────────────────────────────────
@@ -124,15 +137,12 @@ export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type PermissionStatus = 'unknown' | 'granted' | 'denied';
 
 export type Detection = {
-  /** Stable while the same class keeps being detected — prevents card remounts. */
   id: string;
   label: SoundLabel;
   name: string;
   confidence: number;
   threat: ThreatLevel;
-  /** When this class was first detected in the current run. */
   firstSeen: number;
-  /** When it was last confirmed. */
   lastSeen: number;
   simulated: boolean;
 };
@@ -141,27 +151,35 @@ export type EngineState = {
   status: EngineStatus;
   modelStatus: ModelStatus;
   permission: PermissionStatus;
-  /** The detection currently shown to the user, or null. */
   detection: Detection | null;
-  /** True while a window is being classified. */
   analyzing: boolean;
-  /** Milliseconds of uninterrupted critical-level audio. */
+  /** True while the engine is learning the room's noise floor. */
+  calibrating: boolean;
   criticalHoldMs: number;
-  /** Wall-clock cost of the last full analysis, for the diagnostics row. */
   lastLatencyMs: number;
   windowsAnalyzed: number;
-  /** Classes currently suppressed because the user dismissed them. */
   dismissed: SoundLabel[];
   error: string | null;
+
+  // ── Live gate diagnostics, so sensitivity is visibly doing something ──
+  /** Loudest 125 ms block in the last window, dBFS. */
+  levelDb: number;
+  /** Learned ambient noise floor, dBFS. */
+  floorDb: number;
+  /** Required level − floor margin at the current sensitivity, dB. */
+  triggerDb: number;
+  /** Whether the last window cleared the gate. */
+  gateOpen: boolean;
 };
 
 export type EngineEvent =
   | { type: 'detection'; detection: Detection }
+  /** Ask the UI to strobe. Emitted by the engine so the policy lives in one place. */
+  | { type: 'flash'; reason: 'critical' | 'test' }
   | { type: 'dismissed'; label: SoundLabel }
   | { type: 'reset' }
   | { type: 'stopped' };
 
-/** Stable empty array so "nothing dismissed" never churns object identity. */
 const NO_LABELS: SoundLabel[] = [];
 
 const INITIAL_STATE: EngineState = {
@@ -170,11 +188,16 @@ const INITIAL_STATE: EngineState = {
   permission: 'unknown',
   detection: null,
   analyzing: false,
+  calibrating: false,
   criticalHoldMs: 0,
   lastLatencyMs: 0,
   windowsAnalyzed: 0,
   dismissed: NO_LABELS,
   error: null,
+  levelDb: -120,
+  floorDb: -120,
+  triggerDb: SENSITIVITY_PROFILE[2].triggerDb,
+  gateOpen: false,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -183,16 +206,13 @@ const INITIAL_STATE: EngineState = {
 export async function requestMicrophonePermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   try {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      {
-        title: 'Microphone access',
-        message:
-          'SoundGuard listens to your surroundings on-device to recognise important sounds. Audio never leaves your phone.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Not now',
-      },
-    );
+    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, {
+      title: 'Microphone access',
+      message:
+        'SoundGuard listens to your surroundings on-device to recognise important sounds. Audio never leaves your phone.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Not now',
+    });
     return result === PermissionsAndroid.RESULTS.GRANTED;
   } catch {
     return false;
@@ -203,17 +223,17 @@ function vibrate(threat: ThreatLevel) {
   if (Platform.OS === 'web') return;
   try {
     if (threat === 'critical') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setTimeout(() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
       }, 180);
       setTimeout(() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
       }, 360);
     } else if (threat === 'warning') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   } catch {
     /* Haptics are decorative; never let them break detection. */
@@ -223,7 +243,6 @@ function vibrate(threat: ThreatLevel) {
 // ─── Engine ──────────────────────────────────────────────────────────────────
 
 class SoundEngine {
-  // ── Reactive state ──
   private state: EngineState = INITIAL_STATE;
   private listeners = new Set<() => void>();
   private eventListeners = new Set<(e: EngineEvent) => void>();
@@ -231,7 +250,6 @@ class SoundEngine {
   /** Level meter sink. Wired to a Reanimated shared value — bypasses React. */
   onLevel: ((level: number) => void) | null = null;
 
-  // ── Settings (hot-swappable; read fresh on every window) ──
   private settings: AppSettings = { ...DEFAULT_SETTINGS };
 
   // ── Audio ──
@@ -241,6 +259,8 @@ class SoundEngine {
   private samplesSinceAnalysis = 0;
   private resampleScratch = new Float32Array(16384);
   private analysisBuf = new Float32Array(CLIP_SAMPLES);
+  private blockRms = new Float32Array(MAX_BLOCKS);
+  private blockScratch = new Float32Array(MAX_BLOCKS);
   private audioSub: { remove: () => void } | null = null;
 
   // ── Model ──
@@ -250,20 +270,25 @@ class SoundEngine {
   // ── Scheduling ──
   private running = false;
   /**
-   * Single-flight mutex for the analysis pipeline. Only `analyze()` may clear
-   * it — start/stop deliberately leave it alone, so a stop issued mid-analysis
-   * cannot let a second extraction begin against the shared DSP scratch
-   * buffers. The in-flight run notices the session change and bails out.
+   * Single-flight mutex. Only `analyze()` clears it — start/stop deliberately
+   * leave it alone so a stop mid-analysis cannot let a second extraction begin
+   * against the shared DSP scratch. The in-flight run sees the session change
+   * and bails.
    */
   private analyzing = false;
   private analysisStartedAt = 0;
-  /** Incremented on every start/stop so stale async work can be discarded. */
   private sessionId = 0;
+
+  // ── Gate state ──
+  private gateState = createGateState();
+
+  // ── Prediction agreement ──
+  private pendingLabel: SoundLabel | null = null;
+  private pendingCount = 0;
 
   // ── Detection bookkeeping ──
   private suppressUntil = new Map<SoundLabel, number>();
   private lastLoggedAt = new Map<SoundLabel, number>();
-  /** Join key of the published `dismissed` array, so we only publish real changes. */
   private dismissedKey = '';
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -296,10 +321,7 @@ class SoundEngine {
     });
   }
 
-  /**
-   * Immutable, change-gated publish. Identical values do not notify, so the
-   * steady-state listening loop schedules zero renders.
-   */
+  /** Immutable, change-gated publish. */
   private patch(next: Partial<EngineState>) {
     let changed = false;
     for (const key of Object.keys(next) as (keyof EngineState)[]) {
@@ -325,14 +347,22 @@ class SoundEngine {
 
   /**
    * Replace the live settings. Every value is consulted at the start of the
-   * next window, so a change made on the Settings screen takes effect within
-   * one hop — no restart, no remount.
+   * next window, so a change takes effect within one hop — no restart.
    */
   setSettings(settings: AppSettings) {
+    const previous = this.settings;
     this.settings = settings;
 
-    // A newly muted class must vanish from the UI immediately, not on the next
-    // window boundary.
+    // Reflect the new trigger margin immediately, even between windows, so the
+    // Settings screen and the diagnostics row can never disagree.
+    this.patch({ triggerDb: this.profile().triggerDb });
+
+    if (previous.sensitivity !== settings.sensitivity) {
+      // A different agreement requirement invalidates a partially built streak.
+      this.pendingLabel = null;
+      this.pendingCount = 0;
+    }
+
     const current = this.state.detection;
     if (current && settings.mutedSounds.includes(current.label)) {
       this.patch({ detection: null, criticalHoldMs: 0 });
@@ -351,17 +381,13 @@ class SoundEngine {
 
   private profile() {
     const idx = this.effectiveSensitivity() - 1;
-    return SENSITIVITY_PROFILE[idx] ?? SENSITIVITY_PROFILE[2]!;
+    return SENSITIVITY_PROFILE[idx] ?? SENSITIVITY_PROFILE[2];
   }
 
   // ───────────────────────────────────────────────────────────────────────────
   // Model
   // ───────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Load the ONNX session. Safe to call repeatedly and concurrently — the
-   * in-flight promise is shared.
-   */
   loadModel(): Promise<InferenceSession | null> {
     if (this.session) return Promise.resolve(this.session);
     if (this.modelPromise) return this.modelPromise;
@@ -383,8 +409,8 @@ class SoundEngine {
           FileSystem.getInfoAsync(asset.localUri),
         ]);
 
-        // Freshness check by byte size: an O(1) stat beats hashing a 10 MB model
-        // on every cold start. Distinct sentinels so "missing" never compares
+        // Freshness by byte size: an O(1) stat beats hashing a 9 MB model on
+        // every cold start. Distinct sentinels so "missing" never compares
         // equal to "present but unmeasurable".
         const cachedSize = cached.exists ? ((cached as { size?: number }).size ?? -1) : -1;
         const bundledSize = bundled.exists ? ((bundled as { size?: number }).size ?? -2) : -2;
@@ -404,7 +430,7 @@ class SoundEngine {
         return session;
       } catch (err) {
         log('model load failed', err);
-        this.modelPromise = null; // allow a retry
+        this.modelPromise = null;
         this.patch({
           modelStatus: 'error',
           error: 'The recognition model could not be loaded. Reopen the app to retry.',
@@ -436,13 +462,12 @@ class SoundEngine {
     }
     this.patch({ permission: 'granted' });
 
-    // Kick the model load but do not block the transition to "listening":
-    // capture can begin while the session finishes opening.
     void this.loadModel();
 
     this.sessionId += 1;
     this.running = true;
     this.resetBuffers();
+    this.resetGate();
     this.suppressUntil.clear();
     this.lastLoggedAt.clear();
     this.dismissedKey = '';
@@ -454,7 +479,10 @@ class SoundEngine {
       windowsAnalyzed: 0,
       dismissed: NO_LABELS,
       analyzing: false,
+      calibrating: true,
       error: null,
+      triggerDb: this.profile().triggerDb,
+      gateOpen: false,
     });
 
     try {
@@ -464,15 +492,13 @@ class SoundEngine {
         bitsPerSample: 16,
         audioSource: AUDIO_SOURCE,
         bufferSize: CAPTURE_BUFFER,
-        // Required by the package's typings (inherited from react-native-audio-record)
-        // but ignored by the Android module, which never reads the key. We stream
-        // PCM through the JS bridge and never write a file.
+        // Required by the package's typings (inherited from
+        // react-native-audio-record) but never read by the Android module.
         wavFile: '',
       });
 
       // `AudioRecord.on` clears previous listeners internally, so repeated
-      // start/stop cycles cannot accumulate duplicate handlers. It does return
-      // the EventEmitter subscription, even though the typings say `void`.
+      // start/stop cycles cannot accumulate duplicate handlers.
       this.audioSub = LiveAudioStream.on('data', this.handleChunk) as unknown as {
         remove: () => void;
       } | null;
@@ -483,6 +509,7 @@ class SoundEngine {
       this.running = false;
       this.patch({
         status: 'error',
+        calibrating: false,
         error: 'Could not open the microphone. Close other recording apps and try again.',
       });
     }
@@ -490,8 +517,13 @@ class SoundEngine {
 
   stop(): void {
     if (!this.running) {
-      // Still clear any lingering detection so the UI is consistent.
-      this.patch({ status: 'idle', detection: null, analyzing: false, criticalHoldMs: 0 });
+      this.patch({
+        status: 'idle',
+        detection: null,
+        analyzing: false,
+        calibrating: false,
+        criticalHoldMs: 0,
+      });
       return;
     }
 
@@ -512,6 +544,7 @@ class SoundEngine {
     }
 
     this.resetBuffers();
+    this.resetGate();
     this.suppressUntil.clear();
     this.dismissedKey = '';
     this.onLevel?.(0);
@@ -520,8 +553,11 @@ class SoundEngine {
       status: 'idle',
       detection: null,
       analyzing: false,
+      calibrating: false,
       criticalHoldMs: 0,
       dismissed: NO_LABELS,
+      gateOpen: false,
+      levelDb: -120,
     });
     this.emit({ type: 'stopped' });
     log('capture stopped');
@@ -537,12 +573,10 @@ class SoundEngine {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * Dismiss the active detection.
-   *
-   * Runs entirely synchronously so the card disappears in the same frame as the
-   * tap. The class is suppressed for a cool-off period and the audio buffer is
-   * flushed, otherwise the sound still sitting in the 3 s window would be
-   * re-reported on the very next hop.
+   * Dismiss the active detection. Fully synchronous, so the card disappears in
+   * the same frame as the tap. The class is suppressed for a cool-off period
+   * and the buffer is flushed — otherwise the sound still sitting in the 3 s
+   * window would be re-reported on the very next hop.
    */
   dismiss(): void {
     const current = this.state.detection;
@@ -550,13 +584,15 @@ class SoundEngine {
 
     this.suppressUntil.set(current.label, Date.now() + DISMISS_SUPPRESS_MS);
     this.resetBuffers();
+    this.pendingLabel = null;
+    this.pendingCount = 0;
 
     this.patch({ detection: null, criticalHoldMs: 0 });
     this.syncDismissed();
 
     if (this.settings.hapticFeedback) {
       try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } catch {
         /* ignore */
       }
@@ -565,7 +601,6 @@ class SoundEngine {
     this.emit({ type: 'dismissed', label: current.label });
   }
 
-  /** Undo the most recent dismissal(s) — clears every active suppression. */
   undoDismiss(): void {
     if (this.suppressUntil.size === 0) return;
     this.suppressUntil.clear();
@@ -574,12 +609,12 @@ class SoundEngine {
   }
 
   /**
-   * Reset the listening state: flush the audio buffer, clear the current
-   * detection, drop suppressions and restart the critical hold. Capture keeps
-   * running, so there is no audible or visual gap.
+   * Flush the buffer, clear the detection, drop suppressions and re-learn the
+   * room. Capture keeps running, so there is no gap.
    */
   reset(): void {
     this.resetBuffers();
+    this.resetGate();
     this.suppressUntil.clear();
     this.lastLoggedAt.clear();
     this.dismissedKey = '';
@@ -591,11 +626,13 @@ class SoundEngine {
       dismissed: NO_LABELS,
       windowsAnalyzed: 0,
       error: null,
+      calibrating: this.running,
+      gateOpen: false,
     });
 
     if (this.settings.hapticFeedback) {
       try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } catch {
         /* ignore */
       }
@@ -604,30 +641,41 @@ class SoundEngine {
     this.emit({ type: 'reset' });
   }
 
-  /** Publish a detection as if it had come from the microphone (demo / viva). */
+  /**
+   * Publish a detection as if it had come from the microphone.
+   *
+   * Deliberately does NOT pre-load the critical streak. An earlier version set
+   * it straight to the escalation threshold, so simulating a siren navigated to
+   * the SOS screen in the same frame — which covered the visual flash and made
+   * the strobe look broken. Escalation is now reached the same way real audio
+   * reaches it.
+   */
   simulate(label: SoundLabel): void {
     const now = Date.now();
+    const threat = SOUND_THREAT[label];
     const detection: Detection = {
       id: `sim-${label}-${now}`,
       label,
       name: SOUND_DISPLAY_NAMES[label],
       confidence: 0.93,
-      threat: SOUND_THREAT[label],
+      threat,
       firstSeen: now,
       lastSeen: now,
       simulated: true,
     };
 
-    this.patch({
-      detection,
-      criticalHoldMs:
-        detection.threat === 'critical'
-          ? Math.max(this.settings.criticalHoldSeconds * 1000, 1)
-          : 0,
-    });
+    this.patch({ detection, criticalHoldMs: 0 });
 
-    if (this.settings.hapticFeedback) vibrate(detection.threat);
+    if (this.settings.hapticFeedback) vibrate(threat);
+    if (threat === 'critical' && this.settings.visualFlash) {
+      this.emit({ type: 'flash', reason: 'critical' });
+    }
     this.emit({ type: 'detection', detection });
+  }
+
+  /** Fire the screen strobe on demand, ignoring the setting. Used by Settings. */
+  testFlash(): void {
+    this.emit({ type: 'flash', reason: 'test' });
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -641,11 +689,12 @@ class SoundEngine {
     this.samplesSinceAnalysis = 0;
   }
 
-  /**
-   * Recompute the suppression list and publish it only if it actually changed.
-   * The array identity would otherwise churn on every window and schedule a
-   * render for nothing.
-   */
+  private resetGate() {
+    resetGateState(this.gateState);
+    this.pendingLabel = null;
+    this.pendingCount = 0;
+  }
+
   private syncDismissed() {
     const now = Date.now();
     const list: SoundLabel[] = [];
@@ -663,8 +712,8 @@ class SoundEngine {
   }
 
   /**
-   * Per-chunk handler. Deliberately synchronous and short: decode, resample,
-   * append, and hand off. The expensive work is scheduled, never inlined here.
+   * Per-chunk handler: decode, resample, append, hand off. Deliberately short —
+   * the expensive work is scheduled, never inlined here.
    */
   private handleChunk = (base64Chunk: string): void => {
     if (!this.running) return;
@@ -674,14 +723,13 @@ class SoundEngine {
       const sampleCount = bytes.length >> 1;
       if (sampleCount === 0) return;
 
-      // Grow scratch if the native layer ever hands us a larger chunk.
       const needed = Math.ceil((sampleCount * SAMPLE_RATE) / CAPTURE_RATE) + 2;
       if (this.resampleScratch.length < needed) {
         this.resampleScratch = new Float32Array(needed * 2);
       }
 
-      // Decode signed little-endian Int16 by hand. Constructing an Int16Array
-      // view over the Buffer would throw whenever the pooled byteOffset is odd.
+      // Decode signed little-endian Int16 by hand. An Int16Array view over the
+      // Buffer would throw whenever the pooled byteOffset happens to be odd.
       const src = new Float32Array(sampleCount);
       for (let i = 0; i < sampleCount; i++) {
         const lo = bytes[i * 2] as number;
@@ -692,7 +740,6 @@ class SoundEngine {
       }
 
       const level = computeRMS(src);
-      // Perceptual curve: quiet rooms should still show life on the meter.
       this.onLevel?.(Math.min(1, Math.sqrt(level * 7)));
 
       const outLen = this.resample(src, sampleCount);
@@ -702,7 +749,6 @@ class SoundEngine {
     }
   };
 
-  /** Linear resample CAPTURE_RATE → SAMPLE_RATE into `resampleScratch`. */
   private resample(src: Float32Array, srcLen: number): number {
     const ratio = SAMPLE_RATE / CAPTURE_RATE;
     const outLen = Math.floor(srcLen * ratio);
@@ -719,7 +765,6 @@ class SoundEngine {
     return outLen;
   }
 
-  /** Append into the circular buffer and trigger analysis on the hop boundary. */
   private appendToRing(data: Float32Array, length: number) {
     const ring = this.ring;
     const cap = CLIP_SAMPLES;
@@ -735,21 +780,16 @@ class SoundEngine {
     this.filled = Math.min(cap, this.filled + length);
     this.samplesSinceAnalysis += length;
 
-    // Watchdog: if a native call ever fails to settle, release the mutex rather
-    // than silently going deaf for the rest of the session.
+    // Watchdog: if a native call never settles, release the mutex rather than
+    // silently going deaf for the rest of the session.
     if (this.analyzing && Date.now() - this.analysisStartedAt > ANALYSIS_TIMEOUT_MS) {
       log('analysis watchdog fired — releasing the mutex');
       this.analyzing = false;
     }
 
     const hopSamples = Math.floor(this.profile().hopSeconds * SAMPLE_RATE);
-    if (
-      !this.analyzing &&
-      this.filled >= cap &&
-      this.samplesSinceAnalysis >= hopSamples
-    ) {
+    if (!this.analyzing && this.filled >= cap && this.samplesSinceAnalysis >= hopSamples) {
       this.samplesSinceAnalysis = 0;
-      // Detach from the audio callback so the handler returns immediately.
       void this.analyze();
     }
   }
@@ -757,10 +797,32 @@ class SoundEngine {
   /** Unwrap the circular buffer into `analysisBuf`, oldest sample first. */
   private linearise() {
     const cap = CLIP_SAMPLES;
-    const start = this.writeIdx; // oldest sample lives at the write cursor
+    const start = this.writeIdx;
     const tail = cap - start;
     this.analysisBuf.set(this.ring.subarray(start, cap), 0);
     if (tail < cap) this.analysisBuf.set(this.ring.subarray(0, start), tail);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Gate
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** Evaluate the adaptive gate for the current window. See audio/gate.ts. */
+  private evaluateGate(): { open: boolean; levelDb: number; floorDb: number } {
+    const blocks = computeBlockRms(this.analysisBuf, BLOCK_SAMPLES, this.blockRms);
+    const wasCalibrating = this.gateState.calibrationLeft > 0;
+
+    const result = evaluateGate(
+      this.blockRms,
+      blocks,
+      this.blockScratch,
+      this.profile(),
+      this.gateState,
+    );
+
+    if (wasCalibrating && !result.calibrating) this.patch({ calibrating: false });
+
+    return { open: result.open, levelDb: result.levelDb, floorDb: result.floorDb };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -771,7 +833,7 @@ class SoundEngine {
     if (this.analyzing || !this.running) return;
 
     const session = this.session;
-    if (!session) return; // model still opening; the next hop will retry
+    if (!session) return; // model still opening; the next hop retries
 
     const mySession = this.sessionId;
     const startedAt = Date.now();
@@ -781,12 +843,18 @@ class SoundEngine {
     try {
       this.linearise();
 
-      // ── Window-level silence gate ──
       const profile = this.profile();
-      const gate = WINDOW_RMS_BASE * profile.windowGate;
-      const rms = computeRMS(this.analysisBuf);
+      const gate = this.evaluateGate();
 
-      if (rms < gate) {
+      this.patch({
+        levelDb: Math.round(gate.levelDb),
+        floorDb: Math.round(gate.floorDb),
+        triggerDb: profile.triggerDb,
+        gateOpen: gate.open,
+      });
+
+      if (!gate.open) {
+        this.decayPending();
         this.expireDetection();
         return;
       }
@@ -804,12 +872,44 @@ class SoundEngine {
         lastLatencyMs: Date.now() - startedAt,
       });
 
-      if (!result || result.confidence < profile.confidence) {
+      if (!result) {
+        this.decayPending();
         this.expireDetection();
         return;
       }
 
-      this.publish(result.label, result.confidence, profile.hopSeconds * 1000);
+      const { label, confidence, margin } = result;
+
+      // Prediction gate. A diffuse distribution means the network has no answer
+      // for this input — which is precisely what silence and unmodelled noise
+      // produce, given there is no background class to fall back to.
+      if (confidence < profile.confidence || margin < profile.margin) {
+        log(
+          `rejected ${label} conf=${confidence.toFixed(2)} margin=${margin.toFixed(2)} ` +
+            `(need ${profile.confidence}/${profile.margin})`,
+        );
+        this.decayPending();
+        this.expireDetection();
+        return;
+      }
+
+      // Temporal agreement. Overlapping windows mean a genuine sound is present
+      // in several consecutive hops; a one-off spike is not.
+      if (label === this.pendingLabel) {
+        this.pendingCount = Math.min(this.pendingCount + 1, 10);
+      } else {
+        this.pendingLabel = label;
+        this.pendingCount = 1;
+      }
+
+      const unmistakable = confidence >= INSTANT_CONFIDENCE && margin >= INSTANT_MARGIN;
+      if (!unmistakable && this.pendingCount < profile.agree) {
+        log(`holding ${label} (${this.pendingCount}/${profile.agree})`);
+        this.expireDetection();
+        return;
+      }
+
+      this.publish(label, confidence, profile.hopSeconds * 1000);
     } catch (err) {
       log('analysis error', err);
       this.expireDetection();
@@ -819,10 +919,15 @@ class SoundEngine {
     }
   }
 
+  private decayPending() {
+    if (this.pendingCount > 0) this.pendingCount -= 1;
+    if (this.pendingCount === 0) this.pendingLabel = null;
+  }
+
   private async infer(
     session: InferenceSession,
     features: Float32Array,
-  ): Promise<{ label: SoundLabel; confidence: number } | null> {
+  ): Promise<{ label: SoundLabel; confidence: number; margin: number } | null> {
     try {
       const input = new Tensor('float32', features, ONNX_INPUT_DIMS);
       const results = await session.run({ [ONNX_INPUT_NAME]: input });
@@ -839,12 +944,16 @@ class SoundEngine {
       if (!probs || probs.length === 0) return null;
 
       let bestIdx = 0;
-      let best = probs[0] as number;
-      for (let i = 1; i < probs.length; i++) {
+      let best = -Infinity;
+      let second = -Infinity;
+      for (let i = 0; i < probs.length; i++) {
         const p = probs[i] as number;
         if (p > best) {
+          second = best;
           best = p;
           bestIdx = i;
+        } else if (p > second) {
+          second = p;
         }
       }
 
@@ -852,23 +961,20 @@ class SoundEngine {
       if (!label) return null;
 
       if (DEBUG) {
-        log(
-          'probs',
-          SOUND_LABELS.map((l, i) => `${l}=${(probs[i] ?? 0).toFixed(3)}`).join(' '),
-        );
+        log('probs', SOUND_LABELS.map((l, i) => `${l}=${(probs[i] ?? 0).toFixed(3)}`).join(' '));
       }
 
-      return { label, confidence: best };
+      return {
+        label,
+        confidence: best,
+        margin: best - (Number.isFinite(second) ? second : 0),
+      };
     } catch (err) {
       log('inference error', err);
       return null;
     }
   }
 
-  /**
-   * Accept a classified window and surface it, applying the mute list, the
-   * dismissal cool-off and the on-screen hold.
-   */
   private publish(label: SoundLabel, confidence: number, hopMs: number) {
     const now = Date.now();
 
@@ -892,8 +998,8 @@ class SoundEngine {
     const isSameClass = previous?.label === label && !previous.simulated;
 
     const detection: Detection = {
-      // Keeping the id stable across confirming windows means the detection
-      // card updates in place instead of remounting its animations.
+      // Stable id across confirming windows: the card updates in place rather
+      // than remounting its animations.
       id: isSameClass ? previous.id : `${label}-${now}`,
       label,
       name: SOUND_DISPLAY_NAMES[label],
@@ -904,20 +1010,21 @@ class SoundEngine {
       simulated: false,
     };
 
-    const criticalHoldMs =
-      threat === 'critical' ? this.state.criticalHoldMs + hopMs : 0;
+    const criticalHoldMs = threat === 'critical' ? this.state.criticalHoldMs + hopMs : 0;
 
     this.patch({ detection, criticalHoldMs });
 
     if (!isSameClass) {
       if (this.settings.hapticFeedback) vibrate(threat);
+      if (threat === 'critical' && this.settings.visualFlash) {
+        this.emit({ type: 'flash', reason: 'critical' });
+      }
       this.emit({ type: 'detection', detection });
     }
 
     this.persist(detection);
   }
 
-  /** Clear the on-screen detection once its hold window has elapsed. */
   private expireDetection() {
     const current = this.state.detection;
     if (!current) {
@@ -927,12 +1034,10 @@ class SoundEngine {
     if (Date.now() - current.lastSeen >= DETECTION_HOLD_MS) {
       this.patch({ detection: null, criticalHoldMs: 0 });
     } else if (this.state.criticalHoldMs !== 0) {
-      // The streak is broken even though the card is still on screen.
       this.patch({ criticalHoldMs: 0 });
     }
   }
 
-  /** Write to history, rate-limited per class. Never blocks the pipeline. */
   private persist(detection: Detection) {
     if (detection.threat === 'safe' && !this.settings.logSafeEvents) return;
 
@@ -953,7 +1058,7 @@ class SoundEngine {
 }
 
 /**
- * Module singleton. A single instance survives Fast Refresh, so audio
- * subscriptions and the ONNX session are never duplicated during development.
+ * Module singleton — survives Fast Refresh, so audio subscriptions and the ONNX
+ * session are never duplicated during development.
  */
 export const soundEngine = new SoundEngine();

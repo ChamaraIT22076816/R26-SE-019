@@ -15,7 +15,7 @@
  */
 
 import React, { memo, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -25,10 +25,11 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 
 import { alpha, elevation, radius, space, threatColors, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import { SOUND_ICONS } from '@/utils/storage';
 import type { Detection } from '@/utils/soundEngine';
-import { AppButton, type IconName } from './ui';
+import { type IconName } from './ui';
 
 function clockTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], {
@@ -69,8 +70,23 @@ const useStyles = makeStyles((c) => ({
   track: { height: 5, borderRadius: radius.pill, backgroundColor: c.surfaceAlt, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: radius.pill },
 
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
-  flex: { flex: 1 },
+  // Icon-over-label tiles rather than a row of labelled buttons: three
+  // horizontal buttons with icon + text do not fit 360 dp minus card padding,
+  // and truncating "Dismiss" is worse than stacking.
+  actions: { flexDirection: 'row', marginTop: space.lg },
+  action: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surfaceAlt,
+    minHeight: 62,
+  },
+  actionLabel: { ...typeScale.captionStrong, color: c.text, textAlign: 'center' },
 
   simulated: {
     marginTop: space.md,
@@ -94,6 +110,7 @@ export const DetectionCard = memo(function DetectionCard({
 }) {
   const styles = useStyles();
   const c = useColors();
+  const { gap } = useResponsive();
   const tone = threatColors(c, detection.threat);
 
   const enter = useSharedValue(0);
@@ -158,28 +175,33 @@ export const DetectionCard = memo(function DetectionCard({
           </View>
         ) : null}
 
-        <View style={styles.actions}>
-          <AppButton
-            label="Dismiss"
-            icon="close"
-            variant="secondary"
-            onPress={onDismiss}
-            style={styles.flex}
-          />
-          <AppButton
-            label="Mute"
-            icon="volume-mute-outline"
-            variant="ghost"
-            onPress={onMute}
-            style={styles.flex}
-          />
-          <AppButton
-            label="Reset"
-            icon="refresh"
-            variant="ghost"
-            onPress={onReset}
-            style={styles.flex}
-          />
+        <View style={[styles.actions, { gap }]}>
+          {(
+            [
+              { key: 'dismiss', icon: 'close' as IconName, label: 'Dismiss', onPress: onDismiss },
+              {
+                key: 'mute',
+                icon: 'volume-mute-outline' as IconName,
+                label: 'Mute',
+                onPress: onMute,
+              },
+              { key: 'reset', icon: 'refresh' as IconName, label: 'Reset', onPress: onReset },
+            ] as const
+          ).map((action) => (
+            <Pressable
+              key={action.key}
+              onPress={action.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${action.label} ${detection.name}`}
+              android_ripple={{ color: alpha(c.text, 0.08) }}
+              style={({ pressed }) => [styles.action, pressed && { opacity: 0.65 }]}
+            >
+              <Ionicons name={action.icon} size={19} color={c.textSecondary} />
+              <Text style={styles.actionLabel} numberOfLines={1}>
+                {action.label}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </View>
     </Animated.View>

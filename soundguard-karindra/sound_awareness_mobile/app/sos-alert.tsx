@@ -21,7 +21,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -44,6 +43,7 @@ import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 
 import { radius, space, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useSettings } from '@/providers/SettingsProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { getContacts, type EmergencyContact } from '@/utils/storage';
@@ -147,7 +147,8 @@ export default function SosAlertScreen() {
   const { settings } = useSettings();
   const { reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const r = useResponsive();
+  const { width } = r;
 
   const total = Math.max(3, settings.sosCountdown);
   const [remaining, setRemaining] = useState(total);
@@ -334,7 +335,10 @@ export default function SosAlertScreen() {
           ? status || 'Preparing your alert…'
           : 'An SOS will be prepared automatically.';
 
-  const trackWidth = Math.min(width - space.xxl * 2, 420);
+  const trackWidth = Math.min(width - r.hPadding * 2, 420);
+  // The countdown is the single most important glyph on the screen; scale it to
+  // the viewport instead of letting an 88 pt digit pair collide on a 320 dp phone.
+  const timerSize = Math.round(Math.min(96, Math.max(56, r.contentWidth * 0.26)));
 
   return (
     <View style={styles.root}>
@@ -347,7 +351,11 @@ export default function SosAlertScreen() {
         style={[
           styles.content,
           contentStyle,
-          { paddingTop: insets.top + space.xxxl, paddingBottom: Math.max(insets.bottom, space.lg) + space.xxl },
+          {
+            paddingHorizontal: r.hPadding,
+            paddingTop: insets.top + (r.isShort ? space.xl : space.xxxl),
+            paddingBottom: Math.max(insets.bottom, space.lg) + space.xxl,
+          },
         ]}
       >
         {/* Header */}
@@ -375,7 +383,9 @@ export default function SosAlertScreen() {
         <View style={styles.centre}>
           {phase === 'countdown' ? (
             <>
-              <Text style={styles.timer}>{`0:${String(remaining).padStart(2, '0')}`}</Text>
+              <Text style={[styles.timer, { fontSize: timerSize }]}>
+                {`0:${String(remaining).padStart(2, '0')}`}
+              </Text>
               <Text style={styles.timerCaption}>until your contacts are messaged</Text>
               <View style={styles.dots}>
                 {Array.from({ length: total }).map((_, i) => (
@@ -456,7 +466,7 @@ const styles = StyleSheet.create({
   base: { ...StyleSheet.absoluteFillObject, backgroundColor: INK },
   wash: { backgroundColor: DEEP },
 
-  content: { flex: 1, justifyContent: 'space-between', paddingHorizontal: space.xxl },
+  content: { flex: 1, justifyContent: 'space-between' },
 
   header: { alignItems: 'center' },
   badge: {
@@ -486,7 +496,6 @@ const styles = StyleSheet.create({
 
   centre: { alignItems: 'center', justifyContent: 'center' },
   timer: {
-    fontSize: 88,
     fontWeight: '200',
     color: WHITE,
     letterSpacing: 2,

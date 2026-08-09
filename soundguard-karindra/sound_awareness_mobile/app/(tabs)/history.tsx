@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppButton, Card, EmptyState, ScreenHeader, type IconName } from '@/components/ui';
 import { alpha, radius, space, threatColors, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import { useSettings } from '@/providers/SettingsProvider';
 import {
@@ -74,9 +75,9 @@ function clockTime(timestamp: number): string {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  header: { paddingHorizontal: space.xxl, paddingTop: space.md },
+  header: { paddingTop: space.md },
 
-  stats: { flexDirection: 'row', marginHorizontal: space.xxl, marginBottom: space.lg },
+  stats: { flexDirection: 'row', marginBottom: space.lg },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { ...typeScale.title, color: c.text, fontVariant: ['tabular-nums'] },
   statLabel: {
@@ -87,12 +88,7 @@ const useStyles = makeStyles((c) => ({
   },
   statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 4 },
 
-  filters: {
-    flexDirection: 'row',
-    gap: space.sm,
-    paddingHorizontal: space.xxl,
-    paddingBottom: space.md,
-  },
+  filters: { flexDirection: 'row', paddingBottom: space.md },
   chip: {
     flex: 1,
     alignItems: 'center',
@@ -104,7 +100,7 @@ const useStyles = makeStyles((c) => ({
   },
   chipText: { ...typeScale.caption, color: c.textSecondary },
 
-  list: { paddingHorizontal: space.xxl },
+  list: {},
 
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.xl, paddingBottom: space.sm },
   sectionText: { ...typeScale.overline, color: c.textSecondary, textTransform: 'uppercase' },
@@ -148,6 +144,7 @@ export default function HistoryScreen() {
   const styles = useStyles();
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const r = useResponsive();
   const { settings } = useSettings();
 
   const [events, setEvents] = useState<DetectionEvent[]>([]);
@@ -262,7 +259,7 @@ export default function HistoryScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: r.hPadding }]}>
         <ScreenHeader
           title="History"
           subtitle="Every sound SoundGuard has recognised"
@@ -274,7 +271,7 @@ export default function HistoryScreen() {
         />
       </View>
 
-      <Card style={styles.stats}>
+      <Card style={[styles.stats, { marginHorizontal: r.hPadding }]}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{counts.total}</Text>
           <Text style={styles.statLabel}>Total</Text>
@@ -291,7 +288,7 @@ export default function HistoryScreen() {
         </View>
       </Card>
 
-      <View style={styles.filters}>
+      <View style={[styles.filters, { paddingHorizontal: r.hPadding, gap: r.gap }]}>
         {FILTERS.map((option) => {
           const active = filter === option.value;
           return (
@@ -330,7 +327,10 @@ export default function HistoryScreen() {
           data={rows}
           keyExtractor={(row) => row.key}
           renderItem={renderRow}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 110 }]}
+          contentContainerStyle={[
+            styles.list,
+            { paddingHorizontal: r.hPadding, paddingBottom: insets.bottom + 110 },
+          ]}
           showsVerticalScrollIndicator={false}
           initialNumToRender={12}
           windowSize={9}

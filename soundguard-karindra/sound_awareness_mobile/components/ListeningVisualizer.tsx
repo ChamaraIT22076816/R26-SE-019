@@ -195,16 +195,27 @@ export const ListeningOrb = memo(function ListeningOrb({
 
 // ─── Level meter ─────────────────────────────────────────────────────────────
 
-const BAR_COUNT = 21;
+/** Bar pitch in dp (3 dp bar + 4 dp gap). */
+const BAR_PITCH = 7;
+const MIN_BARS = 13;
+const MAX_BARS = 33;
+
+/** Fill the available width without ever overflowing it. */
+function barCountFor(width: number): number {
+  if (!Number.isFinite(width) || width <= 0) return 21;
+  return Math.max(MIN_BARS, Math.min(MAX_BARS, Math.floor(width / BAR_PITCH)));
+}
 
 const Bar = memo(function Bar({
   index,
+  total,
   color,
   active,
   reduceMotion,
   wave,
 }: {
   index: number;
+  total: number;
   color: string;
   active: boolean;
   reduceMotion: boolean;
@@ -214,9 +225,10 @@ const Bar = memo(function Bar({
 
   // Bars near the centre react more strongly — reads as a waveform, not a
   // row of equal blocks.
-  const centreBias = 1 - Math.abs(index - (BAR_COUNT - 1) / 2) / ((BAR_COUNT - 1) / 2);
+  const half = Math.max(1, (total - 1) / 2);
+  const centreBias = 1 - Math.abs(index - half) / half;
   const weight = 0.35 + centreBias * 0.65;
-  const phase = index / BAR_COUNT;
+  const phase = index / total;
 
   const style = useAnimatedStyle(() => {
     if (!active) {
@@ -239,12 +251,16 @@ const Bar = memo(function Bar({
 export const LevelMeter = memo(function LevelMeter({
   color,
   active,
+  width,
 }: {
   color: string;
   active: boolean;
+  /** Available content width; the bar count adapts so it never overflows. */
+  width?: number;
 }) {
   const { reduceMotion } = useTheme();
   const wave = useSharedValue(0);
+  const total = barCountFor(width ?? 0);
 
   useEffect(() => {
     cancelAnimation(wave);
@@ -258,10 +274,11 @@ export const LevelMeter = memo(function LevelMeter({
 
   return (
     <View style={styles.meter} pointerEvents="none" accessibilityElementsHidden>
-      {Array.from({ length: BAR_COUNT }).map((_, i) => (
+      {Array.from({ length: total }).map((_, i) => (
         <Bar
           key={i}
           index={i}
+          total={total}
           color={color}
           active={active}
           reduceMotion={reduceMotion}

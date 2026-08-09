@@ -91,14 +91,20 @@ function getTables(n: number): FftTables {
 
 const windowCache = new Map<number, Float32Array>();
 
-/** Periodic-symmetric Hann window, matching the previous implementation. */
-export function hannWindow(length: number): Float32Array {
+/**
+ * Periodic ("DFT-even") Hann window — divisor N, not N−1.
+ *
+ * This is what `scipy.signal.get_window('hann', N, fftbins=True)` returns, and
+ * therefore what librosa's STFT applies. The symmetric variant (divisor N−1)
+ * used previously is the one meant for filter design, not spectral analysis;
+ * substituting it puts a small but systematic error into every frame.
+ */
+export function periodicHannWindow(length: number): Float32Array {
   let w = windowCache.get(length);
   if (w) return w;
   w = new Float32Array(length);
-  const denom = length - 1;
   for (let i = 0; i < length; i++) {
-    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / denom));
+    w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / length);
   }
   windowCache.set(length, w);
   return w;

@@ -1,17 +1,32 @@
 /**
  * SoundGuard — Visual alert flash
  * ─────────────────────────────────────────────────────────────────────────────
- * A full-screen strobe fired on critical detections, gated by the
- * `visualFlash` setting.
+ * A full-screen strobe for critical detections: the accessible substitute for a
+ * camera-LED flash. It needs no extra native module, so the existing
+ * development build keeps working.
  *
- * This is the accessible substitute for a camera-LED flash: the app targets
- * Deaf and hard-of-hearing users, a screen strobe is visible whether or not the
- * phone is face-down-in-a-pocket, and — unlike torch control — it needs no
- * additional native module, so the existing development build keeps working.
+ * ── Why it was dead, and what changed ────────────────────────────────────────
  *
- * The whole animation runs on the UI thread and the view is
- * `pointerEvents="none"`, so it can never intercept a tap or block the
- * detection pipeline.
+ *   1. The setting was off for everyone. The settings migration folded the v1
+ *      `flashlight` key (default false) into `visualFlash`, so every existing
+ *      install started with the strobe disabled. Fixed in storage.ts.
+ *
+ *   2. Testing it hid it. Simulating a siren pre-loaded the critical streak to
+ *      the escalation threshold, so SosWatcher pushed the full-screen SOS route
+ *      in the same frame the strobe started. Fixed in soundEngine.simulate().
+ *
+ *   3. The SOS route was a native `fullScreenModal`, which opens its own
+ *      container above the root view — nothing rendered here could ever appear
+ *      over it. It is now an ordinary faded card in the same hierarchy.
+ *
+ * The component no longer decides *whether* to flash. The engine owns that
+ * policy and emits an explicit `flash` event, which means the rule is stated
+ * once, next to the detection logic, and can be exercised directly by the
+ * "Test visual flash" control in Settings.
+ *
+ * A white core over the colour wash makes the strobe unmistakable in both
+ * themes and at any screen brightness; `pointerEvents="none"` guarantees it can
+ * never swallow a tap.
  */
 
 import React, { useEffect } from 'react';
@@ -26,53 +41,69 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useEngineActions } from '@/providers/EngineProvider';
-import { useSettings } from '@/providers/SettingsProvider';
 import { useColors } from '@/providers/ThemeProvider';
 
+/** Three hard pulses then a fade — legible without being seizure-inducing. */
+const ON = { duration: 85, easing: Easing.linear } as const;
+const OFF = { duration: 120, easing: Easing.linear } as const;
+const TAIL = { duration: 260, easing: Easing.out(Easing.quad) } as const;
+
 export function FlashOverlay() {
-  const { settings } = useSettings();
   const { onEvent } = useEngineActions();
   const c = useColors();
 
-  const opacity = useSharedValue(0);
+  const wash = useSharedValue(0);
+  const core = useSharedValue(0);
 
   useEffect(() => {
     const unsubscribe = onEvent((event) => {
-      if (event.type !== 'detection') return;
-      if (!settings.visualFlash) return;
-      if (event.detection.threat !== 'critical') return;
+      if (event.type !== 'flash') return;
 
-      cancelAnimation(opacity);
-      const on = { duration: 90, easing: Easing.linear };
-      const off = { duration: 130, easing: Easing.linear };
-      opacity.value = withSequence(
-        withTiming(0.85, on),
-        withTiming(0, off),
-        withTiming(0.85, on),
-        withTiming(0, off),
-        withTiming(0.85, on),
-        withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }),
+      cancelAnimation(wash);
+      cancelAnimation(core);
+
+      wash.value = withSequence(
+        withTiming(0.92, ON),
+        withTiming(0.12, OFF),
+        withTiming(0.92, ON),
+        withTiming(0.12, OFF),
+        withTiming(0.92, ON),
+        withTiming(0, TAIL),
+      );
+      core.value = withSequence(
+        withTiming(0.85, ON),
+        withTiming(0, OFF),
+        withTiming(0.85, ON),
+        withTiming(0, OFF),
+        withTiming(0.85, ON),
+        withTiming(0, TAIL),
       );
     });
 
     return () => {
       unsubscribe();
-      cancelAnimation(opacity);
+      cancelAnimation(wash);
+      cancelAnimation(core);
     };
-  }, [onEvent, opacity, settings.visualFlash]);
+  }, [onEvent, wash, core]);
 
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const washStyle = useAnimatedStyle(() => ({ opacity: wash.value }));
+  const coreStyle = useAnimatedStyle(() => ({ opacity: core.value }));
 
   return (
     <Animated.View
       pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[StyleSheet.absoluteFill, styles.overlay, { backgroundColor: c.critical }, style]}
-    />
+      style={[StyleSheet.absoluteFill, styles.layer, { backgroundColor: c.critical }, washStyle]}
+    >
+      <Animated.View style={[StyleSheet.absoluteFill, styles.core, coreStyle]} />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { zIndex: 999, elevation: 999 },
+  // zIndex for iOS/web ordering, elevation for Android's sibling stacking.
+  layer: { zIndex: 999, elevation: 999 },
+  core: { backgroundColor: '#FFFFFF' },
 });

@@ -25,6 +25,7 @@ import React, { useCallback } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 import {
   ActionRow,
@@ -38,6 +39,8 @@ import {
   type IconName,
 } from '@/components/ui';
 import { alpha, radius, space, typography as typeScale } from '@/constants/theme';
+import { useResponsive } from '@/hooks/useResponsive';
+import { useEngineActions } from '@/providers/EngineProvider';
 import { useSettings } from '@/providers/SettingsProvider';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import {
@@ -59,7 +62,6 @@ const SENSITIVITY_COPY: Record<number, { name: string; detail: string }> = {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  scroll: { paddingHorizontal: space.xxl },
 
   sensitivityCard: { padding: space.lg },
   sensitivityHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -123,7 +125,9 @@ export default function SettingsScreen() {
   const styles = useStyles();
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const r = useResponsive();
   const { settings, update, resetToDefaults } = useSettings();
+  const { testFlash } = useEngineActions();
 
   const copy = SENSITIVITY_COPY[settings.sensitivity] ?? SENSITIVITY_COPY[3]!;
 
@@ -174,7 +178,10 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={{
+          paddingHorizontal: r.hPadding,
+          paddingBottom: insets.bottom + 120,
+        }}
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader title="Settings" subtitle="Tune how SoundGuard listens and alerts" />
@@ -320,6 +327,14 @@ export default function SettingsScreen() {
             value={settings.visualFlash}
             onValueChange={(v) => update('visualFlash', v)}
           />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="eye-outline"
+            tint={c.warning}
+            label="Test visual flash"
+            description="Fire the strobe now, whatever the switch above is set to."
+            onPress={testFlash}
+          />
         </Card>
 
         {/* ── Sound classes ── */}
@@ -445,6 +460,14 @@ export default function SettingsScreen() {
             description="After dispatch, show a one-tap dial to the first person in your Safety Circle."
             value={settings.callFirstContact}
             onValueChange={(v) => update('callFirstContact', v)}
+          />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="play-outline"
+            tint={c.critical}
+            label="Rehearse the SOS screen"
+            description="Open the countdown so you know what it looks like. Nothing is sent unless it completes."
+            onPress={() => router.push('/sos-alert')}
           />
         </Card>
 

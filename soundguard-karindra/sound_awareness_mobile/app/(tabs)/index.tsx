@@ -3,27 +3,21 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * The live monitoring surface.
  *
- * Render discipline, which is what keeps this screen in step with the engine:
- *
+ * Render discipline keeps this screen in step with the engine:
  *   • Engine state arrives through `useSyncExternalStore`, and the engine only
- *     notifies on a genuine change. Idle listening schedules no renders at all.
+ *     notifies on a genuine change.
  *   • The orb and level meter read the microphone level from a shared value on
- *     the UI thread, so the visualiser is decoupled from React entirely.
- *   • Every control is synchronous. Dismiss, reset and mute all mutate engine
- *     or settings state in the tap handler, so the UI responds in the same
- *     frame rather than waiting on a round trip through the audio pipeline.
+ *     the UI thread, so the visualiser never causes a React render.
+ *   • Every control is synchronous, so the UI responds in the same frame as the
+ *     tap rather than waiting on the audio pipeline.
+ *
+ * Layout is driven entirely by `useResponsive`. Nothing here assumes a 390 dp
+ * width: gutters, gaps, the orb diameter and the demo row all derive from the
+ * live viewport, so a 320 dp phone and a 21:9 panel both lay out cleanly.
  */
 
 import React, { useCallback, useMemo } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -31,12 +25,14 @@ import { DetectionCard } from '@/components/DetectionCard';
 import { LevelMeter, ListeningOrb } from '@/components/ListeningVisualizer';
 import { AppButton, Card, SectionLabel, type IconName } from '@/components/ui';
 import { alpha, radius, space, threatColors, typography as typeScale } from '@/constants/theme';
+import { orbDiameter, useResponsive } from '@/hooks/useResponsive';
 import { useEngineActions, useEngineState } from '@/providers/EngineProvider';
 import { useSettings } from '@/providers/SettingsProvider';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import {
   SOUND_DISPLAY_NAMES,
   SOUND_ICONS,
+  SOUND_SHORT_NAMES,
   type SoundLabel,
 } from '@/utils/storage';
 
@@ -48,7 +44,6 @@ const DEMO_SOUNDS: { label: SoundLabel; caption: string }[] = [
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
-  scroll: { paddingHorizontal: space.xxl, paddingBottom: space.xxxl },
 
   header: {
     flexDirection: 'row',
@@ -56,49 +51,51 @@ const useStyles = makeStyles((c) => ({
     justifyContent: 'space-between',
     paddingTop: space.md,
     paddingBottom: space.lg,
+    gap: space.sm,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
   brandMark: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.primarySoft,
   },
+  brandText: { flexShrink: 1 },
   brandName: { ...typeScale.heading, color: c.text },
   brandSub: { ...typeScale.caption, color: c.textMuted, marginTop: 1 },
 
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth * 2,
+    flexShrink: 0,
   },
-  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusPillText: { ...typeScale.overline, textTransform: 'uppercase' },
 
-  stage: { alignItems: 'center', paddingVertical: space.lg },
-  headline: { ...typeScale.title, color: c.text, textAlign: 'center', marginTop: space.xl },
+  stage: { alignItems: 'center', paddingTop: space.sm },
+  headline: { ...typeScale.title, color: c.text, textAlign: 'center', marginTop: space.lg },
   subline: {
     ...typeScale.body,
     color: c.textSecondary,
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 21,
-    paddingHorizontal: space.md,
   },
-  meterWrap: { marginTop: space.lg, marginBottom: space.sm },
+  meterWrap: { marginTop: space.lg, marginBottom: space.xs },
 
   block: { marginTop: space.lg },
 
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: space.sm,
     padding: space.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth * 2,
@@ -114,49 +111,46 @@ const useStyles = makeStyles((c) => ({
   idleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   idleText: { flex: 1, ...typeScale.caption, color: c.textMuted, lineHeight: 19 },
 
-  controls: { marginTop: space.xl, gap: space.md },
-  secondaryRow: { flexDirection: 'row', gap: space.md },
+  controls: { marginTop: space.lg, gap: space.sm },
+  row: { flexDirection: 'row' },
   flex: { flex: 1 },
 
-  diagnostics: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: space.lg,
+  // ── Gate diagnostics ──
+  gauge: { marginTop: space.lg, gap: space.sm },
+  gaugeHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  gaugeTitle: { ...typeScale.overline, color: c.textMuted, textTransform: 'uppercase' },
+  gaugeVerdict: { ...typeScale.overline, textTransform: 'uppercase' },
+  gaugeTrack: {
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: c.surfaceAlt,
+    overflow: 'hidden',
   },
-  diagnosticsText: {
-    ...typeScale.caption,
-    color: c.textMuted,
-    fontVariant: ['tabular-nums'],
-  },
+  gaugeFill: { height: '100%', borderRadius: radius.pill },
+  gaugeTicks: { flexDirection: 'row', justifyContent: 'space-between' },
+  gaugeTick: { ...typeScale.caption, color: c.textMuted, fontVariant: ['tabular-nums'] },
 
-  demoRow: { flexDirection: 'row', gap: space.sm },
+  // ── Demo ──
   demoChip: {
-    flex: 1,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     paddingVertical: space.md,
+    paddingHorizontal: 4,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: c.border,
     backgroundColor: c.surface,
   },
   demoChipLabel: { ...typeScale.captionStrong, color: c.text, textAlign: 'center' },
-  demoChipCaption: { fontSize: 11, color: c.textMuted },
-  demoNote: {
-    ...typeScale.caption,
-    color: c.textMuted,
-    marginTop: space.md,
-    lineHeight: 18,
-  },
+  demoChipCaption: { fontSize: 10, color: c.textMuted, textAlign: 'center' },
+  demoNote: { ...typeScale.caption, color: c.textMuted, marginTop: space.md, lineHeight: 18 },
 }));
 
 export default function ListenScreen() {
   const styles = useStyles();
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const r = useResponsive();
 
   const state = useEngineState();
   const actions = useEngineActions();
@@ -166,9 +160,8 @@ export default function ListenScreen() {
   const starting = state.status === 'starting';
   const detection = state.detection;
 
-  const orbSize = Math.min(Math.max(width - 128, 180), 250);
+  const orbSize = orbDiameter(r);
 
-  // ── Presentation derived from engine state ──
   const tone = useMemo(() => {
     if (detection) return threatColors(c, detection.threat);
     if (listening) return { fg: c.primary, bg: c.primarySoft, label: 'Listening' };
@@ -183,11 +176,13 @@ export default function ListenScreen() {
 
   const headline = detection
     ? detection.name
-    : listening
-      ? 'Listening'
-      : starting
-        ? 'Starting…'
-        : 'Monitoring paused';
+    : state.calibrating
+      ? 'Calibrating'
+      : listening
+        ? 'Listening'
+        : starting
+          ? 'Starting…'
+          : 'Monitoring paused';
 
   const subline = detection
     ? detection.threat === 'critical'
@@ -195,23 +190,26 @@ export default function ListenScreen() {
       : detection.threat === 'warning'
         ? 'Something nearby may need your attention.'
         : 'A routine sound was recognised nearby.'
-    : listening
-      ? state.modelStatus === 'ready'
-        ? 'Your surroundings are being analysed on this device.'
-        : 'Preparing the on-device recognition model…'
-      : 'Start monitoring to be alerted to important sounds around you.';
+    : state.calibrating
+      ? 'Measuring the background level of this room so quiet sounds still stand out.'
+      : listening
+        ? state.modelStatus === 'ready'
+          ? 'Your surroundings are being analysed on this device.'
+          : 'Preparing the on-device recognition model…'
+        : 'Start monitoring to be alerted to important sounds around you.';
 
   const statusLabel = starting
     ? 'Starting'
-    : listening
-      ? state.analyzing
-        ? 'Analysing'
-        : 'Live'
-      : state.modelStatus === 'loading'
-        ? 'Loading'
-        : 'Paused';
+    : state.calibrating
+      ? 'Calibrating'
+      : listening
+        ? state.analyzing
+          ? 'Analysing'
+          : 'Live'
+        : state.modelStatus === 'loading'
+          ? 'Loading'
+          : 'Paused';
 
-  // ── Handlers ──
   const handleMute = useCallback(() => {
     if (!detection) return;
     if (settings.mutedSounds.includes(detection.label)) {
@@ -227,21 +225,37 @@ export default function ListenScreen() {
 
   const dismissedNames = state.dismissed.map((l) => SOUND_DISPLAY_NAMES[l]).join(', ');
 
+  // Headroom above the trigger, as a 0–1 bar. 1.0 means the gate just opened.
+  const excessDb = state.levelDb - state.floorDb;
+  const gaugeRatio = Math.max(
+    0,
+    Math.min(1, state.triggerDb > 0 ? excessDb / state.triggerDb : 0),
+  );
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={{
+          paddingHorizontal: r.hPadding,
+          paddingBottom: insets.bottom + 110,
+        }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.brandMark}>
-              <Ionicons name="pulse" size={19} color={c.primary} />
+              <Ionicons name="pulse" size={18} color={c.primary} />
             </View>
-            <View>
-              <Text style={styles.brandName}>SoundGuard</Text>
-              <Text style={styles.brandSub}>On-device sound awareness</Text>
+            <View style={styles.brandText}>
+              <Text style={styles.brandName} numberOfLines={1}>
+                SoundGuard
+              </Text>
+              {r.isCompact ? null : (
+                <Text style={styles.brandSub} numberOfLines={1}>
+                  On-device sound awareness
+                </Text>
+              )}
             </View>
           </View>
 
@@ -262,13 +276,13 @@ export default function ListenScreen() {
             active={listening || starting}
           />
 
-          <Text style={styles.headline} numberOfLines={2}>
+          <Text style={styles.headline} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
             {headline}
           </Text>
           <Text style={styles.subline}>{subline}</Text>
 
           <View style={styles.meterWrap}>
-            <LevelMeter color={tone.fg} active={listening} />
+            <LevelMeter color={tone.fg} active={listening} width={r.contentWidth} />
           </View>
         </View>
 
@@ -313,7 +327,7 @@ export default function ListenScreen() {
               <Text style={styles.idleText}>
                 {listening
                   ? 'Nothing unusual right now. Detected sounds appear here instantly, with controls to dismiss or mute them.'
-                  : `Sensitivity is set to level ${settings.sensitivity} of 5. Adjust it any time in Settings — changes apply while listening.`}
+                  : `Sensitivity is level ${settings.sensitivity} of 5. Adjust it any time in Settings — changes apply while listening.`}
               </Text>
             </View>
           </Card>
@@ -322,13 +336,50 @@ export default function ListenScreen() {
         {/* ── Dismissal banner ── */}
         {state.dismissed.length > 0 ? (
           <View style={[styles.banner, styles.block]}>
-            <Ionicons name="eye-off-outline" size={17} color={c.textMuted} />
-            <Text style={styles.bannerText}>
-              Temporarily ignoring {dismissedNames}
-            </Text>
+            <Ionicons name="eye-off-outline" size={16} color={c.textMuted} />
+            <Text style={styles.bannerText}>Temporarily ignoring {dismissedNames}</Text>
             <Pressable onPress={actions.undoDismiss} hitSlop={8} accessibilityRole="button">
               <Text style={styles.bannerAction}>Undo</Text>
             </Pressable>
+          </View>
+        ) : null}
+
+        {/* ── Live gate gauge: makes the sensitivity setting observable ── */}
+        {listening ? (
+          <View style={styles.gauge}>
+            <View style={styles.gaugeHead}>
+              <Text style={styles.gaugeTitle}>Detection threshold</Text>
+              <Text
+                style={[
+                  styles.gaugeVerdict,
+                  { color: state.calibrating ? c.textMuted : state.gateOpen ? tone.fg : c.textMuted },
+                ]}
+              >
+                {state.calibrating ? 'Learning room' : state.gateOpen ? 'Above threshold' : 'Below threshold'}
+              </Text>
+            </View>
+
+            <View style={styles.gaugeTrack}>
+              <View
+                style={[
+                  styles.gaugeFill,
+                  {
+                    width: `${Math.round(gaugeRatio * 100)}%`,
+                    backgroundColor: state.gateOpen ? tone.fg : c.borderStrong,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.gaugeTicks}>
+              <Text style={styles.gaugeTick}>
+                Room {Number.isFinite(state.floorDb) ? state.floorDb : -120} dB
+              </Text>
+              <Text style={styles.gaugeTick}>
+                Now {Number.isFinite(state.levelDb) ? state.levelDb : -120} dB
+              </Text>
+              <Text style={styles.gaugeTick}>Needs +{state.triggerDb} dB</Text>
+            </View>
           </View>
         ) : null}
 
@@ -344,9 +395,9 @@ export default function ListenScreen() {
             onPress={actions.toggle}
           />
 
-          <View style={styles.secondaryRow}>
+          <View style={[styles.row, { gap: r.gap }]}>
             <AppButton
-              label="Reset listening"
+              label={r.isCompact ? 'Reset' : 'Reset listening'}
               icon="refresh"
               variant="ghost"
               onPress={actions.reset}
@@ -362,19 +413,9 @@ export default function ListenScreen() {
           </View>
         </View>
 
-        {/* ── Live diagnostics ── */}
-        {listening && state.windowsAnalyzed > 0 ? (
-          <View style={styles.diagnostics}>
-            <Ionicons name="speedometer-outline" size={13} color={c.textMuted} />
-            <Text style={styles.diagnosticsText}>
-              {state.lastLatencyMs} ms per window · {state.windowsAnalyzed} analysed
-            </Text>
-          </View>
-        ) : null}
-
         {/* ── Demo triggers ── */}
         <SectionLabel icon="flask-outline">Demo</SectionLabel>
-        <View style={styles.demoRow}>
+        <View style={[styles.row, { gap: r.gap }]}>
           {DEMO_SOUNDS.map((demo) => (
             <Pressable
               key={demo.label}
@@ -382,7 +423,7 @@ export default function ListenScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Simulate ${SOUND_DISPLAY_NAMES[demo.label]}`}
               android_ripple={{ color: alpha(c.text, 0.07) }}
-              style={({ pressed }) => [styles.demoChip, pressed && { opacity: 0.65 }]}
+              style={({ pressed }) => [styles.demoChip, styles.flex, pressed && { opacity: 0.65 }]}
             >
               <Ionicons
                 name={(SOUND_ICONS[demo.label] ?? 'volume-high-outline') as IconName}
@@ -390,15 +431,17 @@ export default function ListenScreen() {
                 color={c.textSecondary}
               />
               <Text style={styles.demoChipLabel} numberOfLines={1}>
-                {SOUND_DISPLAY_NAMES[demo.label]}
+                {r.isNarrow ? SOUND_SHORT_NAMES[demo.label] : SOUND_DISPLAY_NAMES[demo.label]}
               </Text>
-              <Text style={styles.demoChipCaption}>{demo.caption}</Text>
+              <Text style={styles.demoChipCaption} numberOfLines={1}>
+                {demo.caption}
+              </Text>
             </Pressable>
           ))}
         </View>
         <Text style={styles.demoNote}>
-          Simulated events run through the same state pipeline as live audio, so alert behaviour and
-          SOS escalation can be demonstrated without producing the sound.
+          Simulated events run through the same state pipeline as live audio, so alerts, haptics and
+          the visual flash can be demonstrated without producing the sound.
         </Text>
       </ScrollView>
     </View>
