@@ -27,12 +27,14 @@ export default function Root({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Matches lightPalette.bg / darkPalette.bg in constants/theme.ts so the web
+// shell never flashes a colour the app does not use.
 const responsiveBackground = `
 body {
-  background-color: #fff;
+  background-color: #F5F7FA;
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #000;
+    background-color: #0B0E13;
   }
 }`;

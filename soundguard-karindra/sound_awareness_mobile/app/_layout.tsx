@@ -1,85 +1,120 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
+/**
+ * SoundGuard — Root layout
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Provider order matters:
+ *
+ *   SettingsProvider → ThemeProvider → EngineProvider
+ *
+ * Theme reads `themeMode` from settings, and the engine reads sensitivity,
+ * haptics and background behaviour from the same object. Settings must
+ * therefore hydrate first; the splash screen is held until it has, so no screen
+ * ever renders with default values and then snaps to the user's real
+ * preferences.
+ */
+
+import React, { useEffect, useMemo } from 'react';
+import { View } from 'react-native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+  type Theme,
+} from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { theme } from '@/constants/Colors';
+import { FlashOverlay } from '@/components/FlashOverlay';
+import { Onboarding } from '@/components/Onboarding';
+import { SosWatcher } from '@/components/SosWatcher';
+import { EngineProvider } from '@/providers/EngineProvider';
+import { SettingsProvider, useSettings } from '@/providers/SettingsProvider';
+import { ThemeProvider, useTheme } from '@/providers/ThemeProvider';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
-// Custom dark theme that uses our deep black palette
-const SoundGuardDarkTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    primary: theme.colors.accent,
-    background: theme.colors.background,
-    card: theme.colors.surface,
-    text: theme.colors.text,
-    border: theme.colors.border,
-    notification: theme.colors.urgent,
-  },
-};
+void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={SoundGuardDarkTheme}>
-        <StatusBar style="light" />
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          <Stack.Screen
-            name="sos-alert"
-            options={{
-              presentation: 'fullScreenModal',
-              headerShown: false,
-              animation: 'fade',
-              gestureEnabled: false,
-            }}
-          />
-        </Stack>
-      </ThemeProvider>
+      <SafeAreaProvider>
+        <SettingsProvider>
+          <ThemeProvider>
+            <EngineProvider>
+              <AppShell />
+            </EngineProvider>
+          </ThemeProvider>
+        </SettingsProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function AppShell() {
+  const { settings, ready } = useSettings();
+  const { colors, scheme } = useTheme();
+
+  useEffect(() => {
+    if (ready) void SplashScreen.hideAsync();
+  }, [ready]);
+
+  const navigationTheme = useMemo<Theme>(() => {
+    const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: scheme === 'dark',
+      colors: {
+        ...base.colors,
+        primary: colors.primary,
+        background: colors.bg,
+        card: colors.bgElevated,
+        text: colors.text,
+        border: colors.border,
+        notification: colors.critical,
+      },
+    };
+  }, [colors, scheme]);
+
+  // Hold a themed blank canvas rather than rendering the app with defaults.
+  if (!ready) {
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  }
+
+  return (
+    <NavigationThemeProvider value={navigationTheme}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="sos-alert"
+          options={{
+            presentation: 'fullScreenModal',
+            animation: 'fade',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="+not-found" options={{ title: 'Not found' }} />
+      </Stack>
+
+      {/* Global, route-independent behaviour. */}
+      <SosWatcher />
+      <FlashOverlay />
+
+      {settings.onboardingComplete ? null : <Onboarding />}
+    </NavigationThemeProvider>
   );
 }

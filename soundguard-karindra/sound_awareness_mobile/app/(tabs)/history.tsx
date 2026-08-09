@@ -1,282 +1,363 @@
-import React, { useState, useCallback, useMemo } from 'react';
+/**
+ * SoundGuard — Detection history
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A grouped, filterable log of everything the engine has recorded.
+ *
+ * The list re-reads storage on focus rather than on an interval, and the
+ * flattened section structure is memoised, so returning to the tab is cheap
+ * even with the full 300-event backlog.
+ */
+
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  StyleSheet, View, Text, FlatList, TouchableOpacity, Alert,
   ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { theme } from '@/constants/Colors';
-import { getDetectionLog, clearDetectionLog } from '@/utils/storage';
-import type { DetectionEvent } from '@/utils/storage';
+import { Ionicons } from '@expo/vector-icons';
 
-// ─── Threat level display config ─────────────────────────────────
-type HistoryThreatLevel = 'warning' | 'critical';
-const LEVEL_CFG: Record<HistoryThreatLevel, {
-  color: string; bg: string; label: string; icon: keyof typeof Ionicons.glyphMap;
-}> = {
-  warning:  { color: '#FFB020', bg: 'rgba(255,176,32,0.12)',  label: 'Warning',  icon: 'warning-outline' },
-  critical: { color: '#FF3B5C', bg: 'rgba(255,59,92,0.12)',   label: 'Critical', icon: 'alert-circle-outline' },
-};
+import { AppButton, Card, EmptyState, ScreenHeader, type IconName } from '@/components/ui';
+import { alpha, radius, space, threatColors, typography as typeScale } from '@/constants/theme';
+import { makeStyles, useColors } from '@/providers/ThemeProvider';
+import { useSettings } from '@/providers/SettingsProvider';
+import {
+  SOUND_ICONS,
+  clearDetectionLog,
+  getDetectionLog,
+  isSoundLabel,
+  type DetectionEvent,
+} from '@/utils/storage';
 
-// Icon map — maps raw model labels to Ionicons glyphs
-const LABEL_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  car_horn:        'car-outline',
-  crying_baby:     'happy-outline',
-  dog:             'paw-outline',
-  door_wood_knock: 'notifications-outline',
-  footsteps:       'footsteps-outline',
-  glass_breaking:  'warning-outline',
-  siren:           'medical-outline',
-};
+type Filter = 'all' | 'critical' | 'warning' | 'safe';
 
-// ─── Filter options ───────────────────────────────────────────────
-type FilterOption = 'All' | 'Critical' | 'Warning';
-const FILTERS: FilterOption[] = ['All', 'Critical', 'Warning'];
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'warning', label: 'Attention' },
+  { value: 'safe', label: 'Routine' },
+];
 
-// ─── Date grouping helpers ────────────────────────────────────────
-function getDateLabel(timestamp: number): string {
-  const d     = new Date(timestamp);
-  const now   = new Date();
-  const diff  = now.getTime() - d.getTime();
-  const dayMs = 86400000;
+type Row =
+  | { kind: 'header'; key: string; label: string; count: number }
+  | { kind: 'event'; key: string; event: DetectionEvent };
 
-  if (diff < dayMs && d.getDate() === now.getDate()) return 'Today';
-  if (diff < 2 * dayMs) {
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    if (d.getDate() === yesterday.getDate()) return 'Yesterday';
-  }
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+function dayLabel(timestamp: number): string {
+  const then = new Date(timestamp);
+  const now = new Date();
+
+  const sameDay =
+    then.getFullYear() === now.getFullYear() &&
+    then.getMonth() === now.getMonth() &&
+    then.getDate() === now.getDate();
+  if (sameDay) return 'Today';
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    then.getFullYear() === yesterday.getFullYear() &&
+    then.getMonth() === yesterday.getMonth() &&
+    then.getDate() === yesterday.getDate();
+  if (isYesterday) return 'Yesterday';
+
+  return then.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
+function clockTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// ─── Grouped flat-list item type ─────────────────────────────────
-type ListItem =
-  | { type: 'header'; label: string; key: string }
-  | { type: 'event';  event: DetectionEvent; key: string };
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  header: { paddingHorizontal: space.xxl, paddingTop: space.md },
 
-// ─── Event Card ───────────────────────────────────────────────────
-function EventCard({ event }: { event: DetectionEvent }) {
-  const lc   = LEVEL_CFG[event.threatLevel];
-  const icon = LABEL_ICON[event.rawLabel] ?? 'volume-high-outline';
-  const conf = Math.round(event.confidence * 100);
-  return (
-    <View style={styles.card}>
-      <View style={[styles.cardAccent, { backgroundColor: lc.color }]} />
-      <View style={[styles.cardIcon, { backgroundColor: lc.bg }]}>
-        <Ionicons name={icon} size={22} color={lc.color} />
-      </View>
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle}>{event.soundName}</Text>
-        <View style={styles.cardMetaRow}>
-          <Ionicons name="time-outline" size={12} color={theme.colors.textTertiary} />
-          <Text style={styles.cardMeta}>{formatTime(event.timestamp)}</Text>
-          <View style={styles.metaDot} />
-          <Text style={styles.cardMeta}>{conf}% conf</Text>
-        </View>
-      </View>
-      <View style={[styles.levelBadge, { backgroundColor: lc.bg, borderColor: lc.color + '44' }]}>
-        <View style={[styles.levelDot, { backgroundColor: lc.color }]} />
-        <Text style={[styles.levelText, { color: lc.color }]}>{lc.label}</Text>
-      </View>
-    </View>
-  );
-}
+  stats: { flexDirection: 'row', marginHorizontal: space.xxl, marginBottom: space.lg },
+  stat: { flex: 1, alignItems: 'center' },
+  statValue: { ...typeScale.title, color: c.text, fontVariant: ['tabular-nums'] },
+  statLabel: {
+    ...typeScale.overline,
+    color: c.textMuted,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 4 },
 
-// ─── Section Header ───────────────────────────────────────────────
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionDot} />
-      <Text style={styles.sectionTitle}>{label}</Text>
-      <View style={styles.sectionLine} />
-    </View>
-  );
-}
+  filters: {
+    flexDirection: 'row',
+    gap: space.sm,
+    paddingHorizontal: space.xxl,
+    paddingBottom: space.md,
+  },
+  chip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  chipText: { ...typeScale.caption, color: c.textSecondary },
 
-// ─── Main History Screen ──────────────────────────────────────────
+  list: { paddingHorizontal: space.xxl },
+
+  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.xl, paddingBottom: space.sm },
+  sectionText: { ...typeScale.overline, color: c.textSecondary, textTransform: 'uppercase' },
+  sectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: c.border },
+  sectionCount: { ...typeScale.caption, color: c.textMuted, fontVariant: ['tabular-nums'] },
+
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.md,
+    marginBottom: space.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  cardIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { flex: 1 },
+  cardTitle: { ...typeScale.bodyStrong, color: c.text },
+  cardMeta: { ...typeScale.caption, color: c.textMuted, marginTop: 2 },
+  cardRight: { alignItems: 'flex-end', gap: 4 },
+  cardTime: { ...typeScale.captionStrong, color: c.textSecondary, fontVariant: ['tabular-nums'] },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  tagText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+
+  loading: { paddingTop: space.xxxl * 2, alignItems: 'center' },
+  footer: { alignItems: 'center', paddingVertical: space.xxl },
+  footerText: { ...typeScale.caption, color: c.textMuted },
+  privacy: { marginTop: space.md },
+  privacyText: { ...typeScale.caption, color: c.textMuted, lineHeight: 18, flex: 1 },
+  privacyRow: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start' },
+}));
+
 export default function HistoryScreen() {
+  const styles = useStyles();
+  const c = useColors();
   const insets = useSafeAreaInsets();
-  const [events, setEvents]             = useState<DetectionEvent[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [activeFilter, setActiveFilter] = useState<FilterOption>('All');
+  const { settings } = useSettings();
 
-  // Reload detection log every time the tab gains focus
+  const [events, setEvents] = useState<DetectionEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        setLoading(true);
         const log = await getDetectionLog();
-        if (!cancelled) {
-          setEvents(log);
-          setLoading(false);
-        }
+        if (cancelled) return;
+        setEvents(log);
+        setLoading(false);
       })();
-      return () => { cancelled = true; };
-    }, [])
+      return () => {
+        cancelled = true;
+      };
+    }, []),
   );
 
-  // Apply filter
-  const filtered = useMemo(() => {
-    if (activeFilter === 'All') return events;
-    return events.filter((e) => e.threatLevel === activeFilter.toLowerCase());
-  }, [events, activeFilter]);
-
-  // Build flat list with interleaved section headers
-  const listItems = useMemo((): ListItem[] => {
-    const items: ListItem[] = [];
-    let lastLabel = '';
-    for (const event of filtered) {
-      const label = getDateLabel(event.timestamp);
-      if (label !== lastLabel) {
-        items.push({ type: 'header', label, key: `header-${label}-${event.id}` });
-        lastLabel = label;
-      }
-      items.push({ type: 'event', event, key: event.id });
+  const counts = useMemo(() => {
+    let critical = 0;
+    let warning = 0;
+    for (const event of events) {
+      if (event.threatLevel === 'critical') critical += 1;
+      else if (event.threatLevel === 'warning') warning += 1;
     }
-    return items;
-  }, [filtered]);
+    return { total: events.length, critical, warning };
+  }, [events]);
 
-  // Stats derived from full (unfiltered) events array
-  const totalEvents   = events.length;
-  const criticalCount = events.filter((e) => e.threatLevel === 'critical').length;
-  const warningCount  = events.filter((e) => e.threatLevel === 'warning').length;
+  const rows = useMemo<Row[]>(() => {
+    const filtered = filter === 'all' ? events : events.filter((e) => e.threatLevel === filter);
 
-  const handleClearAll = () => {
-    Alert.alert(
-      'Clear All History',
-      'This will permanently delete all detection events. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All', style: 'destructive',
-          onPress: async () => {
-            await clearDetectionLog();
-            setEvents([]);
-          },
+    // Pre-count each day so the section header can show a total.
+    const perDay = new Map<string, number>();
+    for (const event of filtered) {
+      const label = dayLabel(event.timestamp);
+      perDay.set(label, (perDay.get(label) ?? 0) + 1);
+    }
+
+    const out: Row[] = [];
+    let current = '';
+    for (const event of filtered) {
+      const label = dayLabel(event.timestamp);
+      if (label !== current) {
+        current = label;
+        out.push({ kind: 'header', key: `h-${label}`, label, count: perDay.get(label) ?? 0 });
+      }
+      out.push({ kind: 'event', key: event.id, event });
+    }
+    return out;
+  }, [events, filter]);
+
+  const confirmClear = useCallback(() => {
+    Alert.alert('Clear history', 'Delete every recorded detection? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          await clearDetectionLog();
+          setEvents([]);
         },
-      ]
-    );
-  };
+      },
+    ]);
+  }, []);
 
-  const renderItem = ({ item }: { item: ListItem }) => {
-    if (item.type === 'header') return <SectionHeader label={item.label} />;
-    return <EventCard event={item.event} />;
-  };
+  const renderRow = useCallback(
+    ({ item }: { item: Row }) => {
+      if (item.kind === 'header') {
+        return (
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionText}>{item.label}</Text>
+            <View style={styles.sectionLine} />
+            <Text style={styles.sectionCount}>{item.count}</Text>
+          </View>
+        );
+      }
+
+      const event = item.event;
+      const tone = threatColors(c, event.threatLevel);
+      const icon = (isSoundLabel(event.rawLabel)
+        ? SOUND_ICONS[event.rawLabel]
+        : 'volume-high-outline') as IconName;
+
+      return (
+        <View style={styles.card}>
+          <View style={[styles.cardIcon, { backgroundColor: tone.bg }]}>
+            <Ionicons name={icon} size={19} color={tone.fg} />
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {event.soundName}
+            </Text>
+            <Text style={styles.cardMeta}>
+              {Math.round(event.confidence * 100)}% confidence
+              {event.simulated ? ' · simulated' : ''}
+            </Text>
+          </View>
+          <View style={styles.cardRight}>
+            <Text style={styles.cardTime}>{clockTime(event.timestamp)}</Text>
+            <View style={[styles.tag, { backgroundColor: tone.bg, borderColor: alpha(tone.fg, 0.3) }]}>
+              <Text style={[styles.tagText, { color: tone.fg }]}>{tone.label}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    },
+    [c, styles],
+  );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* ── Header ── */}
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>Detection History</Text>
-            <Text style={styles.subtitle}>Real-time sound event log</Text>
-          </View>
-          {events.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearBtn}
-              activeOpacity={0.7}
-              onPress={handleClearAll}
-            >
-              <Ionicons name="trash-outline" size={16} color={theme.colors.urgent} />
-              <Text style={styles.clearBtnText}>Clear</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <ScreenHeader
+          title="History"
+          subtitle="Every sound SoundGuard has recognised"
+          right={
+            events.length > 0 ? (
+              <AppButton label="Clear" icon="trash-outline" variant="danger" onPress={confirmClear} />
+            ) : undefined
+          }
+        />
       </View>
 
-      {/* ── Stats strip ── */}
-      <View style={styles.statsStrip}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{totalEvents}</Text>
+      <Card style={styles.stats}>
+        <View style={styles.stat}>
+          <Text style={styles.statValue}>{counts.total}</Text>
           <Text style={styles.statLabel}>Total</Text>
         </View>
         <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#FF3B5C' }]}>{criticalCount}</Text>
+        <View style={styles.stat}>
+          <Text style={[styles.statValue, { color: c.critical }]}>{counts.critical}</Text>
           <Text style={styles.statLabel}>Critical</Text>
         </View>
         <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#FFB020' }]}>{warningCount}</Text>
-          <Text style={styles.statLabel}>Warning</Text>
+        <View style={styles.stat}>
+          <Text style={[styles.statValue, { color: c.warning }]}>{counts.warning}</Text>
+          <Text style={styles.statLabel}>Attention</Text>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Ionicons name="radio" size={16} color={theme.colors.accent} />
-          <Text style={[styles.statLabel, { marginTop: 2 }]}>Live</Text>
-        </View>
-      </View>
+      </Card>
 
-      {/* ── Filter chips ── */}
-      <View style={styles.filterRow}>
-        {FILTERS.map((label) => {
-          const isActive = activeFilter === label;
-          const cc =
-            label === 'Critical' ? '#FF3B5C'
-            : label === 'Warning'  ? '#FFB020'
-            : theme.colors.accent;
+      <View style={styles.filters}>
+        {FILTERS.map((option) => {
+          const active = filter === option.value;
           return (
-            <TouchableOpacity
-              key={label}
-              style={[styles.chip, isActive && { backgroundColor: cc + '22', borderColor: cc }]}
-              activeOpacity={0.7}
-              onPress={() => setActiveFilter(label)}
+            <Pressable
+              key={option.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Filter: ${option.label}`}
+              onPress={() => setFilter(option.value)}
+              style={({ pressed }) => [
+                styles.chip,
+                active && {
+                  backgroundColor: c.primarySoft,
+                  borderColor: alpha(c.primary, 0.35),
+                },
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <Text style={[styles.chipText, isActive && { color: cc }]}>{label}</Text>
-            </TouchableOpacity>
+              <Text
+                style={[styles.chipText, active && { color: c.primary, fontWeight: '700' }]}
+                numberOfLines={1}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
 
-      {/* ── List / loading / empty ── */}
       {loading ? (
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color={theme.colors.accent} />
+        <View style={styles.loading}>
+          <ActivityIndicator color={c.primary} />
         </View>
       ) : (
         <FlatList
-          data={listItems}
-          keyExtractor={(item) => item.key}
-          renderItem={renderItem}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 100 },
-          ]}
+          data={rows}
+          keyExtractor={(row) => row.key}
+          renderItem={renderRow}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 110 }]}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          windowSize={9}
+          removeClippedSubviews
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconRing}>
-                <Ionicons name="ear-outline" size={40} color={theme.colors.accent} />
-              </View>
-              <Text style={styles.emptyTitle}>No Detections Yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Start Live Detection on the Radar tab to begin{'\n'}monitoring your environment.
-              </Text>
-              {activeFilter !== 'All' && (
-                <TouchableOpacity
-                  style={styles.resetFilterBtn}
-                  onPress={() => setActiveFilter('All')}
-                >
-                  <Text style={styles.resetFilterText}>Show All Events</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <EmptyState
+              icon="time-outline"
+              title={filter === 'all' ? 'No detections yet' : 'Nothing in this filter'}
+              body={
+                filter === 'all'
+                  ? 'Start monitoring on the Listen tab. Recognised sounds are recorded here automatically.'
+                  : 'Try a different filter to see the rest of your history.'
+              }
+              action={
+                filter !== 'all' ? (
+                  <AppButton label="Show all" variant="secondary" onPress={() => setFilter('all')} />
+                ) : undefined
+              }
+            />
           }
           ListFooterComponent={
-            listItems.length > 0 ? (
+            rows.length > 0 ? (
               <View style={styles.footer}>
-                <Ionicons name="information-circle-outline" size={14} color={theme.colors.textTertiary} />
                 <Text style={styles.footerText}>
-                  Showing {filtered.length} of {totalEvents} event{totalEvents !== 1 ? 's' : ''}
+                  {settings.logSafeEvents
+                    ? 'Routine sounds are being logged.'
+                    : 'Routine sounds are not logged — enable it in Settings.'}
                 </Text>
               </View>
             ) : null
@@ -286,88 +367,3 @@ export default function HistoryScreen() {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: theme.colors.background },
-  header:       { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12 },
-  headerRow:    { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  title:        { fontSize: 32, fontWeight: '700', color: theme.colors.text, letterSpacing: -0.5 },
-  subtitle:     { fontSize: 15, color: theme.colors.textSecondary, marginTop: 4 },
-
-  clearBtn:     {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-    backgroundColor: theme.colors.urgent + '12',
-    borderWidth: 1, borderColor: theme.colors.urgent + '33', marginTop: 8,
-  },
-  clearBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.urgent },
-
-  statsStrip:   {
-    flexDirection: 'row', marginHorizontal: 24,
-    backgroundColor: theme.colors.surface, borderRadius: 14,
-    borderWidth: 1, borderColor: theme.colors.border,
-    paddingVertical: 14, marginBottom: 16, alignItems: 'center',
-  },
-  statItem:     { flex: 1, alignItems: 'center' },
-  statValue:    { fontSize: 20, fontWeight: '700', color: theme.colors.text, fontVariant: ['tabular-nums'] },
-  statLabel:    {
-    fontSize: 11, fontWeight: '600', color: theme.colors.textTertiary,
-    marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  statDivider:  { width: 1, height: 32, backgroundColor: theme.colors.border },
-
-  filterRow:    { flexDirection: 'row', paddingHorizontal: 24, paddingBottom: 12, gap: 8 },
-  chip:         {
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-    backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border,
-  },
-  chipText:     { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
-
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: 20, paddingBottom: 10, gap: 8 },
-  sectionDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.accent },
-  sectionTitle:  {
-    fontSize: 13, fontWeight: '700', color: theme.colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 1,
-  },
-  sectionLine:   { flex: 1, height: 1, backgroundColor: theme.colors.border, marginLeft: 8 },
-
-  listContent:  { paddingHorizontal: 24 },
-
-  card:         {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.colors.surface, borderRadius: 14,
-    padding: 14, marginBottom: 8, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden',
-  },
-  cardAccent:   { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 },
-  cardIcon:     { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
-  cardInfo:     { flex: 1, marginLeft: 14 },
-  cardTitle:    { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-  cardMetaRow:  { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  cardMeta:     { fontSize: 12, color: theme.colors.textTertiary },
-  metaDot:      { width: 3, height: 3, borderRadius: 1.5, backgroundColor: theme.colors.textTertiary, opacity: 0.5, marginHorizontal: 2 },
-
-  levelBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, gap: 5 },
-  levelDot:     { width: 6, height: 6, borderRadius: 3 },
-  levelText:    { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80 },
-
-  emptyState:      { alignItems: 'center', paddingHorizontal: 32, paddingTop: 48, gap: 12 },
-  emptyIconRing:   {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: theme.colors.accent + '15',
-    borderWidth: 1.5, borderColor: theme.colors.accent + '30',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
-  },
-  emptyTitle:      { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-  emptySubtitle:   { fontSize: 14, color: theme.colors.textTertiary, textAlign: 'center', lineHeight: 22 },
-  resetFilterBtn:  {
-    marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999,
-    backgroundColor: theme.colors.accent + '15', borderWidth: 1, borderColor: theme.colors.accent + '44',
-  },
-  resetFilterText: { fontSize: 14, fontWeight: '700', color: theme.colors.accent },
-
-  footer:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 24 },
-  footerText: { fontSize: 12, color: theme.colors.textTertiary },
-});

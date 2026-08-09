@@ -1,38 +1,42 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
-import { theme } from '@/constants/Colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useColors } from '@/providers/ThemeProvider';
 
 export default function TabLayout() {
+  const c = useColors();
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.tabIconDefault,
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.textMuted,
+        // Edge-to-edge is enabled on Android, so the bottom inset is added
+        // explicitly rather than relying on the default chrome height.
         tabBarStyle: {
-          backgroundColor: theme.colors.tabBar,
-          borderTopColor: theme.colors.tabBarBorder,
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          backgroundColor: c.tabBar,
+          borderTopColor: c.tabBarBorder,
+          borderTopWidth: StyleSheet.hairlineWidth * 2,
+          height: 58 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
           paddingTop: 8,
           elevation: 0,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          letterSpacing: 0.3,
-        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
+        tabBarItemStyle: { paddingTop: 2 },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Radar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="radio-outline" size={size} color={color} />
+          title: 'Listen',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'pulse' : 'pulse-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -40,8 +44,8 @@ export default function TabLayout() {
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -49,8 +53,8 @@ export default function TabLayout() {
         name="circle"
         options={{
           title: 'Circle',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -58,8 +62,8 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
           ),
         }}
       />

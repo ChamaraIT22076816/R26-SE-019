@@ -1,499 +1,406 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * SoundGuard — Listen (home)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The live monitoring surface.
+ *
+ * Render discipline, which is what keeps this screen in step with the engine:
+ *
+ *   • Engine state arrives through `useSyncExternalStore`, and the engine only
+ *     notifies on a genuine change. Idle listening schedules no renders at all.
+ *   • The orb and level meter read the microphone level from a shared value on
+ *     the UI thread, so the visualiser is decoupled from React entirely.
+ *   • Every control is synchronous. Dismiss, reset and mute all mutate engine
+ *     or settings state in the tap handler, so the UI responds in the same
+ *     frame rather than waiting on a round trip through the audio pipeline.
+ */
+
+import React, { useCallback, useMemo } from 'react';
 import {
-  StyleSheet, View, Text, TouchableOpacity, StatusBar, useWindowDimensions,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
 } from 'react-native';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withDelay,
-  withSequence, Easing, interpolate, cancelAnimation,
-} from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '@/constants/Colors';
-import { useSoundRecognition } from '@/hooks/useSoundRecognition';
+import { Ionicons } from '@expo/vector-icons';
 
-// ─── Types ───────────────────────────────────────────────────────
-type AlertLevel = 'safe' | 'warning' | 'critical';
+import { DetectionCard } from '@/components/DetectionCard';
+import { LevelMeter, ListeningOrb } from '@/components/ListeningVisualizer';
+import { AppButton, Card, SectionLabel, type IconName } from '@/components/ui';
+import { alpha, radius, space, threatColors, typography as typeScale } from '@/constants/theme';
+import { useEngineActions, useEngineState } from '@/providers/EngineProvider';
+import { useSettings } from '@/providers/SettingsProvider';
+import { makeStyles, useColors } from '@/providers/ThemeProvider';
+import {
+  SOUND_DISPLAY_NAMES,
+  SOUND_ICONS,
+  type SoundLabel,
+} from '@/utils/storage';
 
-type LevelConfig = {
-  color: string;
-  colorDim: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-};
+const DEMO_SOUNDS: { label: SoundLabel; caption: string }[] = [
+  { label: 'door_wood_knock', caption: 'Routine' },
+  { label: 'car_horn', caption: 'Attention' },
+  { label: 'siren', caption: 'Critical' },
+];
 
-// ─── Constants ───────────────────────────────────────────────────
-const RING_COUNT        = 3;
-const STATIC_RING_COUNT = 3;
-const EASING_LINEAR     = Easing.linear;
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  scroll: { paddingHorizontal: space.xxl, paddingBottom: space.xxxl },
 
-const LEVEL_CONFIGS: Record<AlertLevel, LevelConfig> = {
-  safe: {
-    color:    '#4DA6FF',
-    colorDim: 'rgba(77, 166, 255, 0.12)',
-    label:    'SAFE',
-    icon:     'shield-checkmark',
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: space.md,
+    paddingBottom: space.lg,
   },
-  warning: {
-    color:    '#FFB020',
-    colorDim: 'rgba(255, 176, 32, 0.12)',
-    label:    'WARNING',
-    icon:     'warning',
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  brandMark: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.primarySoft,
   },
-  critical: {
-    color:    '#FF3B5C',
-    colorDim: 'rgba(255, 59, 92, 0.12)',
-    label:    'CRITICAL',
-    icon:     'alert-circle',
+  brandName: { ...typeScale.heading, color: c.text },
+  brandSub: { ...typeScale.caption, color: c.textMuted, marginTop: 1 },
+
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
   },
-};
+  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
+  statusPillText: { ...typeScale.overline, textTransform: 'uppercase' },
 
-const CRITICAL_SOS_THRESHOLD_SECONDS = 6;
+  stage: { alignItems: 'center', paddingVertical: space.lg },
+  headline: { ...typeScale.title, color: c.text, textAlign: 'center', marginTop: space.xl },
+  subline: {
+    ...typeScale.body,
+    color: c.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 21,
+    paddingHorizontal: space.md,
+  },
+  meterWrap: { marginTop: space.lg, marginBottom: space.sm },
 
-// ─── Sonar Pulse Ring ────────────────────────────────────────────
-function SonarRing({
-  index, color, duration, radarSize,
-}: { index: number; color: string; duration: number; radarSize: number }) {
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withDelay(
-      index * (duration / RING_COUNT),
-      withRepeat(withTiming(1, { duration, easing: EASING_LINEAR }), -1, false)
-    );
-    return () => cancelAnimation(progress);
-  }, [color, duration]);
-  const animStyle = useAnimatedStyle(() => ({
-    transform:   [{ scale: interpolate(progress.value, [0, 1], [0.25, 1.15]) }],
-    opacity:     interpolate(progress.value, [0, 0.2, 1], [0.6, 0.45, 0]),
-    borderColor: color,
-  }));
-  return (
-    <Animated.View
-      style={[
-        styles.sonarRing,
-        { width: radarSize, height: radarSize, borderRadius: radarSize / 2 },
-        animStyle,
-      ]}
-    />
-  );
-}
+  block: { marginTop: space.lg },
 
-// ─── Radar Blip ──────────────────────────────────────────────────
-function RadarBlip({
-  angle, color, visible, radarSize,
-}: { angle: number; color: string; visible: boolean; radarSize: number }) {
-  const opacity = useSharedValue(0);
-  const scale   = useSharedValue(0.5);
-  useEffect(() => {
-    if (visible) {
-      opacity.value = withRepeat(
-        withSequence(
-          withTiming(1,   { duration: 400 }),
-          withTiming(0.3, { duration: 800 }),
-          withTiming(1,   { duration: 400 }),
-        ), -1, false);
-      scale.value = withRepeat(
-        withSequence(
-          withTiming(1.2, { duration: 400 }),
-          withTiming(0.8, { duration: 800 }),
-          withTiming(1.2, { duration: 400 }),
-        ), -1, false);
-    } else {
-      opacity.value = withTiming(0,   { duration: 300 });
-      scale.value   = withTiming(0.5, { duration: 300 });
-    }
-  }, [visible]);
-  const radius = radarSize * 0.32;
-  const x = Math.cos((angle * Math.PI) / 180) * radius;
-  const y = Math.sin((angle * Math.PI) / 180) * radius;
-  const animStyle = useAnimatedStyle(() => ({
-    opacity:   opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-  return (
-    <Animated.View
-      style={[
-        styles.blip,
-        {
-          left:            radarSize / 2 + x - 9,
-          top:             radarSize / 2 + y - 9,
-          backgroundColor: color,
-          shadowColor:     color,
-        },
-        animStyle,
-      ]}
-    />
-  );
-}
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surfaceAlt,
+  },
+  bannerText: { flex: 1, ...typeScale.caption, color: c.textSecondary, lineHeight: 18 },
+  bannerAction: { ...typeScale.captionStrong, color: c.primary, paddingHorizontal: 6, paddingVertical: 4 },
 
-// ─── Sweep Line ──────────────────────────────────────────────────
-function SweepLine({ color, radarSize }: { color: string; radarSize: number }) {
-  const rotation = useSharedValue(0);
-  useEffect(() => {
-    rotation.value = 0;
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 3000, easing: EASING_LINEAR }), -1, false
-    );
-    return () => cancelAnimation(rotation);
-  }, [color]);
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-  return (
-    <Animated.View
-      style={[styles.sweepContainer, { width: radarSize, height: radarSize }, animStyle]}
-    >
-      <View
-        style={[
-          styles.sweepLine,
-          { backgroundColor: color, width: radarSize / 2 - 6, right: radarSize / 2 },
-        ]}
-      />
-    </Animated.View>
-  );
-}
+  errorCard: { borderColor: alpha(c.critical, 0.35), backgroundColor: c.criticalSoft },
+  errorText: { flex: 1, ...typeScale.caption, color: c.critical, lineHeight: 19 },
 
-// ─── Main Radar Screen ──────────────────────────────────────────
-export default function RadarScreen() {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  idleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  idleText: { flex: 1, ...typeScale.caption, color: c.textMuted, lineHeight: 19 },
+
+  controls: { marginTop: space.xl, gap: space.md },
+  secondaryRow: { flexDirection: 'row', gap: space.md },
+  flex: { flex: 1 },
+
+  diagnostics: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: space.lg,
+  },
+  diagnosticsText: {
+    ...typeScale.caption,
+    color: c.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+
+  demoRow: { flexDirection: 'row', gap: space.sm },
+  demoChip: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  demoChipLabel: { ...typeScale.captionStrong, color: c.text, textAlign: 'center' },
+  demoChipCaption: { fontSize: 11, color: c.textMuted },
+  demoNote: {
+    ...typeScale.caption,
+    color: c.textMuted,
+    marginTop: space.md,
+    lineHeight: 18,
+  },
+}));
+
+export default function ListenScreen() {
+  const styles = useStyles();
+  const c = useColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
-  /**
-   * Responsive radar size.
-   *
-   * availableHeight = screen height
-   *   − insets.top   (status bar / notch)
-   *   − insets.bottom (home indicator)
-   *   − header height  ≈ 54 px
-   *   − status box     ≈ 72 px
-   *   − controls area  ≈ 150 px  (listen button + simulate strip)
-   *   − tab bar        ≈ 56 px
-   *   − vertical margins ≈ 36 px
-   *
-   * The floor of 180 prevents the radar from collapsing to nothing on very
-   * small screens (e.g. 4.7″ iPhone-class display).
-   */
-  const availableHeight = screenHeight - insets.top - insets.bottom - 368;
-  const radarSize = Math.max(180, Math.min(screenWidth - 64, 300, availableHeight));
+  const state = useEngineState();
+  const actions = useEngineActions();
+  const { settings, update } = useSettings();
 
-  const [level, setLevel]                 = useState<AlertLevel>('safe');
-  const [blipAngle, setBlipAngle]         = useState(45);
-  const [detectedSound, setDetectedSound] = useState<string | null>(null);
-  const [confidenceText, setConfidenceText] = useState<string | null>(null);
-  const sosPushedRef = useRef(false);
+  const listening = state.status === 'listening';
+  const starting = state.status === 'starting';
+  const detection = state.detection;
 
-  const recognition   = useSoundRecognition();
-  const config        = LEVEL_CONFIGS[level];
-  const statusOpacity = useSharedValue(1);
+  const orbSize = Math.min(Math.max(width - 128, 180), 250);
 
-  // ── React to inference predictions ──
-  useEffect(() => {
-    if (!recognition.isListening) return;
-    const pred = recognition.prediction;
-    if (pred) {
-      const newLevel = pred.threatLevel as AlertLevel;
-      setLevel(newLevel);
-      setDetectedSound(pred.label);
-      setConfidenceText(`${Math.round(pred.confidence * 100)}% conf`);
-      if (newLevel !== 'safe') setBlipAngle(Math.floor(Math.random() * 360));
-      statusOpacity.value = withSequence(
-        withTiming(0, { duration: 100 }),
-        withTiming(1, { duration: 200 }),
-      );
-    } else {
-      setLevel('safe');
-      setDetectedSound(null);
-      setConfidenceText(null);
+  // ── Presentation derived from engine state ──
+  const tone = useMemo(() => {
+    if (detection) return threatColors(c, detection.threat);
+    if (listening) return { fg: c.primary, bg: c.primarySoft, label: 'Listening' };
+    return { fg: c.textMuted, bg: c.surfaceAlt, label: 'Paused' };
+  }, [c, detection, listening]);
+
+  const orbIcon: IconName = detection
+    ? ((SOUND_ICONS[detection.label] ?? 'volume-high-outline') as IconName)
+    : listening
+      ? 'mic'
+      : 'mic-off-outline';
+
+  const headline = detection
+    ? detection.name
+    : listening
+      ? 'Listening'
+      : starting
+        ? 'Starting…'
+        : 'Monitoring paused';
+
+  const subline = detection
+    ? detection.threat === 'critical'
+      ? 'A critical sound is active in your environment.'
+      : detection.threat === 'warning'
+        ? 'Something nearby may need your attention.'
+        : 'A routine sound was recognised nearby.'
+    : listening
+      ? state.modelStatus === 'ready'
+        ? 'Your surroundings are being analysed on this device.'
+        : 'Preparing the on-device recognition model…'
+      : 'Start monitoring to be alerted to important sounds around you.';
+
+  const statusLabel = starting
+    ? 'Starting'
+    : listening
+      ? state.analyzing
+        ? 'Analysing'
+        : 'Live'
+      : state.modelStatus === 'loading'
+        ? 'Loading'
+        : 'Paused';
+
+  // ── Handlers ──
+  const handleMute = useCallback(() => {
+    if (!detection) return;
+    if (settings.mutedSounds.includes(detection.label)) {
+      actions.dismiss();
+      return;
     }
-  }, [recognition.prediction]);
+    update('mutedSounds', [...settings.mutedSounds, detection.label]);
+  }, [actions, detection, settings.mutedSounds, update]);
 
-  // ── Auto-trigger SOS on sustained critical detection ──
-  useEffect(() => {
-    if (
-      recognition.criticalStreakSeconds >= CRITICAL_SOS_THRESHOLD_SECONDS &&
-      !sosPushedRef.current
-    ) {
-      sosPushedRef.current = true;
-      recognition.stopListening();
-      router.push('/sos-alert');
-    }
-  }, [recognition.criticalStreakSeconds]);
-
-  // Reset SOS flag when screen mounts
-  useEffect(() => { sosPushedRef.current = false; }, []);
-
-  // ── Manual simulation ──
-  const changeLevel = useCallback((newLevel: AlertLevel) => {
-    if (recognition.isListening) recognition.stopListening();
-    statusOpacity.value = withSequence(
-      withTiming(0, { duration: 150 }),
-      withTiming(1, { duration: 300 }),
-    );
-    if (newLevel === 'warning') {
-      setDetectedSound('Car Horn');
-      setConfidenceText('Simulated');
-      setBlipAngle(Math.floor(Math.random() * 360));
-    } else if (newLevel === 'critical') {
-      setDetectedSound('Siren');
-      setConfidenceText('Simulated');
-      setBlipAngle(Math.floor(Math.random() * 360));
-    } else {
-      setDetectedSound(null);
-      setConfidenceText(null);
-    }
-    setLevel(newLevel);
-    if (newLevel === 'critical') {
-      setTimeout(() => router.push('/sos-alert'), 600);
-    }
-  }, [recognition]);
-
-  // ── Toggle live listening ──
-  const toggleListening = useCallback(() => {
-    if (recognition.isListening) {
-      recognition.stopListening();
-      setLevel('safe');
-      setDetectedSound(null);
-      setConfidenceText(null);
-    } else {
-      sosPushedRef.current = false;
-      recognition.startListening();
-    }
-  }, [recognition]);
-
-  const statusBoxStyle  = useAnimatedStyle(() => ({ opacity: statusOpacity.value }));
-
-  const centerGlow = useSharedValue(0.3);
-  useEffect(() => {
-    centerGlow.value = withRepeat(
-      withSequence(
-        withTiming(0.9, { duration: 1200, easing: EASING_LINEAR }),
-        withTiming(0.3, { duration: 1200, easing: EASING_LINEAR }),
-      ), -1, false);
+  const openSystemSettings = useCallback(() => {
+    void Linking.openSettings().catch(() => {});
   }, []);
-  const centerGlowStyle = useAnimatedStyle(() => ({ opacity: centerGlow.value }));
 
-  const statusText = detectedSound
-    ? `${level === 'critical' ? 'CRITICAL' : 'Caution'}: ${detectedSound} Detected`
-    : recognition.isListening
-      ? 'Listening to Environment...'
-      : 'Tap below to start monitoring';
+  const dismissedNames = state.dismissed.map((l) => SOUND_DISPLAY_NAMES[l]).join(', ');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.black} />
-
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <Text style={styles.appTitle}>SoundGuard</Text>
-        <Text style={styles.appSubtitle}>Sound Awareness Radar</Text>
-      </View>
-
-      {/* ── Radar (flex: 1 fills remaining vertical space) ── */}
-      <View style={styles.radarWrapper}>
-        <View style={[styles.radarContainer, { width: radarSize, height: radarSize }]}>
-          {/* Ambient glow */}
-          <View
-            style={[
-              styles.radarGlow,
-              { backgroundColor: config.colorDim, width: radarSize, height: radarSize, borderRadius: radarSize / 2 },
-            ]}
-          />
-          {/* Static range rings */}
-          {Array.from({ length: STATIC_RING_COUNT }).map((_, i) => {
-            const s  = 0.33 + i * 0.33;
-            const sz = radarSize * s;
-            return (
-              <View
-                key={`g-${i}`}
-                style={[styles.staticRing, { width: sz, height: sz, borderRadius: sz / 2 }]}
-              />
-            );
-          })}
-          {/* Crosshairs */}
-          <View style={[styles.crosshairH, { width: radarSize - 4 }]} />
-          <View style={[styles.crosshairV, { height: radarSize - 4 }]} />
-          {/* Sweep line */}
-          <SweepLine color={config.color} radarSize={radarSize} />
-          {/* Sonar pulse rings */}
-          {Array.from({ length: RING_COUNT }).map((_, i) => (
-            <SonarRing
-              key={`s-${i}-${level}`}
-              index={i}
-              color={config.color}
-              duration={2400}
-              radarSize={radarSize}
-            />
-          ))}
-          {/* Threat blip */}
-          <RadarBlip
-            angle={blipAngle}
-            color={config.color}
-            visible={level !== 'safe'}
-            radarSize={radarSize}
-          />
-          {/* Center glow + dot */}
-          <Animated.View
-            style={[
-              styles.centerGlow,
-              { backgroundColor: config.color, shadowColor: config.color },
-              centerGlowStyle,
-            ]}
-          />
-          <View style={[styles.centerDot, { backgroundColor: config.color, shadowColor: config.color }]} />
-        </View>
-      </View>
-
-      {/* ── Status Box ── */}
-      <Animated.View
-        style={[styles.statusBox, { borderColor: config.color + '44' }, statusBoxStyle]}
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
       >
-        <Ionicons name={config.icon} size={24} color={config.color} />
-        <View style={styles.statusTextGroup}>
-          <View style={styles.statusLabelRow}>
-            <Text style={[styles.statusLabel, { color: config.color }]}>{config.label}</Text>
-            {confidenceText && (
-              <Text style={styles.confidenceBadge}>{confidenceText}</Text>
-            )}
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandMark}>
+              <Ionicons name="pulse" size={19} color={c.primary} />
+            </View>
+            <View>
+              <Text style={styles.brandName}>SoundGuard</Text>
+              <Text style={styles.brandSub}>On-device sound awareness</Text>
+            </View>
           </View>
-          <Text style={styles.statusMessage} numberOfLines={1}>{statusText}</Text>
-        </View>
-      </Animated.View>
 
-      {/* ── Controls — safe-area-aware bottom padding ── */}
-      <View style={[styles.controlsContainer, { paddingBottom: Math.max(insets.bottom + 16, 20) }]}>
-        {/* Live listen button */}
-        <TouchableOpacity
-          style={[styles.listenButton, recognition.isListening && styles.listenButtonActive]}
-          activeOpacity={0.7}
-          onPress={toggleListening}
-        >
-          <Ionicons
-            name={recognition.isListening ? 'mic' : 'mic-outline'}
-            size={22}
-            color={recognition.isListening ? theme.colors.background : theme.colors.accent}
-          />
-          <Text
-            style={[
-              styles.listenButtonText,
-              recognition.isListening && styles.listenButtonTextActive,
-            ]}
+          <View
+            style={[styles.statusPill, { backgroundColor: tone.bg, borderColor: alpha(tone.fg, 0.3) }]}
           >
-            {recognition.isListening ? 'Listening...' : 'Start Live Detection'}
-          </Text>
-          {recognition.isListening && <View style={styles.listenDot} />}
-        </TouchableOpacity>
+            <View style={[styles.statusDot, { backgroundColor: tone.fg }]} />
+            <Text style={[styles.statusPillText, { color: tone.fg }]}>{statusLabel}</Text>
+          </View>
+        </View>
 
-        {/* Model/permission error */}
-        {recognition.error && (
-          <Text style={styles.errorText} numberOfLines={2}>{recognition.error}</Text>
+        {/* ── Stage ── */}
+        <View style={styles.stage}>
+          <ListeningOrb
+            size={orbSize}
+            color={tone.fg}
+            icon={orbIcon}
+            active={listening || starting}
+          />
+
+          <Text style={styles.headline} numberOfLines={2}>
+            {headline}
+          </Text>
+          <Text style={styles.subline}>{subline}</Text>
+
+          <View style={styles.meterWrap}>
+            <LevelMeter color={tone.fg} active={listening} />
+          </View>
+        </View>
+
+        {/* ── Permission / model errors ── */}
+        {state.error ? (
+          <Card style={[styles.block, styles.errorCard]}>
+            <View style={styles.idleRow}>
+              <Ionicons name="alert-circle-outline" size={20} color={c.critical} />
+              <Text style={styles.errorText}>{state.error}</Text>
+            </View>
+            {state.permission === 'denied' ? (
+              <AppButton
+                label="Open system settings"
+                icon="open-outline"
+                variant="ghost"
+                onPress={openSystemSettings}
+                style={{ marginTop: space.md }}
+                block
+              />
+            ) : null}
+          </Card>
+        ) : null}
+
+        {/* ── Active detection, or the idle explainer ── */}
+        {detection ? (
+          <View style={styles.block}>
+            <DetectionCard
+              detection={detection}
+              onDismiss={actions.dismiss}
+              onMute={handleMute}
+              onReset={actions.reset}
+            />
+          </View>
+        ) : (
+          <Card style={styles.block}>
+            <View style={styles.idleRow}>
+              <Ionicons
+                name={listening ? 'shield-checkmark-outline' : 'information-circle-outline'}
+                size={20}
+                color={c.textMuted}
+              />
+              <Text style={styles.idleText}>
+                {listening
+                  ? 'Nothing unusual right now. Detected sounds appear here instantly, with controls to dismiss or mute them.'
+                  : `Sensitivity is set to level ${settings.sensitivity} of 5. Adjust it any time in Settings — changes apply while listening.`}
+              </Text>
+            </View>
+          </Card>
         )}
 
-        {/* Simulate strip */}
-        <Text style={styles.controlsTitle}>SIMULATE</Text>
-        <View style={styles.buttonRow}>
-          {(['safe', 'warning', 'critical'] as AlertLevel[]).map((lvl) => {
-            const lc       = LEVEL_CONFIGS[lvl];
-            const isActive = level === lvl && !recognition.isListening;
-            return (
-              <TouchableOpacity
-                key={lvl}
-                style={[
-                  styles.simButton,
-                  { borderColor: lc.color },
-                  isActive && { backgroundColor: lc.color + '22' },
-                ]}
-                activeOpacity={0.7}
-                onPress={() => changeLevel(lvl)}
-              >
-                <Ionicons name={lc.icon} size={18} color={lc.color} />
-                <Text style={[styles.simButtonText, { color: lc.color }]}>
-                  {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* ── Dismissal banner ── */}
+        {state.dismissed.length > 0 ? (
+          <View style={[styles.banner, styles.block]}>
+            <Ionicons name="eye-off-outline" size={17} color={c.textMuted} />
+            <Text style={styles.bannerText}>
+              Temporarily ignoring {dismissedNames}
+            </Text>
+            <Pressable onPress={actions.undoDismiss} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.bannerAction}>Undo</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* ── Primary controls ── */}
+        <View style={styles.controls}>
+          <AppButton
+            label={listening ? 'Stop monitoring' : 'Start monitoring'}
+            icon={listening ? 'stop-circle-outline' : 'mic-outline'}
+            variant={listening ? 'secondary' : 'primary'}
+            size="lg"
+            block
+            disabled={starting}
+            onPress={actions.toggle}
+          />
+
+          <View style={styles.secondaryRow}>
+            <AppButton
+              label="Reset listening"
+              icon="refresh"
+              variant="ghost"
+              onPress={actions.reset}
+              style={styles.flex}
+            />
+            <AppButton
+              label={settings.hapticFeedback ? 'Haptics on' : 'Haptics off'}
+              icon={settings.hapticFeedback ? 'notifications' : 'notifications-off-outline'}
+              variant="ghost"
+              onPress={() => update('hapticFeedback', !settings.hapticFeedback)}
+              style={styles.flex}
+            />
+          </View>
         </View>
-      </View>
+
+        {/* ── Live diagnostics ── */}
+        {listening && state.windowsAnalyzed > 0 ? (
+          <View style={styles.diagnostics}>
+            <Ionicons name="speedometer-outline" size={13} color={c.textMuted} />
+            <Text style={styles.diagnosticsText}>
+              {state.lastLatencyMs} ms per window · {state.windowsAnalyzed} analysed
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ── Demo triggers ── */}
+        <SectionLabel icon="flask-outline">Demo</SectionLabel>
+        <View style={styles.demoRow}>
+          {DEMO_SOUNDS.map((demo) => (
+            <Pressable
+              key={demo.label}
+              onPress={() => actions.simulate(demo.label)}
+              accessibilityRole="button"
+              accessibilityLabel={`Simulate ${SOUND_DISPLAY_NAMES[demo.label]}`}
+              android_ripple={{ color: alpha(c.text, 0.07) }}
+              style={({ pressed }) => [styles.demoChip, pressed && { opacity: 0.65 }]}
+            >
+              <Ionicons
+                name={(SOUND_ICONS[demo.label] ?? 'volume-high-outline') as IconName}
+                size={18}
+                color={c.textSecondary}
+              />
+              <Text style={styles.demoChipLabel} numberOfLines={1}>
+                {SOUND_DISPLAY_NAMES[demo.label]}
+              </Text>
+              <Text style={styles.demoChipCaption}>{demo.caption}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.demoNote}>
+          Simulated events run through the same state pipeline as live audio, so alert behaviour and
+          SOS escalation can be demonstrated without producing the sound.
+        </Text>
+      </ScrollView>
     </View>
   );
 }
-
-// ─── Styles ─────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  // Root — flex: 1 + paddingTop from insets fills the whole screen correctly
-  container:      { flex: 1, backgroundColor: theme.colors.background },
-
-  // Compact header — does not have hardcoded paddingTop (supplied by insets above)
-  header:         { paddingTop: 8, paddingBottom: 6, alignItems: 'center' },
-  appTitle:       { fontSize: 26, fontWeight: '700', color: theme.colors.text, letterSpacing: -0.5 },
-  appSubtitle:    { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
-
-  // Radar wrapper grows to fill whatever space is between header and status box
-  radarWrapper:   { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 180 },
-  radarContainer: { justifyContent: 'center', alignItems: 'center' },
-  radarGlow:      { position: 'absolute' },
-  staticRing:     { position: 'absolute', borderWidth: 1, borderColor: theme.colors.border },
-  crosshairH:     { position: 'absolute', height: 1, backgroundColor: theme.colors.border, opacity: 0.4 },
-  crosshairV:     { position: 'absolute', width: 1, backgroundColor: theme.colors.border, opacity: 0.4 },
-  sonarRing:      { position: 'absolute', borderWidth: 2 },
-  sweepContainer: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
-  sweepLine:      { position: 'absolute', height: 2, opacity: 0.45, borderRadius: 1 },
-  blip: {
-    position: 'absolute', width: 18, height: 18, borderRadius: 9,
-    shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 10, elevation: 6,
-  },
-  centerGlow: {
-    position: 'absolute', width: 44, height: 44, borderRadius: 22,
-    shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 16, elevation: 4,
-  },
-  centerDot: {
-    width: 14, height: 14, borderRadius: 7,
-    shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8,
-  },
-
-  // Status box — fixed height, sits between radar and controls
-  statusBox: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 20, marginBottom: 10, padding: 14,
-    backgroundColor: theme.colors.surface, borderRadius: 14, borderWidth: 1, gap: 12,
-  },
-  statusTextGroup: { flex: 1 },
-  statusLabelRow:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusLabel:     { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' },
-  confidenceBadge: {
-    fontSize: 10, fontWeight: '600', color: theme.colors.textTertiary,
-    backgroundColor: theme.colors.surfaceElevated,
-    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999,
-  },
-  statusMessage: { fontSize: 15, fontWeight: '600', color: theme.colors.text, marginTop: 3, lineHeight: 20 },
-
-  // Controls — horizontally padded; bottom padding supplied dynamically from insets
-  controlsContainer: { paddingHorizontal: 20 },
-
-  listenButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    paddingVertical: 15, borderRadius: 14, borderWidth: 1.5,
-    borderColor: theme.colors.accent, backgroundColor: theme.colors.surface, marginBottom: 14,
-  },
-  listenButtonActive:     { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-  listenButtonText:       { fontSize: 16, fontWeight: '700', color: theme.colors.accent },
-  listenButtonTextActive: { color: theme.colors.background },
-  listenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.background, opacity: 0.8 },
-  errorText: {
-    fontSize: 12, color: theme.colors.urgent, textAlign: 'center',
-    marginBottom: 10, lineHeight: 18,
-  },
-
-  controlsTitle: {
-    fontSize: 10, fontWeight: '700', color: theme.colors.textTertiary,
-    letterSpacing: 1.5, textAlign: 'center', marginBottom: 8,
-  },
-  buttonRow:     { flexDirection: 'row', gap: 8 },
-  simButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 13, borderRadius: 12, borderWidth: 1.5,
-    backgroundColor: theme.colors.surface,
-  },
-  simButtonText: { fontSize: 13, fontWeight: '700' },
-});

@@ -1,205 +1,506 @@
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, Switch, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+/**
+ * SoundGuard — Settings
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Every control on this screen is bound to real behaviour. Nothing here is
+ * decorative, and nothing requires a restart:
+ *
+ *   Theme / Reduce motion → ThemeProvider, applied on the next commit
+ *   Sensitivity           → engine RMS gate, confidence floor and analysis
+ *                           cadence, applied on the next window (< 1.5 s)
+ *   Night boost           → +1 sensitivity step between 21:00 and 06:00
+ *   Background listening  → AppState handler in EngineProvider
+ *   Haptics / Visual flash→ engine vibration and the global flash overlay
+ *   Alert-me-to switches  → engine mute list, applied immediately
+ *   Log routine sounds    → whether safe-class events reach history
+ *   Automatic SOS + hold  → SosWatcher escalation
+ *   SOS countdown         → abort window on the SOS screen
+ *   Share location        → whether GPS is attached to the SOS message
+ *   Call first contact    → dialer hand-off after dispatch
+ *
+ * The screen never reads storage directly; SettingsProvider owns the value and
+ * persists in the background, so a switch animates the instant it is touched.
+ */
+
+import React, { useCallback } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { theme } from '@/constants/Colors';
-import { getSettings, saveSetting } from '@/utils/storage';
-import type { AppSettings } from '@/utils/storage';
+import { Ionicons } from '@expo/vector-icons';
 
-// ─── Custom Slider (pure RN, no extra deps) ─────────────────────
-function SensitivitySlider({ value, onValueChange }: { value: number; onValueChange: (v: number) => void }) {
-  const steps = [1, 2, 3, 4, 5];
-  const labels = ['Low', '', 'Med', '', 'High'];
-  return (
-    <View style={styles.sliderContainer}>
-      <View style={styles.sliderTrack}>
-        <View style={[styles.sliderFill, { width: `${((value - 1) / 4) * 100}%` }]} />
-      </View>
-      <View style={styles.sliderSteps}>
-        {steps.map((step) => (
-          <TouchableOpacity key={step} style={styles.sliderStepHitbox} activeOpacity={0.7} onPress={() => onValueChange(step)}>
-            <View style={[styles.sliderDot, step <= value && styles.sliderDotActive, step === value && styles.sliderDotCurrent]} />
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.sliderLabels}>
-        {labels.map((label, idx) => (
-          <Text key={idx} style={[styles.sliderLabelText, steps[idx] === value && styles.sliderLabelActive]}>
-            {label}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
-}
+import {
+  ActionRow,
+  AppButton,
+  Card,
+  Divider,
+  SectionLabel,
+  SegmentedControl,
+  SettingRow,
+  ScreenHeader,
+  type IconName,
+} from '@/components/ui';
+import { alpha, radius, space, typography as typeScale } from '@/constants/theme';
+import { useSettings } from '@/providers/SettingsProvider';
+import { makeStyles, useColors } from '@/providers/ThemeProvider';
+import {
+  SOUND_DISPLAY_NAMES,
+  SOUND_ICONS,
+  SOUND_LABELS,
+  SOUND_THREAT,
+  clearDetectionLog,
+  type SoundLabel,
+} from '@/utils/storage';
 
-// ─── Setting Row Component ──────────────────────────────────────
-function SettingToggle({ icon, iconColor, label, description, value, onValueChange }: {
-  icon: keyof typeof Ionicons.glyphMap; iconColor: string;
-  label: string; description: string; value: boolean; onValueChange: (v: boolean) => void;
-}) {
-  return (
-    <View style={styles.settingRow}>
-      <View style={[styles.settingIcon, { backgroundColor: iconColor + '15' }]}>
-        <Ionicons name={icon} size={20} color={iconColor} />
-      </View>
-      <View style={styles.settingInfo}>
-        <Text style={styles.settingLabel}>{label}</Text>
-        <Text style={styles.settingDesc}>{description}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: theme.colors.border, true: theme.colors.accentMuted }}
-        thumbColor={value ? theme.colors.accent : theme.colors.textTertiary}
-      />
-    </View>
-  );
-}
+const SENSITIVITY_COPY: Record<number, { name: string; detail: string }> = {
+  1: { name: 'Conservative', detail: 'Only loud, unambiguous sounds. Fewest false alarms.' },
+  2: { name: 'Cautious', detail: 'Slightly more selective than balanced.' },
+  3: { name: 'Balanced', detail: 'Recommended for most homes and workplaces.' },
+  4: { name: 'Responsive', detail: 'Picks up quieter sounds and checks more often.' },
+  5: { name: 'Aggressive', detail: 'Maximum reach. Expect more false positives.' },
+};
 
-// ─── Main Settings Screen ───────────────────────────────────────
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.bg },
+  scroll: { paddingHorizontal: space.xxl },
+
+  sensitivityCard: { padding: space.lg },
+  sensitivityHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  sensitivityInfo: { flex: 1 },
+  sensitivityName: { ...typeScale.subtitle, color: c.text },
+  sensitivityDetail: { ...typeScale.caption, color: c.textMuted, marginTop: 2, lineHeight: 18 },
+
+  track: {
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: c.surfaceAlt,
+    marginTop: space.xxl,
+    overflow: 'hidden',
+  },
+  fill: { height: '100%', backgroundColor: c.primary, borderRadius: radius.pill },
+  steps: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -12 },
+  stepHit: { width: 40, height: 34, alignItems: 'center', justifyContent: 'center' },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: c.surfaceAlt,
+    borderWidth: 2,
+    borderColor: c.surface,
+  },
+  dotFilled: { backgroundColor: c.primary },
+  dotCurrent: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: c.primary,
+    borderColor: alpha(c.primary, 0.28),
+    borderWidth: 4,
+  },
+  stepLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  stepLabel: { width: 40, textAlign: 'center', fontSize: 11, color: c.textMuted },
+  stepLabelActive: { color: c.primary, fontWeight: '700' },
+
+  choiceBlock: { padding: space.lg, gap: space.md },
+  choiceLabel: { ...typeScale.captionStrong, color: c.textSecondary },
+  choiceHint: { ...typeScale.caption, color: c.textMuted, lineHeight: 18 },
+
+  soundRow: { flexDirection: 'row', alignItems: 'center', padding: space.lg, gap: space.md },
+  soundInfo: { flex: 1 },
+  soundName: { ...typeScale.subtitle, color: c.text },
+  soundMeta: { ...typeScale.caption, color: c.textMuted, marginTop: 2 },
+  soundToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  soundToggleText: { ...typeScale.captionStrong },
+
+  footer: { alignItems: 'center', gap: 4, paddingTop: space.xxxl },
+  footerTitle: { ...typeScale.captionStrong, color: c.textSecondary },
+  footerText: { ...typeScale.caption, color: c.textMuted, textAlign: 'center', lineHeight: 18 },
+}));
+
 export default function SettingsScreen() {
+  const styles = useStyles();
+  const c = useColors();
   const insets = useSafeAreaInsets();
-  const [s, setS] = useState<AppSettings>({
-    hapticFeedback: true, flashlight: false, backgroundListening: true,
-    sensitivity: 3, autoCall: false, shareLocation: true, nightMode: false,
-  });
+  const { settings, update, resetToDefaults } = useSettings();
 
-  // Load persisted settings on focus
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const stored = await getSettings();
-        setS(stored);
-      })();
-    }, [])
+  const copy = SENSITIVITY_COPY[settings.sensitivity] ?? SENSITIVITY_COPY[3]!;
+
+  const toggleSound = useCallback(
+    (label: SoundLabel, alertMe: boolean) => {
+      const next = alertMe
+        ? settings.mutedSounds.filter((l) => l !== label)
+        : settings.mutedSounds.includes(label)
+          ? settings.mutedSounds
+          : [...settings.mutedSounds, label];
+      update('mutedSounds', next);
+    },
+    [settings.mutedSounds, update],
   );
 
-  // Helper — update local state AND persist to AsyncStorage
-  const toggle = <K extends keyof AppSettings>(key: K) => async (value: AppSettings[K]) => {
-    setS((prev) => ({ ...prev, [key]: value }));
-    await saveSetting(key, value);
-  };
+  const confirmClearHistory = useCallback(() => {
+    Alert.alert(
+      'Clear detection history',
+      'Every recorded detection will be permanently deleted. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            void clearDetectionLog();
+          },
+        },
+      ],
+    );
+  }, []);
+
+  const confirmReset = useCallback(() => {
+    Alert.alert(
+      'Reset all settings',
+      'Detection, alert and emergency preferences return to their defaults. Your contacts and history are kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: resetToDefaults },
+      ],
+    );
+  }, [resetToDefaults]);
+
+  const replayIntro = useCallback(() => {
+    update('onboardingComplete', false);
+  }, [update]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Configure SoundGuard preferences</Text>
-        </View>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScreenHeader title="Settings" subtitle="Tune how SoundGuard listens and alerts" />
 
-        {/* ── Detection Section ── */}
-        <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>DETECTION</Text></View>
-        <View style={styles.sectionCard}>
-          <SettingToggle icon="pulse-outline" iconColor={theme.colors.accent} label="Enable Haptic Feedback" description="Vibrate phone on sound detection" value={s.hapticFeedback} onValueChange={toggle('hapticFeedback')} />
-          <View style={styles.settingDivider} />
-          <SettingToggle icon="flashlight-outline" iconColor="#FFB020" label="Critical Alert Flashlight" description="Flash camera LED on critical threats" value={s.flashlight} onValueChange={toggle('flashlight')} />
-          <View style={styles.settingDivider} />
-          <SettingToggle icon="ear-outline" iconColor="#6B8AFF" label="Background Listening Mode" description="Continue monitoring when app is minimized" value={s.backgroundListening} onValueChange={toggle('backgroundListening')} />
-        </View>
+        {/* ── Appearance ── */}
+        <SectionLabel icon="color-palette-outline">Appearance</SectionLabel>
+        <Card padded={false}>
+          <View style={styles.choiceBlock}>
+            <Text style={styles.choiceLabel}>Theme</Text>
+            <SegmentedControl
+              value={settings.themeMode}
+              onChange={(value) => update('themeMode', value)}
+              options={[
+                { value: 'system', label: 'System', icon: 'phone-portrait-outline' },
+                { value: 'light', label: 'Light', icon: 'sunny-outline' },
+                { value: 'dark', label: 'Dark', icon: 'moon-outline' },
+              ]}
+            />
+          </View>
+          <Divider />
+          <SettingRow
+            icon="accessibility-outline"
+            tint={c.primary}
+            label="Reduce motion"
+            description="Stop looping animations across the app. Saves battery."
+            value={settings.reduceMotion}
+            onValueChange={(v) => update('reduceMotion', v)}
+          />
+        </Card>
 
-        {/* ── AI Sensitivity ── */}
-        <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>AI SENSITIVITY</Text></View>
-        <View style={styles.sensitivityCard}>
-          <View style={styles.sensitivityHeader}>
-            <View style={[styles.settingIcon, { backgroundColor: '#A78BFA15' }]}>
-              <Ionicons name="analytics-outline" size={20} color="#A78BFA" />
+        {/* ── Detection ── */}
+        <SectionLabel icon="options-outline">Detection</SectionLabel>
+        <Card padded={false}>
+          <View style={styles.sensitivityCard}>
+            <View style={styles.sensitivityHead}>
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: radius.md,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: c.primarySoft,
+                }}
+              >
+                <Ionicons name="analytics-outline" size={20} color={c.primary} />
+              </View>
+              <View style={styles.sensitivityInfo}>
+                <Text style={styles.sensitivityName}>
+                  Sensitivity · {copy.name}
+                </Text>
+                <Text style={styles.sensitivityDetail}>{copy.detail}</Text>
+              </View>
             </View>
-            <View style={styles.sensitivityHeaderText}>
-              <Text style={styles.settingLabel}>AI Sensitivity Level</Text>
-              <Text style={styles.settingDesc}>
-                {s.sensitivity <= 2 ? 'Fewer false positives, may miss quiet sounds' : s.sensitivity >= 4 ? 'Catches more sounds, may trigger more alerts' : 'Balanced detection for most environments'}
-              </Text>
+
+            <View style={styles.track}>
+              <View style={[styles.fill, { width: `${((settings.sensitivity - 1) / 4) * 100}%` }]} />
+            </View>
+
+            <View style={styles.steps}>
+              {[1, 2, 3, 4, 5].map((step) => {
+                const current = step === settings.sensitivity;
+                return (
+                  <Pressable
+                    key={step}
+                    style={styles.stepHit}
+                    hitSlop={6}
+                    accessibilityRole="adjustable"
+                    accessibilityLabel={`Sensitivity level ${step}`}
+                    accessibilityState={{ selected: current }}
+                    onPress={() => update('sensitivity', step)}
+                  >
+                    <View
+                      style={[
+                        styles.dot,
+                        step <= settings.sensitivity && styles.dotFilled,
+                        current && styles.dotCurrent,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.stepLabels}>
+              {['Low', '', 'Balanced', '', 'High'].map((label, i) => (
+                <Text
+                  key={`sens-label-${i}`}
+                  style={[styles.stepLabel, i + 1 === settings.sensitivity && styles.stepLabelActive]}
+                >
+                  {label}
+                </Text>
+              ))}
             </View>
           </View>
-          <SensitivitySlider value={s.sensitivity} onValueChange={toggle('sensitivity')} />
-          <View style={styles.sensitivityBadge}>
-            <Ionicons name="speedometer-outline" size={14} color={s.sensitivity >= 4 ? '#FF6B8A' : s.sensitivity <= 2 ? '#4DA6FF' : '#FFB020'} />
-            <Text style={[styles.sensitivityBadgeText, { color: s.sensitivity >= 4 ? '#FF6B8A' : s.sensitivity <= 2 ? '#4DA6FF' : '#FFB020' }]}>
-              Level {s.sensitivity} — {s.sensitivity <= 2 ? 'Conservative' : s.sensitivity >= 4 ? 'Aggressive' : 'Balanced'}
+
+          <Divider />
+          <SettingRow
+            icon="moon-outline"
+            tint="#A78BFA"
+            label="Night boost"
+            description="Raise sensitivity one step between 21:00 and 06:00."
+            value={settings.nightMode}
+            onValueChange={(v) => update('nightMode', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="ear-outline"
+            tint={c.safe}
+            label="Keep listening in the background"
+            description="Continue monitoring when the app is not on screen. The system may still suspend it to save power."
+            value={settings.backgroundListening}
+            onValueChange={(v) => update('backgroundListening', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="document-text-outline"
+            tint={c.textSecondary}
+            label="Log routine sounds"
+            description="Record footsteps, knocks and barks in history as well as alerts."
+            value={settings.logSafeEvents}
+            onValueChange={(v) => update('logSafeEvents', v)}
+          />
+        </Card>
+
+        {/* ── Alerts ── */}
+        <SectionLabel icon="notifications-outline">Alerts</SectionLabel>
+        <Card padded={false}>
+          <SettingRow
+            icon="pulse-outline"
+            tint={c.primary}
+            label="Haptic feedback"
+            description="Vibrate when a sound is recognised. Critical sounds use a stronger pattern."
+            value={settings.hapticFeedback}
+            onValueChange={(v) => update('hapticFeedback', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="flash-outline"
+            tint={c.warning}
+            label="Visual flash"
+            description="Flash the screen on critical detections so an alert is visible at a glance."
+            value={settings.visualFlash}
+            onValueChange={(v) => update('visualFlash', v)}
+          />
+        </Card>
+
+        {/* ── Sound classes ── */}
+        <SectionLabel icon="volume-high-outline">Sounds to alert me to</SectionLabel>
+        <Card padded={false}>
+          {SOUND_LABELS.map((label, i) => {
+            const muted = settings.mutedSounds.includes(label);
+            const threat = SOUND_THREAT[label];
+            const tint =
+              threat === 'critical' ? c.critical : threat === 'warning' ? c.warning : c.safe;
+            return (
+              <View key={label}>
+                {i > 0 ? <Divider inset={space.lg} /> : null}
+                <View style={styles.soundRow}>
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: radius.md,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: alpha(tint, 0.14),
+                    }}
+                  >
+                    <Ionicons
+                      name={(SOUND_ICONS[label] ?? 'volume-high-outline') as IconName}
+                      size={19}
+                      color={tint}
+                    />
+                  </View>
+                  <View style={styles.soundInfo}>
+                    <Text style={styles.soundName}>{SOUND_DISPLAY_NAMES[label]}</Text>
+                    <Text style={styles.soundMeta}>
+                      {threat === 'critical'
+                        ? 'Critical — can escalate to SOS'
+                        : threat === 'warning'
+                          ? 'Attention'
+                          : 'Routine'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => toggleSound(label, muted)}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: !muted }}
+                    accessibilityLabel={`Alert me to ${SOUND_DISPLAY_NAMES[label]}`}
+                    hitSlop={6}
+                    style={({ pressed }) => [
+                      styles.soundToggle,
+                      {
+                        backgroundColor: muted ? c.surfaceAlt : alpha(c.primary, 0.12),
+                        borderColor: muted ? c.border : alpha(c.primary, 0.35),
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.soundToggleText, { color: muted ? c.textMuted : c.primary }]}
+                    >
+                      {muted ? 'Muted' : 'On'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+
+        {/* ── Emergency ── */}
+        <SectionLabel icon="shield-half-outline">Emergency</SectionLabel>
+        <Card padded={false}>
+          <SettingRow
+            icon="alert-circle-outline"
+            tint={c.critical}
+            label="Automatic SOS escalation"
+            description="Open the SOS countdown when a critical sound continues. You can always cancel."
+            value={settings.autoSos}
+            onValueChange={(v) => update('autoSos', v)}
+          />
+          <Divider />
+          <View style={[styles.choiceBlock, !settings.autoSos && { opacity: 0.45 }]}>
+            <Text style={styles.choiceLabel}>Escalate after</Text>
+            <SegmentedControl
+              value={settings.criticalHoldSeconds}
+              onChange={(value) => update('criticalHoldSeconds', value)}
+              options={[
+                { value: 3, label: '3 sec' },
+                { value: 6, label: '6 sec' },
+                { value: 10, label: '10 sec' },
+              ]}
+            />
+            <Text style={styles.choiceHint}>
+              How long a critical sound must persist before the SOS countdown opens.
             </Text>
           </View>
+          <Divider />
+          <View style={styles.choiceBlock}>
+            <Text style={styles.choiceLabel}>Countdown before dispatch</Text>
+            <SegmentedControl
+              value={settings.sosCountdown}
+              onChange={(value) => update('sosCountdown', value)}
+              options={[
+                { value: 5, label: '5 sec' },
+                { value: 10, label: '10 sec' },
+                { value: 20, label: '20 sec' },
+              ]}
+            />
+            <Text style={styles.choiceHint}>Your window to abort before contacts are messaged.</Text>
+          </View>
+          <Divider />
+          <SettingRow
+            icon="location-outline"
+            tint={c.primary}
+            label="Share location"
+            description="Attach a map link to the SOS message."
+            value={settings.shareLocation}
+            onValueChange={(v) => update('shareLocation', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="call-outline"
+            tint={c.warning}
+            label="Offer to call first contact"
+            description="After dispatch, show a one-tap dial to the first person in your Safety Circle."
+            value={settings.callFirstContact}
+            onValueChange={(v) => update('callFirstContact', v)}
+          />
+        </Card>
+
+        {/* ── Data ── */}
+        <SectionLabel icon="lock-closed-outline">Data & privacy</SectionLabel>
+        <Card padded={false}>
+          <ActionRow
+            icon="play-circle-outline"
+            tint={c.primary}
+            label="Replay the introduction"
+            description="Show the first-run walkthrough again."
+            onPress={replayIntro}
+          />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="trash-outline"
+            tint={c.critical}
+            label="Clear detection history"
+            description="Delete every recorded event from this device."
+            onPress={confirmClearHistory}
+            destructive
+          />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="refresh-outline"
+            tint={c.critical}
+            label="Reset all settings"
+            description="Restore defaults. Contacts and history are kept."
+            onPress={confirmReset}
+            destructive
+          />
+        </Card>
+
+        <View style={{ marginTop: space.lg }}>
+          <AppButton
+            label="Everything stays on this device"
+            icon="shield-checkmark-outline"
+            variant="ghost"
+            block
+            onPress={() =>
+              Alert.alert(
+                'On-device processing',
+                'Audio is captured, converted to a spectrogram and classified entirely on this phone. Nothing is uploaded, and no recording is written to storage. Only the resulting labels, timestamps and confidence values are saved to your local history.',
+              )
+            }
+          />
         </View>
 
-        {/* ── Emergency Section ── */}
-        <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>EMERGENCY</Text></View>
-        <View style={styles.sectionCard}>
-          <SettingToggle icon="call-outline" iconColor="#FF3B5C" label="SOS Auto-Call" description="Auto-dial emergency services on SOS dispatch" value={s.autoCall} onValueChange={toggle('autoCall')} />
-          <View style={styles.settingDivider} />
-          <SettingToggle icon="location-outline" iconColor={theme.colors.accent} label="Share Location in SOS" description="Include GPS coordinates in SOS alerts" value={s.shareLocation} onValueChange={toggle('shareLocation')} />
-          <View style={styles.settingDivider} />
-          <SettingToggle icon="moon-outline" iconColor="#C084FC" label="Night Mode Sensitivity" description="Increase sensitivity during nighttime hours" value={s.nightMode} onValueChange={toggle('nightMode')} />
+        <View style={styles.footer}>
+          <Text style={styles.footerTitle}>SoundGuard 2.0</Text>
+          <Text style={styles.footerText}>
+            Expo SDK 54 · ONNX Runtime Mobile{'\n'}
+            Research build — R26-SE-019
+          </Text>
         </View>
-
-        {/* ── App Section ── */}
-        <View style={styles.sectionHeader}><Text style={styles.sectionLabel}>APP</Text></View>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity style={styles.linkRow} activeOpacity={0.7}>
-            <View style={[styles.settingIcon, { backgroundColor: 'rgba(100,100,122,0.12)' }]}>
-              <Ionicons name="language-outline" size={20} color={theme.colors.textSecondary} />
-            </View>
-            <View style={styles.settingInfo}><Text style={styles.settingLabel}>Language</Text><Text style={styles.settingDesc}>English</Text></View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
-          </TouchableOpacity>
-          <View style={styles.settingDivider} />
-          <TouchableOpacity style={styles.linkRow} activeOpacity={0.7}>
-            <View style={[styles.settingIcon, { backgroundColor: 'rgba(100,100,122,0.12)' }]}>
-              <Ionicons name="help-circle-outline" size={20} color={theme.colors.textSecondary} />
-            </View>
-            <View style={styles.settingInfo}><Text style={styles.settingLabel}>Help & Support</Text></View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
-          </TouchableOpacity>
-          <View style={styles.settingDivider} />
-          <TouchableOpacity style={styles.linkRow} activeOpacity={0.7}>
-            <View style={[styles.settingIcon, { backgroundColor: 'rgba(100,100,122,0.12)' }]}>
-              <Ionicons name="document-text-outline" size={20} color={theme.colors.textSecondary} />
-            </View>
-            <View style={styles.settingInfo}><Text style={styles.settingLabel}>Privacy Policy</Text></View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.version}>SoundGuard v1.0.0</Text>
-        <Text style={styles.versionSub}>Build 2026.05.09 • Expo SDK 54</Text>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  scrollContent: { paddingHorizontal: 24 },
-  header: { paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: 32, fontWeight: '700', color: theme.colors.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, color: theme.colors.textSecondary, marginTop: 4 },
-  sectionHeader: { marginTop: 24, marginBottom: 10, paddingLeft: 4 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: theme.colors.textTertiary, letterSpacing: 1 },
-  sectionCard: { backgroundColor: theme.colors.surface, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden' },
-  settingRow: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  settingIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  settingInfo: { flex: 1, marginLeft: 14 },
-  settingLabel: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-  settingDesc: { fontSize: 13, color: theme.colors.textTertiary, marginTop: 2, lineHeight: 18 },
-  settingDivider: { height: 1, backgroundColor: theme.colors.border, marginLeft: 68 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  sensitivityCard: { backgroundColor: theme.colors.surface, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, padding: 16 },
-  sensitivityHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  sensitivityHeaderText: { flex: 1, marginLeft: 14 },
-  sensitivityBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, marginTop: 16, backgroundColor: theme.colors.surfaceElevated, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border },
-  sensitivityBadgeText: { fontSize: 13, fontWeight: '600' },
-  sliderContainer: { paddingHorizontal: 4 },
-  sliderTrack: { height: 4, backgroundColor: theme.colors.border, borderRadius: 2, overflow: 'hidden' },
-  sliderFill: { height: '100%', backgroundColor: theme.colors.accent, borderRadius: 2 },
-  sliderSteps: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -10 },
-  sliderStepHitbox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  sliderDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: theme.colors.border, borderWidth: 3, borderColor: theme.colors.surface },
-  sliderDotActive: { backgroundColor: theme.colors.accent },
-  sliderDotCurrent: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent + '44', width: 20, height: 20, borderRadius: 10, borderWidth: 4 },
-  sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -2 },
-  sliderLabelText: { fontSize: 11, fontWeight: '600', color: theme.colors.textTertiary, width: 36, textAlign: 'center' },
-  sliderLabelActive: { color: theme.colors.accent },
-  version: { textAlign: 'center', fontSize: 14, fontWeight: '600', color: theme.colors.textTertiary, marginTop: 32 },
-  versionSub: { textAlign: 'center', fontSize: 12, color: theme.colors.textTertiary, marginTop: 4, opacity: 0.6 },
-});
