@@ -303,7 +303,7 @@ export default function SosAlertScreen() {
 
   const dismiss = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+    else router.replace('/');
   }, []);
 
   const backdropStyle = useAnimatedStyle(() => ({

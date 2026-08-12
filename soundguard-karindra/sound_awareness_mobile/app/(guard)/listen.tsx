@@ -14,12 +14,17 @@
  * Layout is driven entirely by `useResponsive`. Nothing here assumes a 390 dp
  * width: gutters, gaps, the orb diameter and the demo row all derive from the
  * live viewport, so a 320 dp phone and a 21:9 panel both lay out cleanly.
+ *
+ * The header carries the mode's two exits — back to the dashboard, and straight
+ * across to Live Transcribe. Both release the microphone before the destination
+ * can ask for it; see `app/(guard)/_layout.tsx` and `utils/audioArbiter.ts`.
  */
 
 import React, { useCallback, useMemo } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 import { DetectionCard } from '@/components/DetectionCard';
 import { LevelMeter, ListeningOrb } from '@/components/ListeningVisualizer';
@@ -61,6 +66,17 @@ const useStyles = makeStyles((c) => ({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.primarySoft,
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  navButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   brandText: { flexShrink: 1 },
   brandName: { ...typeScale.heading, color: c.text },
@@ -223,6 +239,18 @@ export default function ListenScreen() {
     void Linking.openSettings().catch(() => {});
   }, []);
 
+  const goHome = useCallback(() => {
+    // Popping to the dashboard unmounts this mode, which is what releases the
+    // microphone. `replace` is the fallback for a cold deep link straight here,
+    // where there is nothing on the stack to pop back to.
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }, []);
+
+  const switchToTranscribe = useCallback(() => {
+    router.replace('/transcribe');
+  }, []);
+
   const dismissedNames = state.dismissed.map((l) => SOUND_DISPLAY_NAMES[l]).join(', ');
 
   // Headroom above the trigger, as a 0–1 bar. 1.0 means the gate just opened.
@@ -244,9 +272,17 @@ export default function ListenScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Ionicons name="pulse" size={18} color={c.primary} />
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to dashboard"
+              accessibilityHint="Stops monitoring and releases the microphone"
+              onPress={goHome}
+              hitSlop={8}
+              android_ripple={{ color: alpha(c.text, 0.1), borderless: true }}
+              style={({ pressed }) => [styles.brandMark, pressed && { opacity: 0.65 }]}
+            >
+              <Ionicons name="chevron-back" size={19} color={c.primary} />
+            </Pressable>
             <View style={styles.brandText}>
               <Text style={styles.brandName} numberOfLines={1}>
                 SoundGuard
@@ -259,11 +295,28 @@ export default function ListenScreen() {
             </View>
           </View>
 
-          <View
-            style={[styles.statusPill, { backgroundColor: tone.bg, borderColor: alpha(tone.fg, 0.3) }]}
-          >
-            <View style={[styles.statusDot, { backgroundColor: tone.fg }]} />
-            <Text style={[styles.statusPillText, { color: tone.fg }]}>{statusLabel}</Text>
+          <View style={styles.headerActions}>
+            <View
+              style={[
+                styles.statusPill,
+                { backgroundColor: tone.bg, borderColor: alpha(tone.fg, 0.3) },
+              ]}
+            >
+              <View style={[styles.statusDot, { backgroundColor: tone.fg }]} />
+              <Text style={[styles.statusPillText, { color: tone.fg }]}>{statusLabel}</Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Switch to Live Transcribe"
+              accessibilityHint="Releases the microphone here and opens live captions"
+              onPress={switchToTranscribe}
+              hitSlop={8}
+              android_ripple={{ color: alpha(c.accent, 0.14), borderless: true }}
+              style={({ pressed }) => [styles.navButton, pressed && { opacity: 0.65 }]}
+            >
+              <Ionicons name="chatbubbles-outline" size={17} color={c.accent} />
+            </Pressable>
           </View>
         </View>
 

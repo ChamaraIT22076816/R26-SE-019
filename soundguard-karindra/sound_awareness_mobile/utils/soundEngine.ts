@@ -65,6 +65,7 @@ import {
   resetGateState,
   toDb,
 } from './audio/gate';
+import { audioArbiter } from './audioArbiter';
 import {
   DEFAULT_SETTINGS,
   SOUND_DISPLAY_NAMES,
@@ -268,6 +269,13 @@ class SoundEngine {
   private modelPromise: Promise<InferenceSession | null> | null = null;
 
   // ── Scheduling ──
+  /**
+   * The user's intent, as distinct from `running` (the hardware's state).
+   * `start()` has two awaits in it — the permission dialog and the arbiter
+   * hand-over — and the user can leave the mode during either. Without this
+   * flag a stop issued mid-start would be overtaken by the start it cancelled.
+   */
+  private wanted = false;
   private running = false;
   /**
    * Single-flight mutex. Only `analyze()` clears it — start/stop deliberately
@@ -446,13 +454,27 @@ class SoundEngine {
   // Lifecycle
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Begin monitoring.
+   *
+   * Capture is never opened directly. The microphone is a single exclusive
+   * device shared with Live Transcribe, so ownership is taken through
+   * `audioArbiter`, which releases the other mode, lets the audio HAL settle,
+   * and only then runs `beginCapture` — inside the lock, so no competing mode
+   * can slip in between "we own it" and "we opened it".
+   *
+   * Permission is requested *before* acquiring, so a dialog the user leaves on
+   * screen never blocks the other mode from releasing the hardware.
+   */
   async start(): Promise<void> {
     if (this.running || this.state.status === 'starting') return;
 
+    this.wanted = true;
     this.patch({ status: 'starting', error: null });
 
     const granted = await requestMicrophonePermission();
     if (!granted) {
+      this.wanted = false;
       this.patch({
         status: 'idle',
         permission: 'denied',
@@ -462,8 +484,42 @@ class SoundEngine {
     }
     this.patch({ permission: 'granted' });
 
+    // The user may have left the mode while the permission dialog was up.
+    if (!this.wanted) {
+      this.patch({ status: 'idle' });
+      return;
+    }
+
     void this.loadModel();
 
+    const acquired = await audioArbiter.acquire({
+      id: 'soundguard',
+      release: () => this.teardown(),
+      activate: () => this.beginCapture(),
+    });
+
+    if (!acquired) {
+      this.wanted = false;
+      log('capture failed');
+      this.patch({
+        status: 'error',
+        calibrating: false,
+        error: 'Could not open the microphone. Close other recording apps and try again.',
+      });
+      return;
+    }
+
+    // Stopped while the hand-over was in flight. The arbiter queue already has
+    // the matching release behind us, but saying so explicitly keeps the state
+    // machine readable — and both paths are idempotent.
+    if (!this.wanted) this.stop();
+  }
+
+  /**
+   * Open the native stream. Runs inside the arbiter's lock; throwing unwinds
+   * the acquisition, so a failed open can never leave a half-owned microphone.
+   */
+  private beginCapture(): void {
     this.sessionId += 1;
     this.running = true;
     this.resetBuffers();
@@ -485,40 +541,48 @@ class SoundEngine {
       gateOpen: false,
     });
 
-    try {
-      LiveAudioStream.init({
-        sampleRate: CAPTURE_RATE,
-        channels: 1,
-        bitsPerSample: 16,
-        audioSource: AUDIO_SOURCE,
-        bufferSize: CAPTURE_BUFFER,
-        // Required by the package's typings (inherited from
-        // react-native-audio-record) but never read by the Android module.
-        wavFile: '',
-      });
+    LiveAudioStream.init({
+      sampleRate: CAPTURE_RATE,
+      channels: 1,
+      bitsPerSample: 16,
+      audioSource: AUDIO_SOURCE,
+      bufferSize: CAPTURE_BUFFER,
+      // Required by the package's typings (inherited from
+      // react-native-audio-record) but never read by the Android module.
+      wavFile: '',
+    });
 
-      // `AudioRecord.on` clears previous listeners internally, so repeated
-      // start/stop cycles cannot accumulate duplicate handlers.
-      this.audioSub = LiveAudioStream.on('data', this.handleChunk) as unknown as {
-        remove: () => void;
-      } | null;
-      LiveAudioStream.start();
-      log('capture started');
-    } catch (err) {
-      log('capture failed', err);
-      this.running = false;
-      this.patch({
-        status: 'error',
-        calibrating: false,
-        error: 'Could not open the microphone. Close other recording apps and try again.',
-      });
-    }
+    // `AudioRecord.on` clears previous listeners internally, so repeated
+    // start/stop cycles cannot accumulate duplicate handlers.
+    this.audioSub = LiveAudioStream.on('data', this.handleChunk) as unknown as {
+      remove: () => void;
+    } | null;
+    LiveAudioStream.start();
+    log('capture started');
   }
 
+  /**
+   * Stop monitoring.
+   *
+   * The teardown runs synchronously so the button flips in the same frame as
+   * the tap, and the arbiter is then told the microphone is free. Handing the
+   * release to the arbiter instead of doing it there keeps ownership bookkeeping
+   * in exactly one place, and keeps mode switches ordered.
+   */
   stop(): void {
+    this.wanted = false;
+    this.teardown();
+    void audioArbiter.release('soundguard');
+  }
+
+  /**
+   * Release every native audio resource. Idempotent, never throws, and never
+   * calls back into the arbiter — it is the arbiter's own release callback.
+   */
+  private teardown(): void {
     if (!this.running) {
       this.patch({
-        status: 'idle',
+        status: this.state.status === 'error' ? 'error' : 'idle',
         detection: null,
         analyzing: false,
         calibrating: false,
@@ -527,6 +591,8 @@ class SoundEngine {
       return;
     }
 
+    // Invalidating the session id makes any analysis already in flight discard
+    // its result instead of publishing a detection after the stop.
     this.sessionId += 1;
     this.running = false;
 
@@ -564,7 +630,10 @@ class SoundEngine {
   }
 
   async toggle(): Promise<void> {
-    if (this.running) this.stop();
+    // `wanted` is checked as well as `running`, so a second tap while the
+    // permission dialog or the microphone hand-over is still in flight cancels
+    // the pending start instead of being swallowed.
+    if (this.running || this.wanted) this.stop();
     else await this.start();
   }
 

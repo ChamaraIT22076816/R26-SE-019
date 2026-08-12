@@ -16,6 +16,12 @@
  *      into a Reanimated shared value at ~4 Hz and animated on the UI thread,
  *      so a live visualiser costs zero renders and zero JS-thread work per
  *      frame.
+ *
+ * Backgrounding behaviour deliberately does NOT live here. This provider is
+ * mounted for the whole app, including the dashboard and Live Transcribe, so an
+ * auto-resume owned by it could re-open SoundGuard's capture on a screen that
+ * has nothing to do with SoundGuard. It belongs to the mode, and now lives in
+ * `app/(guard)/_layout.tsx`, whose lifetime is exactly the mode's lifetime.
  */
 
 import React, {
@@ -23,11 +29,9 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useSyncExternalStore,
   type PropsWithChildren,
 } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
 import { useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { soundEngine, type EngineEvent, type EngineState } from '@/utils/soundEngine';
@@ -78,9 +82,6 @@ export function EngineProvider({ children }: PropsWithChildren) {
   const { settings, ready } = useSettings();
   const level = useSharedValue(0);
 
-  /** True when we paused capture ourselves because the app was backgrounded. */
-  const autoPaused = useRef(false);
-
   // ── Level meter: engine → shared value, bypassing React entirely ──
   useEffect(() => {
     soundEngine.onLevel = (value: number) => {
@@ -101,30 +102,6 @@ export function EngineProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void soundEngine.loadModel();
   }, []);
-
-  // ── Background behaviour, driven by the `backgroundListening` setting ──
-  useEffect(() => {
-    const onChange = (next: AppStateStatus) => {
-      const listening = soundEngine.getState().status === 'listening';
-
-      if (next === 'active') {
-        if (autoPaused.current) {
-          autoPaused.current = false;
-          void soundEngine.start();
-        }
-        return;
-      }
-
-      // 'background' or 'inactive'
-      if (listening && !settings.backgroundListening) {
-        autoPaused.current = true;
-        soundEngine.stop();
-      }
-    };
-
-    const sub = AppState.addEventListener('change', onChange);
-    return () => sub.remove();
-  }, [settings.backgroundListening]);
 
   const value = useMemo<EngineContextValue>(
     () => ({

@@ -14,7 +14,11 @@
       "backgroundColor": "#0A0A0F"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "SoundGuard listens to your surroundings to recognise important sounds, and captions speech in real time. Audio is processed on this device and never uploaded by the app.",
+        "NSSpeechRecognitionUsageDescription": "SoundGuard uses speech recognition to turn what people say into large, high-contrast captions you can read and show to the person you are talking to."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +30,8 @@
       "package": "com.karindragimhan69.soundguard",
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET"
       ]
     },
     "web": {
@@ -36,7 +41,19 @@
     },
     "plugins": [
       "expo-router",
-      "onnxruntime-react-native"
+      "onnxruntime-react-native",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "SoundGuard listens to your surroundings to recognise important sounds, and captions speech in real time. Audio is processed on this device and never uploaded by the app.",
+          "speechRecognitionPermission": "SoundGuard uses speech recognition to turn what people say into large, high-contrast captions you can read and show to the person you are talking to.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts",
+            "com.google.android.as"
+          ]
+        }
+      ]
     ],
     "assetBundlePatterns": [
       "assets/**/*"

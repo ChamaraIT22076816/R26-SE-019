@@ -48,6 +48,7 @@ import {
   SOUND_ICONS,
   SOUND_LABELS,
   SOUND_THREAT,
+  TRANSCRIBE_TEXT_SCALES,
   clearDetectionLog,
   type SoundLabel,
 } from '@/utils/storage';
@@ -402,6 +403,91 @@ export default function SettingsScreen() {
           })}
         </Card>
 
+        {/* ── Live Transcribe ──
+            The second mode's preferences live here as well as behind the gear
+            on the Transcribe screen itself. Both write the same shared settings
+            object, so the two surfaces can never disagree — this one exists for
+            discoverability, the other for reach without leaving a conversation. */}
+        <SectionLabel icon="chatbubbles-outline">Live Transcribe</SectionLabel>
+        <Card padded={false}>
+          <View style={styles.choiceBlock}>
+            <Text style={styles.choiceLabel}>Recognition language</Text>
+            <SegmentedControl
+              value={settings.transcribeLocale}
+              onChange={(value) => update('transcribeLocale', value)}
+              options={[
+                { value: 'en-US', label: 'US' },
+                { value: 'en-GB', label: 'UK' },
+                { value: 'en-IN', label: 'India' },
+                { value: 'en-AU', label: 'AU' },
+              ]}
+            />
+            <Text style={styles.choiceHint}>
+              English only. The device must have the matching language pack, which is what makes
+              offline recognition possible.
+            </Text>
+          </View>
+          <Divider />
+          <View style={styles.choiceBlock}>
+            <Text style={styles.choiceLabel}>Default caption size</Text>
+            <SegmentedControl
+              value={settings.transcribeTextScale}
+              onChange={(value) => update('transcribeTextScale', value)}
+              options={TRANSCRIBE_TEXT_SCALES.map((option, index) => ({
+                value: index,
+                label: option.label,
+              }))}
+            />
+            <Text style={styles.choiceHint}>
+              Captions can still be resized on screen at any time without changing this.
+            </Text>
+          </View>
+          <Divider />
+          <SettingRow
+            icon="text-outline"
+            tint={c.accent}
+            label="Show words as they are spoken"
+            description="Partial results appear in grey and firm up when the sentence ends."
+            value={settings.transcribeInterim}
+            onValueChange={(v) => update('transcribeInterim', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="ellipsis-horizontal-outline"
+            tint={c.accent}
+            label="Add punctuation"
+            description="Full stops and commas, where the device's recogniser supports it."
+            value={settings.transcribePunctuation}
+            onValueChange={(v) => update('transcribePunctuation', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="cloud-offline-outline"
+            tint={c.safe}
+            label="Prefer on-device recognition"
+            description="Works offline and keeps audio on the phone. Needs the language pack installed; accuracy varies by device."
+            value={settings.transcribeOffline}
+            onValueChange={(v) => update('transcribeOffline', v)}
+          />
+          <Divider />
+          <SettingRow
+            icon="sync-outline"
+            tint={c.accent}
+            label="Start flipped"
+            description="Open Live Transcribe with the caption already rotated for the person opposite you."
+            value={settings.transcribeFlipped}
+            onValueChange={(v) => update('transcribeFlipped', v)}
+          />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="chatbubbles-outline"
+            tint={c.accent}
+            label="Open Live Transcribe"
+            description="Releases the microphone from sound detection and hands it to speech recognition."
+            onPress={() => router.replace('/transcribe')}
+          />
+        </Card>
+
         {/* ── Emergency ── */}
         <SectionLabel icon="shield-half-outline">Emergency</SectionLabel>
         <Card padded={false}>
@@ -517,9 +603,9 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>SoundGuard 2.0</Text>
+          <Text style={styles.footerTitle}>SoundGuard 3.0 · Dual mode</Text>
           <Text style={styles.footerText}>
-            Expo SDK 54 · ONNX Runtime Mobile{'\n'}
+            Expo SDK 54 · ONNX Runtime Mobile · OS speech recognition{'\n'}
             Research build — R26-SE-019
           </Text>
         </View>

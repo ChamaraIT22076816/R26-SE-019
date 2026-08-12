@@ -31,9 +31,9 @@ export default function NotFoundScreen() {
           The link you followed points somewhere SoundGuard does not have a page for.
         </Text>
         <AppButton
-          label="Back to monitoring"
+          label="Back to the dashboard"
           icon="arrow-back"
-          onPress={() => router.replace('/(tabs)')}
+          onPress={() => router.replace('/')}
           style={{ marginTop: space.md }}
         />
       </View>

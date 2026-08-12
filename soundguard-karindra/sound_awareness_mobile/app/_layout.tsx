@@ -22,6 +22,22 @@
  * removed from the route tree entirely, so the router resolves straight to the
  * correct screen instead of mounting the wrong one and redirecting — there is no
  * redirect race and no flash of the wrong screen.
+ *
+ * ── Route shape ──────────────────────────────────────────────────────────────
+ *
+ *   /              Home dashboard — the two modes, and no audio of its own
+ *   /transcribe    Live Transcribe — OS speech recognition
+ *   (guard)        SoundGuard — the tabbed monitoring mode
+ *      /listen /history /circle /settings
+ *   /sos-alert     Emergency dispatch, reachable from anywhere
+ *   /onboarding    First run
+ *
+ * Both modes are *pushed* from the dashboard rather than being tabs of one
+ * navigator. That is a hardware decision as much as a navigation one: a pushed
+ * screen is unmounted when it is popped, which gives each mode a single,
+ * unambiguous moment at which to release the microphone. Tabs keep their
+ * screens mounted, so a tabbed layout would have left both modes alive at once
+ * with only a focus flag distinguishing them.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -39,16 +55,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+import { AudioGovernor } from '@/components/AudioGovernor';
 import { FlashOverlay } from '@/components/FlashOverlay';
 import { SosWatcher } from '@/components/SosWatcher';
 import { EngineProvider } from '@/providers/EngineProvider';
 import { SettingsProvider, useSettings } from '@/providers/SettingsProvider';
 import { ThemeProvider, useTheme } from '@/providers/ThemeProvider';
+import { TranscribeProvider } from '@/providers/TranscribeProvider';
 
 export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: 'index',
 };
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -62,7 +80,9 @@ export default function RootLayout() {
         <SettingsProvider>
           <ThemeProvider>
             <EngineProvider>
-              <AppShell />
+              <TranscribeProvider>
+                <AppShell />
+              </TranscribeProvider>
             </EngineProvider>
           </ThemeProvider>
         </SettingsProvider>
@@ -141,7 +161,9 @@ function AppShell() {
         </Stack.Protected>
 
         <Stack.Protected guard={showApp}>
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(guard)" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="transcribe" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen
             name="sos-alert"
             options={{
@@ -155,8 +177,9 @@ function AppShell() {
         </Stack.Protected>
       </Stack>
 
-      {/* Route-independent behaviour. Plain siblings of the navigator — neither
-          creates navigation state. */}
+      {/* Route-independent behaviour. Plain siblings of the navigator — none of
+          them creates navigation state. */}
+      <AudioGovernor />
       <SosWatcher />
       <FlashOverlay />
 

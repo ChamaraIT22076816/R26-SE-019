@@ -25,6 +25,9 @@ import { useWindowDimensions } from 'react-native';
 /** Layout is designed against this width and scaled from it. */
 const REFERENCE_WIDTH = 390;
 
+/** Layout is designed against this height and scaled from it vertically. */
+const REFERENCE_HEIGHT = 844;
+
 /** Longest comfortable measure for body text; wider screens centre instead. */
 const CONTENT_MAX_WIDTH = 560;
 
@@ -41,6 +44,8 @@ export type Responsive = {
   isShort: boolean;
   /** Tall, narrow panels — the 20:9 and 21:9 Android class. */
   isTall: boolean;
+  /** The 21:9+ class, where fixed-height stacks leave visible dead space. */
+  isVeryTall: boolean;
 
   /** Minimum edge inset for this width class. */
   gutter: number;
@@ -60,6 +65,17 @@ export type Responsive = {
    * comically small on a 320 dp device or bloated on a tablet.
    */
   scale: (value: number) => number;
+
+  /**
+   * Scale a vertical dimension with screen *height*.
+   *
+   * Horizontal scaling is the wrong tool for vertical rhythm: a 20:9 handset is
+   * no wider than a 16:9 one but is 25% taller, so `scale()` returns 1.0 for
+   * both and any stack sized with it leaves a band of dead space at the bottom
+   * of the taller device. Clamped, so a tablet does not inflate a caption into
+   * a poster and a split-screen window does not crush it.
+   */
+  vScale: (value: number) => number;
 };
 
 export function useResponsive(): Responsive {
@@ -72,6 +88,7 @@ export function useResponsive(): Responsive {
     const isShort = height < 700;
     const aspect = height / Math.max(1, width);
     const isTall = aspect >= 1.95;
+    const isVeryTall = aspect >= 2.1;
 
     const gutter = isCompact ? 14 : isNarrow ? 16 : 20;
     // Centre and cap on wide screens; otherwise just use the gutter.
@@ -83,6 +100,9 @@ export function useResponsive(): Responsive {
     const factor = Math.min(1.1, Math.max(0.88, width / REFERENCE_WIDTH));
     const scale = (value: number) => Math.round(value * factor);
 
+    const vFactor = Math.min(1.18, Math.max(0.82, height / REFERENCE_HEIGHT));
+    const vScale = (value: number) => Math.round(value * vFactor);
+
     return {
       width,
       height,
@@ -92,11 +112,13 @@ export function useResponsive(): Responsive {
       isWide,
       isShort,
       isTall,
+      isVeryTall,
       gutter,
       hPadding,
       contentWidth,
       gap,
       scale,
+      vScale,
     };
   }, [width, height]);
 }

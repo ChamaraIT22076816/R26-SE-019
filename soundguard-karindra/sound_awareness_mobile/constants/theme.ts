@@ -47,6 +47,18 @@ export type Palette = {
   /** Text/icon colour placed on top of `primary`. */
   onPrimary: string;
 
+  /**
+   * Secondary brand colour, used to distinguish the app's second mode.
+   *
+   * The dashboard offers two doors into two different pieces of hardware
+   * behaviour, and they must be told apart at a glance and without relying on
+   * reading. Violet is deliberately far from `primary` (blue) in hue and from
+   * every semantic colour, so it can never be mistaken for a threat level.
+   */
+  accent: string;
+  accentSoft: string;
+  onAccent: string;
+
   /** Semantic: informational, non-threatening sound. */
   safe: string;
   safeSoft: string;
@@ -88,6 +100,10 @@ export const darkPalette: Palette = {
   primarySoft: 'rgba(91, 140, 255, 0.16)',
   onPrimary: '#FFFFFF',
 
+  accent: '#A78BFA',
+  accentSoft: 'rgba(167, 139, 250, 0.16)',
+  onAccent: '#160B2E',
+
   safe: '#34D399',
   safeSoft: 'rgba(52, 211, 153, 0.15)',
 
@@ -123,6 +139,10 @@ export const lightPalette: Palette = {
   primary: '#2563EB',
   primarySoft: 'rgba(37, 99, 235, 0.10)',
   onPrimary: '#FFFFFF',
+
+  accent: '#6D28D9',
+  accentSoft: 'rgba(109, 40, 217, 0.10)',
+  onAccent: '#FFFFFF',
 
   safe: '#0E9F6E',
   safeSoft: 'rgba(14, 159, 110, 0.12)',

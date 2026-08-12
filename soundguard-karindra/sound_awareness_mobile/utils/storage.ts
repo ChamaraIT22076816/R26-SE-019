@@ -87,6 +87,34 @@ export function isSoundLabel(v: string): v is SoundLabel {
   return (SOUND_LABELS as readonly string[]).includes(v);
 }
 
+// ─── Live Transcribe taxonomy ────────────────────────────────────────────────
+
+/**
+ * English variants offered for speech recognition.
+ *
+ * Kept deliberately short. Every extra entry is a language pack the device may
+ * not have installed, and a missing pack fails at `start()` with a terminal
+ * `language-not-supported` error rather than degrading gracefully.
+ */
+export const TRANSCRIBE_LOCALES = [
+  { value: 'en-US', label: 'English (US)' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'en-IN', label: 'English (India)' },
+  { value: 'en-AU', label: 'English (Australia)' },
+] as const;
+
+export function isTranscribeLocale(value: string): boolean {
+  return TRANSCRIBE_LOCALES.some((locale) => locale.value === value);
+}
+
+/** Caption size ramp for Live Transcribe, as a multiplier of the base size. */
+export const TRANSCRIBE_TEXT_SCALES = [
+  { label: 'Large', factor: 0.78 },
+  { label: 'Larger', factor: 1 },
+  { label: 'Huge', factor: 1.28 },
+  { label: 'Max', factor: 1.6 },
+] as const;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type EmergencyContact = {
@@ -122,6 +150,20 @@ export type AppSettings = {
   mutedSounds: SoundLabel[];
   /** Write routine (safe) detections to history as well. */
   logSafeEvents: boolean;
+
+  // Live Transcribe
+  /** BCP-47 locale handed to the OS speech recogniser. English variants only. */
+  transcribeLocale: string;
+  /** Show the partial result while a sentence is still being spoken. */
+  transcribeInterim: boolean;
+  /** Ask the recogniser to punctuate and capitalise (Android 13+ / iOS 16+). */
+  transcribePunctuation: boolean;
+  /** Prefer the offline model. Works only where the language pack is installed. */
+  transcribeOffline: boolean;
+  /** Default caption size, 0 (large) … 3 (huge). */
+  transcribeTextScale: number;
+  /** Start Live Transcribe with the caption already rotated 180°. */
+  transcribeFlipped: boolean;
 
   // Emergency
   /** Escalate to the SOS screen after sustained critical detection. */
@@ -160,6 +202,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundListening: true,
   mutedSounds: [],
   logSafeEvents: false,
+
+  transcribeLocale: 'en-US',
+  transcribeInterim: true,
+  transcribePunctuation: true,
+  transcribeOffline: false,
+  transcribeTextScale: 1,
+  transcribeFlipped: false,
 
   autoSos: true,
   criticalHoldSeconds: 6,
@@ -219,6 +268,21 @@ function normaliseSettings(raw: unknown): AppSettings {
     backgroundListening: bool('backgroundListening', DEFAULT_SETTINGS.backgroundListening),
     mutedSounds: muted,
     logSafeEvents: bool('logSafeEvents', DEFAULT_SETTINGS.logSafeEvents),
+
+    transcribeLocale:
+      typeof s.transcribeLocale === 'string' && isTranscribeLocale(s.transcribeLocale)
+        ? s.transcribeLocale
+        : DEFAULT_SETTINGS.transcribeLocale,
+    transcribeInterim: bool('transcribeInterim', DEFAULT_SETTINGS.transcribeInterim),
+    transcribePunctuation: bool('transcribePunctuation', DEFAULT_SETTINGS.transcribePunctuation),
+    transcribeOffline: bool('transcribeOffline', DEFAULT_SETTINGS.transcribeOffline),
+    transcribeTextScale: num(
+      'transcribeTextScale',
+      DEFAULT_SETTINGS.transcribeTextScale,
+      0,
+      TRANSCRIBE_TEXT_SCALES.length - 1,
+    ),
+    transcribeFlipped: bool('transcribeFlipped', DEFAULT_SETTINGS.transcribeFlipped),
 
     autoSos: bool('autoSos', DEFAULT_SETTINGS.autoSos),
     criticalHoldSeconds: num('criticalHoldSeconds', DEFAULT_SETTINGS.criticalHoldSeconds, 2, 30),
