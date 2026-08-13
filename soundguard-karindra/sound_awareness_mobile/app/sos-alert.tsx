@@ -10,13 +10,37 @@
  * It reads live settings: `sosCountdown` sets the abort window, `shareLocation`
  * decides whether GPS is resolved at all, `callFirstContact` adds the dial
  * hand-off, and `hapticFeedback` gates the escalating vibration.
+ *
+ * ── Two ways in ──────────────────────────────────────────────────────────────
+ *
+ *   ?auto=1    the threat escalation protocol expired. The user has *already*
+ *              had a full countdown with a cancel button in front of them, so
+ *              this screen does not make them sit through a second one — it
+ *              opens straight into transmitting. Making somebody abort twice is
+ *              not extra safety, it is a second chance to be too slow.
+ *
+ *   no params  opened by hand, from Settings' rehearsal or a manual trigger.
+ *              The abort countdown runs as normal.
+ *
+ *   ?drill=1   a rehearsal from the demo controls. Every step runs, including
+ *              the location fix, but the SMS composer is never opened. A demo
+ *              that can accidentally message somebody's family is not a demo.
+ *
+ * ── Why dispatch waits for the foreground ────────────────────────────────────
+ *
+ * When escalation fires while the phone is in a pocket, this screen mounts and
+ * runs with the app still backgrounded. The location fix and the contact lookup
+ * work there; the SMS composer does not — it is an Activity, and Android will
+ * not let a backgrounded app start one. So the message is prepared immediately
+ * and the composer is opened at the first moment the app is actually visible,
+ * rather than being fired into a void and silently lost.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Linking,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -37,8 +61,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 
@@ -46,6 +69,8 @@ import { radius, space, typography as typeScale } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useSettings } from '@/providers/SettingsProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { playSignature, type SignatureId } from '@/utils/hapticSignatures';
+import { notifySosDispatched } from '@/utils/notifications';
 import { getContacts, type EmergencyContact } from '@/utils/storage';
 
 // Fixed emergency palette — intentionally scheme-independent.
@@ -65,16 +90,24 @@ const CANCEL_THRESHOLD = 0.82;
 
 type Phase = 'countdown' | 'transmitting' | 'sent' | 'cancelled';
 
-function haptic(kind: 'tick' | 'urgent' | 'success' | 'heavy', enabled: boolean) {
-  if (!enabled || Platform.OS === 'web') return;
-  try {
-    if (kind === 'tick') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    else if (kind === 'urgent') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    else if (kind === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-  } catch {
-    /* ignore */
-  }
+/**
+ * The same semantic vocabulary the rest of the app uses, so the rhythm a user
+ * learned in the haptic dictionary is the rhythm they feel here.
+ */
+function haptic(id: SignatureId, enabled: boolean) {
+  playSignature(id, enabled);
+}
+
+/** Resolve once the app is genuinely on screen, or immediately if it already is. */
+function whenForeground(): Promise<void> {
+  if (AppState.currentState === 'active') return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      subscription.remove();
+      resolve();
+    });
+  });
 }
 
 // ─── Slide to cancel ─────────────────────────────────────────────────────────
@@ -150,9 +183,14 @@ export default function SosAlertScreen() {
   const r = useResponsive();
   const { width } = r;
 
+  const params = useLocalSearchParams<{ auto?: string; drill?: string }>();
+  // Read once. The params object is a fresh identity on every render, and a
+  // phase that could flip back to 'countdown' mid-dispatch would be a disaster.
+  const entry = useRef({ auto: params.auto === '1', drill: params.drill === '1' }).current;
+
   const total = Math.max(3, settings.sosCountdown);
-  const [remaining, setRemaining] = useState(total);
-  const [phase, setPhase] = useState<Phase>('countdown');
+  const [remaining, setRemaining] = useState(entry.auto ? 0 : total);
+  const [phase, setPhase] = useState<Phase>(entry.auto ? 'transmitting' : 'countdown');
   const [status, setStatus] = useState('');
   const [firstContact, setFirstContact] = useState<EmergencyContact | null>(null);
 
@@ -188,7 +226,7 @@ export default function SosAlertScreen() {
   useEffect(() => {
     if (phase !== 'countdown') return;
 
-    haptic('urgent', settings.hapticFeedback);
+    haptic('threat_armed', settings.hapticFeedback);
 
     tickRef.current = setInterval(() => {
       setRemaining((prev) => {
@@ -197,7 +235,7 @@ export default function SosAlertScreen() {
           setPhase('transmitting');
           return 0;
         }
-        haptic(prev <= 4 ? 'urgent' : 'tick', settings.hapticFeedback);
+        haptic(prev <= 4 ? 'threat_final' : 'threat_tick', settings.hapticFeedback);
         return prev - 1;
       });
     }, 1000);
@@ -213,29 +251,40 @@ export default function SosAlertScreen() {
     let cancelled = false;
 
     (async () => {
-      let locationLine = '';
+      /**
+       * Best-effort GPS fix, as a sentence to append to the message.
+       *
+       * Returns `null` when no coordinates were obtained, which the caller uses
+       * to decide whether a second attempt is worth making. That matters more
+       * than it looks: an automatic escalation runs with the phone in a pocket,
+       * and Android will not serve a foreground-location request to an app that
+       * is not visible. The first attempt usually fails there — so the caller
+       * tries again the moment the screen comes back, which is when it works.
+       */
+      const resolveLocation = async (): Promise<string | null> => {
+        try {
+          const { status: permission } = await Location.requestForegroundPermissionsAsync();
+          if (permission !== 'granted') return null;
+
+          const fix = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+          ]);
+          if (fix && typeof fix === 'object' && 'coords' in fix) {
+            const { latitude, longitude } = fix.coords;
+            return ` My location: https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+
+      let coordinates: string | null = null;
 
       if (settings.shareLocation) {
         setStatus('Resolving your location…');
-        try {
-          const { status: permission } = await Location.requestForegroundPermissionsAsync();
-          if (permission === 'granted') {
-            const fix = await Promise.race([
-              Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
-            ]);
-            if (fix && typeof fix === 'object' && 'coords' in fix) {
-              const { latitude, longitude } = fix.coords;
-              locationLine = ` My location: https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-            } else {
-              locationLine = ' Location could not be determined in time.';
-            }
-          } else {
-            locationLine = ' Location permission was not granted.';
-          }
-        } catch {
-          locationLine = ' Location could not be determined.';
-        }
+        coordinates = await resolveLocation();
       }
       if (cancelled) return;
 
@@ -250,13 +299,47 @@ export default function SosAlertScreen() {
 
       setFirstContact(contacts[0] ?? null);
       const numbers = contacts.map((c) => c.phone).filter(Boolean);
-      const message = `EMERGENCY — I need help. This alert was sent by SoundGuard.${locationLine}`;
 
-      if (numbers.length > 0) {
+      const composeMessage = () => {
+        const line = !settings.shareLocation
+          ? ''
+          : (coordinates ?? ' My location could not be determined.');
+        return `EMERGENCY — I need help. This alert was sent by SoundGuard.${line}`;
+      };
+
+      if (entry.drill) {
+        setStatus(
+          numbers.length > 0
+            ? `Drill: a message to ${numbers.length} contact${numbers.length > 1 ? 's' : ''} was prepared but not sent.`
+            : 'Drill: no contacts saved, so there was nobody to prepare a message for.',
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+      } else if (numbers.length > 0) {
+        // Reaching this screen from the background is the normal case for an
+        // automatic escalation, and an SMS composer cannot be opened from
+        // there. Prepare everything, then wait for the app to be visible.
+        if (AppState.currentState !== 'active') {
+          setStatus('Message ready. Waiting for the screen to be unlocked…');
+          void notifySosDispatched(
+            `A message to ${numbers.length} contact${numbers.length > 1 ? 's' : ''} is ready to send. Open SoundGuard to send it.`,
+          );
+          await whenForeground();
+          if (cancelled) return;
+
+          // Now that the app is visible, a location request will actually be
+          // served. Only worth doing if the first attempt came back empty —
+          // which, from the background, it almost always will have.
+          if (settings.shareLocation && !coordinates) {
+            setStatus('Getting your location…');
+            coordinates = await resolveLocation();
+          }
+        }
+        if (cancelled) return;
+
         setStatus(`Opening a message to ${numbers.length} contact${numbers.length > 1 ? 's' : ''}…`);
         try {
           if (await SMS.isAvailableAsync()) {
-            await SMS.sendSMSAsync(numbers, message);
+            await SMS.sendSMSAsync(numbers, composeMessage());
           } else {
             setStatus('SMS is unavailable on this device.');
             await new Promise((resolve) => setTimeout(resolve, 900));
@@ -270,20 +353,25 @@ export default function SosAlertScreen() {
       }
       if (cancelled) return;
 
-      haptic('success', settings.hapticFeedback);
+      haptic('sos_dispatched', settings.hapticFeedback);
       setPhase('sent');
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [phase, settings.hapticFeedback, settings.shareLocation]);
+  }, [phase, entry.drill, settings.hapticFeedback, settings.shareLocation]);
 
   // ── Auto-dismiss after success ──
   useEffect(() => {
     if (phase !== 'sent' && phase !== 'cancelled') return;
-    const delay = phase === 'cancelled' ? 700 : settings.callFirstContact && firstContact ? 8000 : 3500;
+    const delay =
+      phase === 'cancelled' ? 700 : settings.callFirstContact && firstContact ? 8000 : 3500;
     const timer = setTimeout(() => {
+      // Only auto-dismiss once the user is actually looking at this. Popping the
+      // screen while the phone is still in a pocket would erase the one record
+      // they have of what happened.
+      if (AppState.currentState !== 'active') return;
       if (router.canGoBack()) router.back();
     }, delay);
     return () => clearTimeout(timer);
@@ -291,7 +379,7 @@ export default function SosAlertScreen() {
 
   const handleCancel = useCallback(() => {
     if (tickRef.current) clearInterval(tickRef.current);
-    haptic('success', settings.hapticFeedback);
+    haptic('threat_cancelled', settings.hapticFeedback);
     setPhase('cancelled');
   }, [settings.hapticFeedback]);
 
@@ -319,16 +407,22 @@ export default function SosAlertScreen() {
 
   const heading =
     phase === 'sent'
-      ? 'SOS sent'
+      ? entry.drill
+        ? 'Drill complete'
+        : 'SOS sent'
       : phase === 'cancelled'
         ? 'Alert cancelled'
         : phase === 'transmitting'
-          ? 'Sending SOS'
+          ? entry.drill
+            ? 'Rehearsing SOS'
+            : 'Sending SOS'
           : 'Critical sound detected';
 
   const subheading =
     phase === 'sent'
-      ? 'Your Safety Circle has been notified.'
+      ? entry.drill
+        ? 'Nothing was sent. This was a rehearsal.'
+        : 'Your Safety Circle has been notified.'
       : phase === 'cancelled'
         ? 'No message was sent.'
         : phase === 'transmitting'
@@ -415,9 +509,11 @@ export default function SosAlertScreen() {
               </View>
               <Text style={[styles.timerCaption, { marginTop: space.xl }]}>
                 {phase === 'sent'
-                  ? settings.shareLocation
-                    ? 'Message prepared with your location.'
-                    : 'Message prepared without location.'
+                  ? entry.drill
+                    ? 'The full flow ran end to end. No message left this phone.'
+                    : settings.shareLocation
+                      ? 'Message prepared with your location.'
+                      : 'Message prepared without location.'
                   : 'Returning to monitoring.'}
               </Text>
             </>
@@ -433,7 +529,7 @@ export default function SosAlertScreen() {
             </>
           ) : null}
 
-          {phase === 'sent' && settings.callFirstContact && firstContact ? (
+          {phase === 'sent' && !entry.drill && settings.callFirstContact && firstContact ? (
             <Pressable
               onPress={handleCall}
               accessibilityRole="button"

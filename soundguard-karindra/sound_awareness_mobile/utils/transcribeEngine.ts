@@ -48,6 +48,7 @@ import {
 } from 'expo-speech-recognition';
 
 import { audioArbiter } from './audioArbiter';
+import { findTranscribeLocale } from './storage';
 
 /** Flip to true for verbose recogniser diagnostics in Metro. */
 const DEBUG = false;
@@ -106,6 +107,24 @@ export type TranscribeState = {
   error: string | null;
   /** True when the error is terminal and the user must act. */
   fatal: boolean;
+
+  // ── Language capability, read from the device rather than assumed ──
+  /**
+   * Every locale the device's recogniser will accept. Empty means "not known" —
+   * Android 12 and below cannot answer the question at all — and must therefore
+   * never be read as "nothing is supported".
+   */
+  supportedLocales: string[];
+  /** Locales with an offline pack already downloaded. */
+  installedLocales: string[];
+  /** True once the capability probe has actually run. */
+  localesProbed: boolean;
+  /**
+   * Where to go when the chosen language turned out to be unavailable. Set only
+   * after a real `language-not-supported`, so the UI offers a way forward
+   * instead of a dead end.
+   */
+  suggestedLocale: string | null;
 };
 
 export type TranscribeOptions = {
@@ -116,13 +135,14 @@ export type TranscribeOptions = {
 };
 
 export const DEFAULT_TRANSCRIBE_OPTIONS: TranscribeOptions = {
-  locale: 'en-US',
+  locale: 'en-IN',
   interimResults: true,
   addsPunctuation: true,
   preferOffline: false,
 };
 
 const NO_LINES: TranscriptLine[] = [];
+const NO_LOCALES: string[] = [];
 
 const INITIAL_STATE: TranscribeState = {
   status: 'idle',
@@ -135,6 +155,10 @@ const INITIAL_STATE: TranscribeState = {
   locale: DEFAULT_TRANSCRIBE_OPTIONS.locale,
   error: null,
   fatal: false,
+  supportedLocales: NO_LOCALES,
+  installedLocales: NO_LOCALES,
+  localesProbed: false,
+  suggestedLocale: null,
 };
 
 // ─── Error classification ────────────────────────────────────────────────────
@@ -169,7 +193,7 @@ function messageFor(code: ExpoSpeechRecognitionErrorCode): string {
     case 'service-not-allowed':
       return 'No speech recognition service is available on this device. Install or enable Google Speech Services, then try again.';
     case 'language-not-supported':
-      return 'This language pack is not installed on the device. Pick another English variant from the options panel.';
+      return 'This phone cannot recognise that language yet. Download the language pack from the options panel, or switch to another language.';
     case 'network':
       return 'Speech recognition needs a network connection for this language. Reconnect, or turn on on-device recognition in the options panel.';
     case 'audio-capture':
@@ -248,7 +272,15 @@ class TranscribeEngine {
   setOptions(next: TranscribeOptions) {
     const previous = this.options;
     this.options = next;
-    this.patch({ locale: next.locale });
+    this.patch({
+      locale: next.locale,
+      // A new language invalidates the previous language's suggestion, and any
+      // message telling the user the old one was unavailable.
+      suggestedLocale: previous.locale === next.locale ? this.state.suggestedLocale : null,
+      ...(previous.locale !== next.locale && this.state.fatal
+        ? { error: null, fatal: false }
+        : null),
+    });
 
     const needsRestart =
       this.shouldRun &&
@@ -279,13 +311,100 @@ class TranscribeEngine {
     }
   }
 
+  /**
+   * Ask the device which languages it can actually recognise.
+   *
+   * Offering Sinhala and Tamil is worth nothing if the picker cannot say
+   * whether *this* phone has them, so the language list is annotated from the
+   * platform's own answer rather than from an assumption baked into the app.
+   *
+   * Two honest limitations, both handled by the caller reading `localesProbed`
+   * and an empty list as "unknown" rather than "none":
+   *   • Android 12 and below cannot answer, and returns an empty array.
+   *   • iOS reports its own list, which never includes Sinhala.
+   */
+  async probeLocales(): Promise<void> {
+    try {
+      const result = await ExpoSpeechRecognitionModule.getSupportedLocales({});
+      this.patch({
+        supportedLocales: Array.isArray(result.locales) ? result.locales : NO_LOCALES,
+        installedLocales: Array.isArray(result.installedLocales)
+          ? result.installedLocales
+          : NO_LOCALES,
+        localesProbed: true,
+      });
+    } catch {
+      // "package_not_found", an OEM recogniser that refuses to answer, or an
+      // OS too old to be asked. Unknown, not unsupported.
+      this.patch({ localesProbed: true });
+    }
+  }
+
+  /**
+   * Whether a locale is known to work here.
+   *
+   * Returns true when the answer is unknown, deliberately: a user should be
+   * allowed to try Sinhala on a device that cannot enumerate its languages, and
+   * find out from a real attempt rather than from our guess.
+   */
+  isLocaleSupported(locale: string): boolean {
+    const supported = this.state.supportedLocales;
+    if (supported.length === 0) return true;
+    const language = locale.split('-')[0];
+    return supported.some(
+      (entry) => entry === locale || entry.replace('_', '-').split('-')[0] === language,
+    );
+  }
+
+  /** True when the locale has an offline pack, so recognition works with no data. */
+  isLocaleInstalled(locale: string): boolean {
+    return this.state.installedLocales.some((entry) => entry.replace('_', '-') === locale);
+  }
+
+  /**
+   * Ask Android to fetch the offline pack for a language.
+   *
+   * This is the fix for "Sinhala is listed but does not work" — on Android 13
+   * it opens the system download dialog, and on 14+ it downloads directly. iOS
+   * has no equivalent, and says so rather than pretending to work.
+   */
+  async downloadLanguage(locale: string): Promise<{ ok: boolean; message: string }> {
+    if (Platform.OS !== 'android') {
+      return {
+        ok: false,
+        message: 'Language packs are managed by iOS itself, under Settings → General → Keyboard → Dictation.',
+      };
+    }
+    try {
+      const result = await ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({
+        locale,
+      });
+      await this.probeLocales();
+      return {
+        ok: result.status !== 'download_canceled',
+        message:
+          result.status === 'download_success'
+            ? 'Language pack downloaded. On-device recognition is now available for this language.'
+            : result.status === 'opened_dialog'
+              ? 'The system download dialog was opened. Finish there, then come back.'
+              : 'The download was cancelled.',
+      };
+    } catch {
+      return {
+        ok: false,
+        message:
+          'This device could not download the language pack. It may need Android 13 or newer, or Google Speech Services.',
+      };
+    }
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   async start(): Promise<void> {
     if (this.state.status === 'starting') return;
 
     this.shouldRun = true;
-    this.patch({ status: 'starting', error: null, fatal: false });
+    this.patch({ status: 'starting', error: null, fatal: false, suggestedLocale: null });
 
     // Availability first: starting an absent recogniser produces a native
     // error event several seconds later, which reads as a hang.
@@ -585,7 +704,14 @@ class TranscribeEngine {
         fatal: true,
         interim: '',
         permission: code === 'not-allowed' ? 'denied' : this.state.permission,
+        // A missing language is the one fatal error with an obvious next step,
+        // so the UI is handed one instead of a dead end.
+        suggestedLocale:
+          code === 'language-not-supported'
+            ? (findTranscribeLocale(this.options.locale)?.fallback ?? 'en-IN')
+            : this.state.suggestedLocale,
       });
+      if (code === 'language-not-supported') void this.probeLocales();
       void audioArbiter.release('transcribe');
       return;
     }

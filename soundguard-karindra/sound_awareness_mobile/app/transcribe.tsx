@@ -1,8 +1,22 @@
 /**
  * SoundGuard — Live Transcribe
  * ─────────────────────────────────────────────────────────────────────────────
- * Speech turned into text a Deaf user can read across a table, and — with one
- * tap — text the *hearing person opposite* can read too.
+ * A two-way communication hub. Speech becomes text the Deaf user can read across
+ * a table; a typed reply becomes text the *hearing person opposite* can read.
+ * Both directions, one screen, one device, no hand-over.
+ *
+ * ── Two languages, not one ───────────────────────────────────────────────────
+ *
+ * This app is for Sri Lanka, and a captioning tool that only understands English
+ * is a tool that works in a lab and fails at a counter. Sinhala and Tamil are
+ * first-class choices in the language picker, listed in their own scripts, and
+ * the picker is annotated with what *this particular phone* can actually do —
+ * see `transcribeEngine.probeLocales`. Where a language pack is missing, the
+ * panel offers to download it rather than dead-ending on an error.
+ *
+ * The choice of language reaches further than the recogniser: it also selects
+ * which ready-made phrases the reply composer offers, so picking Sinhala for the
+ * speaker gives you Sinhala to answer with.
  *
  * ── Why this screen ignores the app's theme ──────────────────────────────────
  *
@@ -47,6 +61,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Linking,
   Modal,
   Pressable,
@@ -72,6 +88,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
+import { ReplyComposer } from '@/components/ReplyComposer';
 import { type IconName } from '@/components/ui';
 import { radius, space, typography as typeScale } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -83,7 +100,11 @@ import {
   useTranscribeState,
 } from '@/providers/TranscribeProvider';
 import { transcribeEngine } from '@/utils/transcribeEngine';
-import { TRANSCRIBE_LOCALES, TRANSCRIBE_TEXT_SCALES } from '@/utils/storage';
+import {
+  TRANSCRIBE_LOCALES,
+  TRANSCRIBE_TEXT_SCALES,
+  transcribeLocaleLabel,
+} from '@/utils/storage';
 
 // ─── Fixed high-contrast palette ─────────────────────────────────────────────
 // Deliberately scheme-independent. See the file header.
@@ -203,6 +224,8 @@ export default function TranscribeScreen() {
   const [flipped, setFlipped] = useState(settings.transcribeFlipped);
   const [scaleIndex, setScaleIndex] = useState(settings.transcribeTextScale);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [panel, setPanel] = useState({ width: 0, height: 0 });
 
   /**
@@ -320,6 +343,46 @@ export default function TranscribeScreen() {
     );
   }, []);
 
+  /**
+   * Open the reply surface.
+   *
+   * Captions keep running underneath. The recogniser owns the microphone, the
+   * keyboard owns the screen, and neither needs the other — a conversation
+   * where answering meant going deaf would not be a conversation.
+   */
+  const openReply = useCallback(() => {
+    setOptionsOpen(false);
+    setReplyOpen(true);
+  }, []);
+
+  const toggleReplyFlip = useCallback(() => {
+    update('replyFlipped', !settings.replyFlipped);
+  }, [settings.replyFlipped, update]);
+
+  /**
+   * Fetch a missing language pack.
+   *
+   * The single most valuable control on this screen for a Sri Lankan user: a
+   * phone that has never been asked for Sinhala does not have it, and without
+   * this the language is listed but permanently broken.
+   */
+  const downloadLanguage = useCallback(
+    async (locale: string) => {
+      if (downloading) return;
+      setDownloading(locale);
+      try {
+        const result = await actions.downloadLanguage(locale);
+        Alert.alert(
+          result.ok ? 'Language pack' : 'Could not download',
+          `${transcribeLocaleLabel(locale)}\n\n${result.message}`,
+        );
+      } finally {
+        setDownloading(null);
+      }
+    },
+    [actions, downloading],
+  );
+
   const statusText = starting
     ? 'Starting…'
     : listening
@@ -332,8 +395,9 @@ export default function TranscribeScreen() {
 
   const statusTone = listening ? LIVE : state.status === 'error' ? ALERT : MUTED;
 
-  const localeLabel =
-    TRANSCRIBE_LOCALES.find((locale) => locale.value === settings.transcribeLocale)?.label ??
+  const localeLabel = transcribeLocaleLabel(settings.transcribeLocale);
+  const localeNative =
+    TRANSCRIBE_LOCALES.find((locale) => locale.value === settings.transcribeLocale)?.native ??
     settings.transcribeLocale;
 
   return (
@@ -367,7 +431,7 @@ export default function TranscribeScreen() {
               {statusText}
             </Text>
             <Text style={styles.statusMeta} numberOfLines={1}>
-              {`· ${settings.transcribeLocale}`}
+              {`· ${localeNative}`}
             </Text>
           </View>
         </View>
@@ -383,7 +447,10 @@ export default function TranscribeScreen() {
         </Pressable>
       </View>
 
-      {/* ── Error / capability banner ── */}
+      {/* ── Error / capability banner ──
+          A fatal error with a known way forward always offers it inline. A
+          language that this phone cannot serve is the common case, and burying
+          the fix behind the options panel would strand the user mid-conversation. */}
       {state.error ? (
         <View style={[styles.banner, { marginHorizontal: r.hPadding }]}>
           <Ionicons name="alert-circle-outline" size={18} color={ALERT} />
@@ -396,6 +463,19 @@ export default function TranscribeScreen() {
               hitSlop={8}
             >
               <Text style={styles.bannerAction}>Settings</Text>
+            </Pressable>
+          ) : state.suggestedLocale ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Switch to ${transcribeLocaleLabel(state.suggestedLocale)}`}
+              onPress={() => update('transcribeLocale', state.suggestedLocale as string)}
+              hitSlop={8}
+            >
+              <Text style={styles.bannerAction} numberOfLines={1}>
+                Use{' '}
+                {TRANSCRIBE_LOCALES.find((l) => l.value === state.suggestedLocale)?.native ??
+                  state.suggestedLocale}
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -444,8 +524,8 @@ export default function TranscribeScreen() {
                 {!state.available
                   ? 'No speech recognition service is installed on this device.'
                   : listening
-                    ? 'Listening. Start speaking, or hand the phone to the person you are talking to.'
-                    : 'Tap the microphone below to start live captions.'}
+                    ? `Listening in ${localeNative}. Speech appears here — tap Reply to answer in writing.`
+                    : 'Tap Listen for live captions, or Reply to write something and show it.'}
               </Text>
             </View>
           )}
@@ -471,24 +551,48 @@ export default function TranscribeScreen() {
           </Text>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={listening ? 'Stop live captions' : 'Start live captions'}
-          accessibilityState={{ busy: starting }}
-          disabled={starting}
-          onPress={actions.toggle}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            listening ? styles.primaryButtonActive : null,
-            pressed && styles.pressed,
-            starting && { opacity: 0.6 },
-          ]}
-        >
-          <Ionicons name={listening ? 'stop' : 'mic'} size={24} color={BLACK} />
-          <Text style={styles.primaryLabel} numberOfLines={1}>
-            {starting ? 'Starting…' : listening ? 'Stop' : 'Start captions'}
-          </Text>
-        </Pressable>
+        {/* ── The two directions of the conversation, side by side ──
+            Listening and replying are peers, not a feature and a sub-feature,
+            so they get equal billing on the primary row. The reply button is
+            tinted rather than white so the two are distinguishable at a glance
+            and by touch position alone. */}
+        <View style={[styles.primaryRow, { gap: r.gap }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={listening ? 'Stop live captions' : 'Start live captions'}
+            accessibilityState={{ busy: starting }}
+            disabled={starting}
+            onPress={actions.toggle}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.primaryListen,
+              listening ? styles.primaryButtonActive : null,
+              pressed && styles.pressed,
+              starting && { opacity: 0.6 },
+            ]}
+          >
+            <Ionicons name={listening ? 'stop' : 'mic'} size={24} color={BLACK} />
+            <Text style={styles.primaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {starting ? 'Starting…' : listening ? 'Stop' : r.isNarrow ? 'Listen' : 'Start captions'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Type a reply to show the person you are talking to"
+            onPress={openReply}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.primaryReply,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="chatbox-ellipses" size={24} color={BLACK} />
+            <Text style={styles.primaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              Reply
+            </Text>
+          </Pressable>
+        </View>
 
         <View style={[styles.secondaryRow, { gap: r.gap }]}>
           <SecondaryButton
@@ -550,34 +654,85 @@ export default function TranscribeScreen() {
             contentContainerStyle={{ paddingBottom: space.lg }}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.sheetLabel}>Language</Text>
-            <View style={styles.optionGrid}>
+            <Text style={styles.sheetLabel}>Language spoken to you</Text>
+            <View style={styles.localeList}>
               {TRANSCRIBE_LOCALES.map((locale) => {
                 const active = settings.transcribeLocale === locale.value;
+                const supported = actions.isLocaleSupported(locale.value);
+                const installed = actions.isLocaleInstalled(locale.value);
+                const busy = downloading === locale.value;
+
                 return (
                   <Pressable
                     key={locale.value}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
-                    accessibilityLabel={locale.label}
+                    accessibilityLabel={`${locale.label}${supported ? '' : ', not available on this device'}`}
                     onPress={() => update('transcribeLocale', locale.value)}
                     style={({ pressed }) => [
-                      styles.optionChip,
-                      active && styles.optionChipActive,
+                      styles.localeRow,
+                      active && styles.localeRowActive,
                       pressed && styles.pressed,
                     ]}
                   >
-                    <Text
-                      style={[styles.optionChipText, active && styles.optionChipTextActive]}
-                      numberOfLines={1}
-                    >
-                      {locale.label}
-                    </Text>
+                    <View style={styles.localeText}>
+                      <Text
+                        style={[styles.localeNative, active && styles.localeNativeActive]}
+                        numberOfLines={1}
+                      >
+                        {locale.native}
+                      </Text>
+                      <Text
+                        style={[styles.localeMeta, active && { color: 'rgba(0,0,0,0.6)' }]}
+                        numberOfLines={1}
+                      >
+                        {locale.label}
+                        {installed ? ' · offline ready' : supported ? '' : ' · not on this device'}
+                      </Text>
+                    </View>
+
+                    {/* Downloading is offered for anything without an offline
+                        pack, not only for the unsupported ones: it is also what
+                        makes on-device recognition possible for a language the
+                        phone can currently only handle over the network. */}
+                    {installed ? (
+                      <Ionicons name="cloud-done-outline" size={18} color={active ? BLACK : LIVE} />
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Download the ${locale.label} language pack`}
+                        onPress={() => void downloadLanguage(locale.value)}
+                        disabled={busy}
+                        hitSlop={8}
+                        style={({ pressed }) => [styles.localeAction, pressed && styles.pressed]}
+                      >
+                        {busy ? (
+                          <ActivityIndicator size="small" color={active ? BLACK : WHITE} />
+                        ) : (
+                          <Ionicons
+                            name="cloud-download-outline"
+                            size={18}
+                            color={active ? BLACK : supported ? MUTED : ALERT}
+                          />
+                        )}
+                      </Pressable>
+                    )}
                   </Pressable>
                 );
               })}
             </View>
+            <Text style={styles.sheetHint}>
+              {state.localesProbed && state.supportedLocales.length === 0
+                ? 'This phone cannot list its languages, so all of them are offered. If one fails, download its pack with the arrow.'
+                : 'Downloading a pack lets that language work offline, and is usually what fixes a language the phone says it cannot recognise.'}
+            </Text>
 
+            <SheetToggle
+              label="Reply faces the other person"
+              description="Show your typed reply rotated 180°, so the phone can stay in your hand."
+              value={settings.replyFlipped}
+              onChange={(next) => update('replyFlipped', next)}
+            />
             <SheetToggle
               label="Show words as they are spoken"
               description="Partial results appear in grey and firm up when the sentence ends."
@@ -637,6 +792,23 @@ export default function TranscribeScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Type a reply"
+              onPress={openReply}
+              style={({ pressed }) => [styles.switchRow, pressed && styles.pressed]}
+            >
+              <Ionicons name="chatbox-ellipses" size={19} color={ACCENT} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Type a reply</Text>
+                <Text style={styles.switchDesc}>
+                  Write something and show it, full screen, to the person opposite. Captions keep
+                  running underneath.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={MUTED} />
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Switch to SoundGuard sound detection"
               onPress={switchToSoundGuard}
               style={({ pressed }) => [styles.switchRow, pressed && styles.pressed]}
@@ -652,7 +824,7 @@ export default function TranscribeScreen() {
             </Pressable>
 
             <Text style={styles.sheetFoot}>
-              Recognition is performed by {localeLabel} speech services built into this phone.
+              Recognition is performed by the {localeLabel} speech services built into this phone.
               SoundGuard never uploads audio of its own.
             </Text>
           </ScrollView>
@@ -667,6 +839,17 @@ export default function TranscribeScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      {/* ── The reply half of the conversation ──
+          Rendered here rather than as a route so the caption session underneath
+          is never unmounted: opening the keyboard must not stop listening. */}
+      <ReplyComposer
+        visible={replyOpen}
+        onClose={() => setReplyOpen(false)}
+        locale={settings.transcribeLocale}
+        flipped={settings.replyFlipped}
+        onToggleFlip={toggleReplyFlip}
+      />
     </View>
   );
 }
@@ -823,17 +1006,22 @@ const styles = StyleSheet.create({
   meterBar: { width: 3, height: 20, borderRadius: 2, backgroundColor: WHITE },
   wordCount: { fontSize: 11, color: MUTED, fontVariant: ['tabular-nums'] },
 
+  primaryRow: { flexDirection: 'row' },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.md,
+    gap: space.sm,
     minHeight: 62,
+    paddingHorizontal: space.sm,
     borderRadius: radius.lg,
     backgroundColor: WHITE,
   },
+  // Listening gets the larger share: it is the mode the screen is usually in.
+  primaryListen: { flex: 1.25 },
+  primaryReply: { flex: 1, backgroundColor: ACCENT },
   primaryButtonActive: { backgroundColor: ALERT },
-  primaryLabel: { fontSize: 17, fontWeight: '800', color: BLACK, letterSpacing: 0.2 },
+  primaryLabel: { fontSize: 16, fontWeight: '800', color: BLACK, letterSpacing: 0.2 },
 
   secondaryRow: { flexDirection: 'row', marginTop: space.md },
   secondaryButton: {
@@ -880,6 +1068,37 @@ const styles = StyleSheet.create({
     marginTop: space.xl,
     marginBottom: space.sm,
   },
+  sheetHint: { ...typeScale.caption, color: MUTED, lineHeight: 18, marginTop: space.md },
+
+  // ── Language list ──
+  // A row rather than a chip: two scripts, an English gloss and a download
+  // control do not fit in a pill, and a Sinhala speaker should not have to
+  // decode an abbreviation to find their own language.
+  localeList: { gap: 6 },
+  localeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: 12,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: LINE,
+    backgroundColor: SURFACE,
+  },
+  localeRowActive: { backgroundColor: WHITE, borderColor: WHITE },
+  localeText: { flex: 1 },
+  localeNative: { fontSize: 17, fontWeight: '700', color: WHITE },
+  localeNativeActive: { color: BLACK },
+  localeMeta: { fontSize: 11, color: MUTED, marginTop: 2 },
+  localeAction: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+  },
+
   optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   optionChip: {
     paddingHorizontal: 14,

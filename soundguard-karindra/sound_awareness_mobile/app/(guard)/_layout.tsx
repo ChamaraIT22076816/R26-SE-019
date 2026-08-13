@@ -31,10 +31,21 @@
  * re-opened underneath them. Anchoring the listener to this layout makes the
  * bug unrepresentable: the subscription is torn down with the mode, so there is
  * nothing left to resume into.
+ *
+ * ── Preference versus capability ─────────────────────────────────────────────
+ *
+ * Wanting to listen in the background is not the same as being able to. On
+ * Android the ability comes from the native microphone foreground service,
+ * which only exists in a build made with `plugins/withSoundGuardBackground.js`;
+ * without it, a backgrounded app reads pure silence from the microphone and
+ * reports nothing while looking perfectly healthy. So the setting is combined
+ * with the real capability, and where the capability is missing the pipeline is
+ * paused and resumed rather than left running deaf. iOS needs no such service —
+ * its background audio mode covers it — so the check is Android-only.
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { AppState, StyleSheet, type AppStateStatus } from 'react-native';
+import { AppState, Platform, StyleSheet, type AppStateStatus } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs } from 'expo-router';
@@ -43,6 +54,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSettings } from '@/providers/SettingsProvider';
 import { useColors } from '@/providers/ThemeProvider';
 import { audioArbiter } from '@/utils/audioArbiter';
+import { backgroundCapture } from '@/utils/backgroundService';
+import { clearAllNotifications } from '@/utils/notifications';
 import { soundEngine } from '@/utils/soundEngine';
 
 export default function GuardLayout() {
@@ -70,11 +83,25 @@ export default function GuardLayout() {
   );
 
   // ── Background behaviour, driven by the `backgroundListening` setting ──
+  //
+  // With the setting on, nothing happens here at all: the microphone foreground
+  // service started by `soundEngine.start()` is what actually keeps capture
+  // alive, and tearing the pipeline down on `background` would be precisely the
+  // bug this release fixes. With it off, monitoring is paused and — importantly
+  // — *remembered*, so returning to the app restores the state the user left.
   const autoPaused = useRef(false);
+
+  const canRunInBackground =
+    settings.backgroundListening &&
+    (Platform.OS !== 'android' || backgroundCapture.available);
 
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
       if (next === 'active') {
+        // Anything the OS showed while we were away has been superseded by the
+        // live UI the user is now looking at.
+        void clearAllNotifications();
+
         if (!autoPaused.current) return;
         autoPaused.current = false;
         // Resume only into a free microphone. Anything else means ownership
@@ -86,14 +113,14 @@ export default function GuardLayout() {
 
       // 'background' or 'inactive'
       if (soundEngine.getState().status !== 'listening') return;
-      if (settings.backgroundListening) return;
+      if (canRunInBackground) return;
       autoPaused.current = true;
       soundEngine.stop();
     };
 
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
-  }, [settings.backgroundListening]);
+  }, [canRunInBackground]);
 
   return (
     <Tabs

@@ -8,20 +8,29 @@
  *   Sensitivity           → engine RMS gate, confidence floor and analysis
  *                           cadence, applied on the next window (< 1.5 s)
  *   Night boost           → +1 sensitivity step between 21:00 and 06:00
- *   Background listening  → AppState handler in EngineProvider
- *   Haptics / Visual flash→ engine vibration and the global flash overlay
+ *   Background listening  → the microphone foreground service
+ *   Haptic signatures     → per-sound vibration rhythms, in app and in the
+ *                           notification channels
+ *   Visual flash          → the global flash overlay
+ *   Background alerts     → OS notifications while the app is not on screen
  *   Alert-me-to switches  → engine mute list, applied immediately
  *   Log routine sounds    → whether safe-class events reach history
- *   Automatic SOS + hold  → SosWatcher escalation
+ *   Threat escalation     → the inescapable safety check and its countdown
  *   SOS countdown         → abort window on the SOS screen
  *   Share location        → whether GPS is attached to the SOS message
  *   Call first contact    → dialer hand-off after dispatch
+ *
+ * Two rows report capability rather than preference: background listening is
+ * disabled outright when the binary has no native listening service, and the
+ * background-alerts description changes when the notification permission has
+ * been refused. A settings screen that offers a switch for something the device
+ * cannot do is worse than one that omits it.
  *
  * The screen never reads storage directly; SettingsProvider owns the value and
  * persists in the background, so a switch animates the instant it is touched.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +41,7 @@ import {
   AppButton,
   Card,
   Divider,
+  IconBadge,
   SectionLabel,
   SegmentedControl,
   SettingRow,
@@ -43,11 +53,20 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useEngineActions } from '@/providers/EngineProvider';
 import { useSettings } from '@/providers/SettingsProvider';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
+import { backgroundCapture } from '@/utils/backgroundService';
+import { SOUND_SIGNATURE_LIST, playSignature } from '@/utils/hapticSignatures';
+import {
+  getNotificationPermission,
+  notifyDetection,
+  requestNotificationPermission,
+  type NotificationPermission,
+} from '@/utils/notifications';
 import {
   SOUND_DISPLAY_NAMES,
   SOUND_ICONS,
   SOUND_LABELS,
   SOUND_THREAT,
+  TRANSCRIBE_LOCALES,
   TRANSCRIBE_TEXT_SCALES,
   clearDetectionLog,
   type SoundLabel,
@@ -60,6 +79,55 @@ const SENSITIVITY_COPY: Record<number, { name: string; detail: string }> = {
   4: { name: 'Responsive', detail: 'Picks up quieter sounds and checks more often.' },
   5: { name: 'Aggressive', detail: 'Maximum reach. Expect more false positives.' },
 };
+
+/**
+ * One entry in the vibration dictionary.
+ *
+ * Deliberately not an `ActionRow`: that ends in a chevron, which promises the
+ * row leads somewhere. This one plays a vibration and stays put, so it ends in a
+ * play affordance instead. On a screen whose whole purpose is teaching a user
+ * what a control will do before they need it under pressure, a misleading
+ * affordance is worse than an ugly one.
+ */
+function SignatureRow({
+  icon,
+  tint,
+  name,
+  rhythm,
+  hint,
+  onPress,
+}: {
+  icon: IconName;
+  tint: string;
+  name: string;
+  rhythm: string;
+  hint: string;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const c = useColors();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${name}, ${rhythm}`}
+      accessibilityHint={`Play this vibration. ${hint}`}
+      onPress={onPress}
+      android_ripple={{ color: alpha(c.text, 0.07) }}
+      style={({ pressed }) => [styles.signatureRow, pressed && { backgroundColor: c.surfaceHover }]}
+    >
+      <IconBadge icon={icon} color={tint} background={alpha(tint, 0.14)} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.signatureName}>{name}</Text>
+        <Text style={styles.signatureRhythm}>{rhythm}</Text>
+        <Text style={styles.signatureHint}>{hint}</Text>
+      </View>
+      <View style={[styles.signaturePlay, { borderColor: alpha(tint, 0.35) }]}>
+        <Ionicons name="play" size={15} color={tint} />
+      </View>
+    </Pressable>
+  );
+}
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.bg },
@@ -117,6 +185,47 @@ const useStyles = makeStyles((c) => ({
   },
   soundToggleText: { ...typeScale.captionStrong },
 
+  signatureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+  },
+  signatureName: { ...typeScale.subtitle, color: c.text },
+  signatureRhythm: { ...typeScale.captionStrong, color: c.textSecondary, marginTop: 1 },
+  signatureHint: { ...typeScale.caption, color: c.textMuted, marginTop: 3, lineHeight: 18 },
+  signaturePlay: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    // Optically centred: a play triangle's visual mass sits left of its box.
+    paddingLeft: 2,
+  },
+
+  dictionaryNote: {
+    ...typeScale.caption,
+    color: c.textMuted,
+    lineHeight: 18,
+    marginTop: space.md,
+    paddingHorizontal: space.xs,
+  },
+
+  localeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  localeChip: {
+    minWidth: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: c.border,
+    backgroundColor: c.surfaceAlt,
+  },
+  localeChipNative: { ...typeScale.bodyStrong, color: c.text },
+  localeChipMeta: { fontSize: 11, color: c.textMuted, marginTop: 1 },
+
   footer: { alignItems: 'center', gap: 4, paddingTop: space.xxxl },
   footerTitle: { ...typeScale.captionStrong, color: c.textSecondary },
   footerText: { ...typeScale.caption, color: c.textMuted, textAlign: 'center', lineHeight: 18 },
@@ -128,9 +237,51 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const r = useResponsive();
   const { settings, update, resetToDefaults } = useSettings();
-  const { testFlash } = useEngineActions();
+  const { testFlash, simulate } = useEngineActions();
 
   const copy = SENSITIVITY_COPY[settings.sensitivity] ?? SENSITIVITY_COPY[3]!;
+
+  // ── Honest reporting of what this build can actually do ──
+  // Background capture needs a native foreground service that only exists in a
+  // build made with the background config plugin, and notifications need a
+  // permission the user can revoke at any time. Both are read rather than
+  // assumed, so the screen never promises something the binary cannot deliver.
+  const [notificationPermission, setNotificationPermission] =
+    useState<NotificationPermission>('undetermined');
+
+  useEffect(() => {
+    let cancelled = false;
+    void getNotificationPermission().then((value) => {
+      if (!cancelled) setNotificationPermission(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const testNotification = useCallback(() => {
+    void (async () => {
+      const granted = await requestNotificationPermission();
+      setNotificationPermission(granted);
+      if (granted !== 'granted') {
+        Alert.alert(
+          'Notifications are off',
+          'SoundGuard cannot alert you while it is closed until notifications are allowed for this app in system settings.',
+        );
+        return;
+      }
+      await notifyDetection({
+        label: 'door_wood_knock',
+        name: 'Door Knock (test)',
+        confidence: 0.97,
+        threat: 'safe',
+      });
+      Alert.alert(
+        'Test alert posted',
+        'Lock your phone or swipe down to see it. A real alert uses the same vibration rhythm as the sound it reports.',
+      );
+    })();
+  }, []);
 
   const toggleSound = useCallback(
     (label: SoundLabel, alertMe: boolean) => {
@@ -293,8 +444,13 @@ export default function SettingsScreen() {
             icon="ear-outline"
             tint={c.safe}
             label="Keep listening in the background"
-            description="Continue monitoring when the app is not on screen. The system may still suspend it to save power."
-            value={settings.backgroundListening}
+            description={
+              backgroundCapture.available
+                ? 'Continue monitoring with the app closed or the screen locked. A permanent notice appears while this is running — Android requires it, and it is what allows the microphone to stay open.'
+                : 'Not available in this build. Background monitoring needs the native listening service, which is added by the next build of the app.'
+            }
+            value={settings.backgroundListening && backgroundCapture.available}
+            disabled={!backgroundCapture.available}
             onValueChange={(v) => update('backgroundListening', v)}
           />
           <Divider />
@@ -314,8 +470,8 @@ export default function SettingsScreen() {
           <SettingRow
             icon="pulse-outline"
             tint={c.primary}
-            label="Haptic feedback"
-            description="Vibrate when a sound is recognised. Critical sounds use a stronger pattern."
+            label="Haptic signatures"
+            description="Vibrate when a sound is recognised. Every sound has its own rhythm, so you can tell them apart without looking."
             value={settings.hapticFeedback}
             onValueChange={(v) => update('hapticFeedback', v)}
           />
@@ -328,6 +484,19 @@ export default function SettingsScreen() {
             value={settings.visualFlash}
             onValueChange={(v) => update('visualFlash', v)}
           />
+          <Divider />
+          <SettingRow
+            icon="notifications-circle-outline"
+            tint={c.accent}
+            label="Alerts when the app is closed"
+            description={
+              notificationPermission === 'denied'
+                ? 'Blocked in system settings. Tap Test below to see how to re-enable it.'
+                : 'Post a phone notification for sounds detected while SoundGuard is in the background, using that sound’s vibration rhythm.'
+            }
+            value={settings.backgroundAlerts}
+            onValueChange={(v) => update('backgroundAlerts', v)}
+          />
           <Divider inset={space.lg} />
           <ActionRow
             icon="eye-outline"
@@ -336,7 +505,48 @@ export default function SettingsScreen() {
             description="Fire the strobe now, whatever the switch above is set to."
             onPress={testFlash}
           />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="notifications-outline"
+            tint={c.accent}
+            label="Test a background alert"
+            description="Post a notification now, so you can check what one looks and feels like on the lock screen."
+            onPress={testNotification}
+          />
         </Card>
+
+        {/* ── The haptic dictionary ──
+            A vibration alphabet is only useful if it can be learned, and it
+            cannot be learned by waiting for a real siren. Every signature is
+            playable on demand, next to a description of its rhythm. This is the
+            single most important accessibility surface in the app for a user
+            who keeps the phone in a pocket. */}
+        <SectionLabel icon="hand-left-outline">Vibration dictionary</SectionLabel>
+        <Card padded={false}>
+          {SOUND_SIGNATURE_LIST.map((signature, index) => {
+            const label = signature.id as SoundLabel;
+            const threat = SOUND_THREAT[label];
+            const tint =
+              threat === 'critical' ? c.critical : threat === 'warning' ? c.warning : c.safe;
+            return (
+              <View key={signature.id}>
+                {index > 0 ? <Divider inset={space.lg} /> : null}
+                <SignatureRow
+                  icon={(SOUND_ICONS[label] ?? 'volume-high-outline') as IconName}
+                  tint={tint}
+                  name={SOUND_DISPLAY_NAMES[label]}
+                  rhythm={signature.rhythm}
+                  hint={signature.hint}
+                  onPress={() => playSignature(label, true)}
+                />
+              </View>
+            );
+          })}
+        </Card>
+        <Text style={styles.dictionaryNote}>
+          Tap any row to feel it. These are the same patterns the phone uses for notifications when
+          SoundGuard is closed, so what you learn here works everywhere.
+        </Text>
 
         {/* ── Sound classes ── */}
         <SectionLabel icon="volume-high-outline">Sounds to alert me to</SectionLabel>
@@ -411,20 +621,43 @@ export default function SettingsScreen() {
         <SectionLabel icon="chatbubbles-outline">Live Transcribe</SectionLabel>
         <Card padded={false}>
           <View style={styles.choiceBlock}>
-            <Text style={styles.choiceLabel}>Recognition language</Text>
-            <SegmentedControl
-              value={settings.transcribeLocale}
-              onChange={(value) => update('transcribeLocale', value)}
-              options={[
-                { value: 'en-US', label: 'US' },
-                { value: 'en-GB', label: 'UK' },
-                { value: 'en-IN', label: 'India' },
-                { value: 'en-AU', label: 'AU' },
-              ]}
-            />
+            <Text style={styles.choiceLabel}>Language spoken to you</Text>
+            <View style={styles.localeGrid}>
+              {TRANSCRIBE_LOCALES.map((locale) => {
+                const active = settings.transcribeLocale === locale.value;
+                return (
+                  <Pressable
+                    key={locale.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`${locale.native}, ${locale.label}`}
+                    onPress={() => update('transcribeLocale', locale.value)}
+                    style={({ pressed }) => [
+                      styles.localeChip,
+                      active && { backgroundColor: c.primary, borderColor: c.primary },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.localeChipNative, active && { color: c.onPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {locale.native}
+                    </Text>
+                    <Text
+                      style={[styles.localeChipMeta, active && { color: c.onPrimary, opacity: 0.8 }]}
+                      numberOfLines={1}
+                    >
+                      {locale.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <Text style={styles.choiceHint}>
-              English only. The device must have the matching language pack, which is what makes
-              offline recognition possible.
+              Sinhala and Tamil are supported wherever the phone has the language pack. Live
+              Transcribe checks this device and can download a missing pack from its own options
+              panel.
             </Text>
           </View>
           <Divider />
@@ -494,25 +727,26 @@ export default function SettingsScreen() {
           <SettingRow
             icon="alert-circle-outline"
             tint={c.critical}
-            label="Automatic SOS escalation"
-            description="Open the SOS countdown when a critical sound continues. You can always cancel."
+            label="Threat escalation protocol"
+            description="A critical sound locks the screen with a countdown until you confirm you are safe. If you do not, an SOS is sent for you."
             value={settings.autoSos}
             onValueChange={(v) => update('autoSos', v)}
           />
           <Divider />
           <View style={[styles.choiceBlock, !settings.autoSos && { opacity: 0.45 }]}>
-            <Text style={styles.choiceLabel}>Escalate after</Text>
+            <Text style={styles.choiceLabel}>Time to confirm you are safe</Text>
             <SegmentedControl
-              value={settings.criticalHoldSeconds}
-              onChange={(value) => update('criticalHoldSeconds', value)}
+              value={settings.threatCountdownSeconds}
+              onChange={(value) => update('threatCountdownSeconds', value)}
               options={[
-                { value: 3, label: '3 sec' },
-                { value: 6, label: '6 sec' },
                 { value: 10, label: '10 sec' },
+                { value: 15, label: '15 sec' },
+                { value: 30, label: '30 sec' },
               ]}
             />
             <Text style={styles.choiceHint}>
-              How long a critical sound must persist before the SOS countdown opens.
+              How long the warning stays on screen before the SOS is sent automatically. Longer is
+              safer against false alarms; shorter gets help faster if you cannot reach the phone.
             </Text>
           </View>
           <Divider />
@@ -554,6 +788,14 @@ export default function SettingsScreen() {
             label="Rehearse the SOS screen"
             description="Open the countdown so you know what it looks like. Nothing is sent unless it completes."
             onPress={() => router.push('/sos-alert')}
+          />
+          <Divider inset={space.lg} />
+          <ActionRow
+            icon="warning-outline"
+            tint={c.critical}
+            label="Rehearse the threat lock"
+            description="Simulate a siren. The full escalation runs, including the countdown — but it ends in a drill, and no message is ever sent."
+            onPress={() => simulate('siren')}
           />
         </Card>
 
@@ -603,7 +845,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>SoundGuard 3.0 · Dual mode</Text>
+          <Text style={styles.footerTitle}>SoundGuard 4.0 · Always on</Text>
           <Text style={styles.footerText}>
             Expo SDK 54 · ONNX Runtime Mobile · OS speech recognition{'\n'}
             Research build — R26-SE-019

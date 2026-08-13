@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "SoundGuard listens to your surroundings to recognise important sounds, and captions speech in real time. Audio is processed on this device and never uploaded by the app.",
-        "NSSpeechRecognitionUsageDescription": "SoundGuard uses speech recognition to turn what people say into large, high-contrast captions you can read and show to the person you are talking to."
+        "NSSpeechRecognitionUsageDescription": "SoundGuard uses speech recognition to turn what people say into large, high-contrast captions you can read and show to the person you are talking to.",
+        "NSLocationWhenInUseUsageDescription": "Your location is attached to an SOS message so the people in your Safety Circle know where to find you. It is used only when an SOS is sent.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
@@ -31,7 +33,12 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
       ]
     },
     "web": {
@@ -53,7 +60,14 @@
             "com.google.android.as"
           ]
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#F0475C"
+        }
+      ],
+      "./plugins/withSoundGuardBackground"
     ],
     "assetBundlePatterns": [
       "assets/**/*"

@@ -41,12 +41,35 @@
  *      softmax confidence floor
  *      top-1 vs top-2 margin
  *      consecutive agreeing windows required
+ *
+ * ── What happens after a detection ───────────────────────────────────────────
+ *
+ * `announce()` is the single fan-out point, and it is reached by real audio and
+ * by the demo triggers alike. Four consumers, in order of how likely they are to
+ * be the one that actually reaches the user:
+ *
+ *   1. the sound's haptic signature      (works in a pocket)
+ *   2. the screen strobe, if critical    (works face-up on a table)
+ *   3. an OS notification, if backgrounded
+ *   4. the threat escalation protocol, if critical
+ *
+ * Keeping them together — rather than scattered across the screens that happen
+ * to be mounted — is what makes "detected while the app was closed" behave
+ * identically to "detected while you were watching".
+ *
+ * ── Background execution ─────────────────────────────────────────────────────
+ *
+ * Since Android 11 a backgrounded app reads silence from the microphone rather
+ * than failing, which for a safety tool is the worst kind of failure: the
+ * pipeline looks healthy and hears nothing. `start()` therefore promotes the
+ * process to a microphone-typed foreground service before opening capture — at
+ * a moment when the app is by definition visible, which is also the only moment
+ * Android 12+ permits starting one. See `backgroundService.ts`.
  */
 
-import { PermissionsAndroid, Platform } from 'react-native';
+import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
 import { InferenceSession, Tensor } from 'onnxruntime-react-native';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { Buffer } from 'buffer';
@@ -66,6 +89,15 @@ import {
   toDb,
 } from './audio/gate';
 import { audioArbiter } from './audioArbiter';
+import { backgroundCapture } from './backgroundService';
+import { cancelSignature, playSignature } from './hapticSignatures';
+import {
+  clearAllNotifications,
+  ensureNotificationSetup,
+  notifyDetection,
+  requestNotificationPermission,
+} from './notifications';
+import { threatEscalation } from './threatEscalation';
 import {
   DEFAULT_SETTINGS,
   SOUND_DISPLAY_NAMES,
@@ -156,7 +188,6 @@ export type EngineState = {
   analyzing: boolean;
   /** True while the engine is learning the room's noise floor. */
   calibrating: boolean;
-  criticalHoldMs: number;
   lastLatencyMs: number;
   windowsAnalyzed: number;
   dismissed: SoundLabel[];
@@ -190,7 +221,6 @@ const INITIAL_STATE: EngineState = {
   detection: null,
   analyzing: false,
   calibrating: false,
-  criticalHoldMs: 0,
   lastLatencyMs: 0,
   windowsAnalyzed: 0,
   dismissed: NO_LABELS,
@@ -220,25 +250,9 @@ export async function requestMicrophonePermission(): Promise<boolean> {
   }
 }
 
-function vibrate(threat: ThreatLevel) {
-  if (Platform.OS === 'web') return;
-  try {
-    if (threat === 'critical') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setTimeout(() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-      }, 180);
-      setTimeout(() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-      }, 360);
-    } else if (threat === 'warning') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } else {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  } catch {
-    /* Haptics are decorative; never let them break detection. */
-  }
+/** True when the app is not the thing on screen. */
+function backgrounded(): boolean {
+  return AppState.currentState !== 'active';
 }
 
 // ─── Engine ──────────────────────────────────────────────────────────────────
@@ -373,7 +387,25 @@ class SoundEngine {
 
     const current = this.state.detection;
     if (current && settings.mutedSounds.includes(current.label)) {
-      this.patch({ detection: null, criticalHoldMs: 0 });
+      this.patch({ detection: null });
+    }
+
+    // The escalation protocol is configured from the same object, so it can
+    // never be reading a different generation of the user's preferences than
+    // the engine that feeds it.
+    threatEscalation.configure({
+      enabled: settings.autoSos,
+      countdownSeconds: settings.threatCountdownSeconds,
+      haptics: settings.hapticFeedback,
+      notifications: settings.backgroundAlerts,
+    });
+
+    // Turning background listening off mid-session gives the service back
+    // immediately rather than at the next start/stop cycle.
+    if (previous.backgroundListening && !settings.backgroundListening) {
+      void backgroundCapture.stop();
+    } else if (!previous.backgroundListening && settings.backgroundListening && this.running) {
+      void this.promoteToBackgroundService();
     }
   }
 
@@ -465,6 +497,17 @@ class SoundEngine {
    *
    * Permission is requested *before* acquiring, so a dialog the user leaves on
    * screen never blocks the other mode from releasing the hardware.
+   *
+   * ── Background readiness ─────────────────────────────────────────────────
+   *
+   * This is also the one moment at which the app is guaranteed to be visible
+   * and the user is unambiguously asking to be monitored, which makes it the
+   * only correct place to do two things:
+   *
+   *   • ask for notification permission — the request explains itself here, and
+   *     nowhere else;
+   *   • start the microphone foreground service — Android 12+ forbids starting
+   *     one from the background, so it has to be now or never.
    */
   async start(): Promise<void> {
     if (this.running || this.state.status === 'starting') return;
@@ -492,6 +535,21 @@ class SoundEngine {
 
     void this.loadModel();
 
+    // Both are deliberately awaited-but-tolerant: a refused notification
+    // permission or an unavailable service degrades the feature set, it does
+    // not stop monitoring. Neither can reject.
+    if (this.settings.backgroundAlerts) {
+      await requestNotificationPermission();
+    } else {
+      void ensureNotificationSetup();
+    }
+    if (!this.wanted) {
+      this.patch({ status: 'idle' });
+      return;
+    }
+
+    if (this.settings.backgroundListening) await this.promoteToBackgroundService();
+
     const acquired = await audioArbiter.acquire({
       id: 'soundguard',
       release: () => this.teardown(),
@@ -500,6 +558,7 @@ class SoundEngine {
 
     if (!acquired) {
       this.wanted = false;
+      void backgroundCapture.stop();
       log('capture failed');
       this.patch({
         status: 'error',
@@ -513,6 +572,22 @@ class SoundEngine {
     // the matching release behind us, but saying so explicitly keeps the state
     // machine readable — and both paths are idempotent.
     if (!this.wanted) this.stop();
+  }
+
+  /**
+   * Ask the OS to treat this process as foreground for microphone purposes.
+   *
+   * Resolves whatever happens. On iOS, on the web, and in a build made before
+   * the background plugin was added there is no service to start, and the app
+   * simply keeps its previous foreground-only behaviour — which is why nothing
+   * downstream branches on the result.
+   */
+  private async promoteToBackgroundService(): Promise<void> {
+    if (!backgroundCapture.available) return;
+    await backgroundCapture.start(
+      'SoundGuard is listening',
+      'Recognising important sounds around you. Audio never leaves this phone.',
+    );
   }
 
   /**
@@ -531,7 +606,6 @@ class SoundEngine {
     this.patch({
       status: 'listening',
       detection: null,
-      criticalHoldMs: 0,
       windowsAnalyzed: 0,
       dismissed: NO_LABELS,
       analyzing: false,
@@ -573,6 +647,15 @@ class SoundEngine {
     this.wanted = false;
     this.teardown();
     void audioArbiter.release('soundguard');
+
+    // Nothing is listening any more, so nothing may claim to be: silence any
+    // half-played signature, drop the shade entries and disarm a countdown that
+    // is no longer backed by a live pipeline. The foreground service is given
+    // back in `teardown`, which covers the hand-over to Live Transcribe as well
+    // as this deliberate stop.
+    cancelSignature();
+    threatEscalation.reset();
+    void clearAllNotifications();
   }
 
   /**
@@ -580,13 +663,19 @@ class SoundEngine {
    * calls back into the arbiter — it is the arbiter's own release callback.
    */
   private teardown(): void {
+    // Unconditionally, and before the early return: a microphone-typed
+    // foreground service that is not capturing is a permanent notification
+    // promising something untrue, and this runs on *every* way of losing the
+    // microphone — including the arbiter handing it to Live Transcribe, which
+    // never goes through `stop()`.
+    void backgroundCapture.stop();
+
     if (!this.running) {
       this.patch({
         status: this.state.status === 'error' ? 'error' : 'idle',
         detection: null,
         analyzing: false,
         calibrating: false,
-        criticalHoldMs: 0,
       });
       return;
     }
@@ -620,7 +709,6 @@ class SoundEngine {
       detection: null,
       analyzing: false,
       calibrating: false,
-      criticalHoldMs: 0,
       dismissed: NO_LABELS,
       gateOpen: false,
       levelDb: -120,
@@ -656,17 +744,10 @@ class SoundEngine {
     this.pendingLabel = null;
     this.pendingCount = 0;
 
-    this.patch({ detection: null, criticalHoldMs: 0 });
+    this.patch({ detection: null });
     this.syncDismissed();
 
-    if (this.settings.hapticFeedback) {
-      try {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } catch {
-        /* ignore */
-      }
-    }
-
+    playSignature('dismiss', this.settings.hapticFeedback);
     this.emit({ type: 'dismissed', label: current.label });
   }
 
@@ -691,7 +772,6 @@ class SoundEngine {
 
     this.patch({
       detection: null,
-      criticalHoldMs: 0,
       dismissed: NO_LABELS,
       windowsAnalyzed: 0,
       error: null,
@@ -699,47 +779,42 @@ class SoundEngine {
       gateOpen: false,
     });
 
-    if (this.settings.hapticFeedback) {
-      try {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch {
-        /* ignore */
-      }
-    }
+    // "Reset listening" means exactly that, so the escalation protocol's
+    // re-arm cool-offs are cleared too — otherwise a user who cancelled a
+    // false alarm would find the real one that follows silently swallowed.
+    threatEscalation.clearSuppressions();
 
+    playSignature('reset', this.settings.hapticFeedback);
     this.emit({ type: 'reset' });
   }
 
   /**
    * Publish a detection as if it had come from the microphone.
    *
-   * Deliberately does NOT pre-load the critical streak. An earlier version set
-   * it straight to the escalation threshold, so simulating a siren navigated to
-   * the SOS screen in the same frame — which covered the visual flash and made
-   * the strobe look broken. Escalation is now reached the same way real audio
-   * reaches it.
+   * Routed through the *same* `announce` fan-out as a real detection, so the
+   * demo exercises the real haptic signature, the real strobe policy, the real
+   * notification path and the real escalation protocol. A demo that runs
+   * through a parallel implementation proves nothing about the app.
+   *
+   * The escalation protocol still sees `simulated: true` and carries it through
+   * to the SOS screen as a drill, which is what stops a demo tap from opening a
+   * message to somebody's family.
    */
   simulate(label: SoundLabel): void {
     const now = Date.now();
-    const threat = SOUND_THREAT[label];
     const detection: Detection = {
       id: `sim-${label}-${now}`,
       label,
       name: SOUND_DISPLAY_NAMES[label],
       confidence: 0.93,
-      threat,
+      threat: SOUND_THREAT[label],
       firstSeen: now,
       lastSeen: now,
       simulated: true,
     };
 
-    this.patch({ detection, criticalHoldMs: 0 });
-
-    if (this.settings.hapticFeedback) vibrate(threat);
-    if (threat === 'critical' && this.settings.visualFlash) {
-      this.emit({ type: 'flash', reason: 'critical' });
-    }
-    this.emit({ type: 'detection', detection });
+    this.patch({ detection });
+    this.announce(detection);
   }
 
   /** Fire the screen strobe on demand, ignoring the setting. Used by Settings. */
@@ -978,7 +1053,7 @@ class SoundEngine {
         return;
       }
 
-      this.publish(label, confidence, profile.hopSeconds * 1000);
+      this.publish(label, confidence);
     } catch (err) {
       log('analysis error', err);
       this.expireDetection();
@@ -1044,7 +1119,7 @@ class SoundEngine {
     }
   }
 
-  private publish(label: SoundLabel, confidence: number, hopMs: number) {
+  private publish(label: SoundLabel, confidence: number) {
     const now = Date.now();
 
     if (this.settings.mutedSounds.includes(label)) {
@@ -1079,31 +1154,67 @@ class SoundEngine {
       simulated: false,
     };
 
-    const criticalHoldMs = threat === 'critical' ? this.state.criticalHoldMs + hopMs : 0;
+    this.patch({ detection });
 
-    this.patch({ detection, criticalHoldMs });
-
-    if (!isSameClass) {
-      if (this.settings.hapticFeedback) vibrate(threat);
-      if (threat === 'critical' && this.settings.visualFlash) {
-        this.emit({ type: 'flash', reason: 'critical' });
-      }
-      this.emit({ type: 'detection', detection });
-    }
+    // Everything below is "this is a *new* thing happening", not "the same
+    // thing is still happening". Re-firing the alert on every confirming window
+    // would turn a continuous siren into an unreadable buzz and a column of
+    // duplicate notifications.
+    if (!isSameClass) this.announce(detection);
 
     this.persist(detection);
   }
 
+  /**
+   * The alert fan-out: haptics, strobe, OS notification, escalation.
+   *
+   * Shared by real and simulated detections so the demo triggers exercise
+   * exactly the code path a microphone detection takes — a demo that runs
+   * through a second implementation is a demo that proves nothing.
+   */
+  private announce(detection: Detection) {
+    const { threat, label } = detection;
+
+    // 1. Haptic signature. The primary output channel for a Deaf user, and the
+    //    only one that works with the phone in a pocket.
+    playSignature(label, this.settings.hapticFeedback);
+
+    // 2. Screen strobe, for a phone lying face up on a table.
+    if (threat === 'critical' && this.settings.visualFlash) {
+      this.emit({ type: 'flash', reason: 'critical' });
+    }
+
+    // 3. System notification, but only when the app is not the thing on screen.
+    //    In the foreground the detection card is already the alert; posting as
+    //    well would stack the shade with things the user has already seen.
+    if (this.settings.backgroundAlerts && backgrounded()) {
+      void notifyDetection({
+        label,
+        name: detection.name,
+        confidence: detection.confidence,
+        threat,
+      });
+    }
+
+    // 4. Escalation. The protocol decides for itself whether to arm — it owns
+    //    the enabled switch, the re-arm suppression and the countdown.
+    if (threat === 'critical') {
+      threatEscalation.consider({
+        label,
+        name: detection.name,
+        confidence: detection.confidence,
+        simulated: detection.simulated,
+      });
+    }
+
+    this.emit({ type: 'detection', detection });
+  }
+
   private expireDetection() {
     const current = this.state.detection;
-    if (!current) {
-      if (this.state.criticalHoldMs !== 0) this.patch({ criticalHoldMs: 0 });
-      return;
-    }
+    if (!current) return;
     if (Date.now() - current.lastSeen >= DETECTION_HOLD_MS) {
-      this.patch({ detection: null, criticalHoldMs: 0 });
-    } else if (this.state.criticalHoldMs !== 0) {
-      this.patch({ criticalHoldMs: 0 });
+      this.patch({ detection: null });
     }
   }
 
