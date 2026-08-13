@@ -72,7 +72,10 @@ export function RecordView() {
   )
 
   function beginCountdown() {
-    if (tracking.status !== 'running' || !gloss.trim()) return
+    // Signer is required: a reference whose performer is unknown cannot be
+    // traced back or replaced later, and provenance is the whole point of
+    // distinguishing team stand-ins from authoritative SSL.
+    if (tracking.status !== 'running' || !gloss.trim() || !signer.trim()) return
     setReview(null)
     setCount(COUNTDOWN_S)
     setPhase('countdown')
@@ -239,12 +242,14 @@ export function RecordView() {
               <button
                 className="btn"
                 onClick={beginCountdown}
-                disabled={tracking.status !== 'running' || !gloss.trim()}
+                disabled={tracking.status !== 'running' || !gloss.trim() || !signer.trim()}
                 title={
                   tracking.status !== 'running'
                     ? 'Start the camera first'
                     : !gloss.trim()
                       ? 'Choose a gloss first'
+                      : !signer.trim()
+                        ? 'Enter who is signing first'
                       : undefined
                 }
               >

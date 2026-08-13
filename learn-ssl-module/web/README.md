@@ -125,10 +125,21 @@ trajectories; points feedback at the finger that deviates.
 The Practice tab logs every attempt and pre-selects the suggested sign (★);
 the Progress tab shows summary tiles and per-sign mastery, weakest first.
 
-## Scenario: Social Gathering (Introductions)
+## Scenarios
 
 `src/scenario/` + `src/data/scenarios/` run a scripted conversation where each
-turn asks for **one** sign, scored through the existing DTW path.
+turn asks for **one** sign, scored through the existing DTW path. Two of the
+five proposal-approved scenarios ship:
+
+| Scenario | Turns | Reference source |
+|---|---|---|
+| **Social Gathering (Introductions)** | 7 (ME, YOU, NAME, WHAT, WHERE, CAN, YOUR) | Team recordings — *provisional*. Aligned with Malkith's avatar glosses, so this is the integration demo. |
+| **Restaurant** | 5 (KANAWA, BONAWA, 500, MILADII GANNAWA, BILPATHA) | Kaggle corpus — **real signers**. Demo this when reference quality matters. |
+
+Verified end to end: with the Restaurant vocabulary loaded, a correct
+performance scores 100 and performing a *different* sign from the same scenario
+scores 33 or below with appropriateness 0 and the confusion named — including
+the visually similar KANAWA/BONAWA pair. ~9 ms per turn.
 
 - **Data-driven.** A scenario is a JSON file listing turns
   (`partnerLine`, `prompt`, `gloss`, `hint`). Adding another of the five
@@ -206,6 +217,10 @@ Two design points worth stating explicitly:
 - **Practice chips need grouping.** The tab lists all 80 references as a flat
   chip list. It needs a category filter or search before the remaining
   categories (numbers, months, everyday words — ~66 more clips) are converted.
-- **Verb glosses are Sinhala transliterations** (`KANAWA`, `BONAWA`), taken from
-  the dataset's own filenames. English translations need a human who reads
-  Sinhala; add them as a display field, never by guessing.
+- **67 of 141 glosses still have no English meaning.** Glosses are the dataset's
+  own Sinhala transliterations (`KANAWA`, `ADINAWA`), which a hearing learner
+  cannot act on. `src/data/translations.ts` holds *human-verified* meanings only
+  — 4 confirmed so far, the rest listed there as commented lines to fill in.
+  A missing meaning displays as the bare gloss, which is the safe default;
+  never guess one, since a wrong meaning teaches the learner the wrong word.
+  Letters, numbers and months need no entry.

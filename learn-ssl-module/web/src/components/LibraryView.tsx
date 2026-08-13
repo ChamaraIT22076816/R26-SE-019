@@ -3,6 +3,7 @@ import type { SignRecording } from '../vision/types'
 import { deleteRecording, listRecordings, saveRecording } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
 import { SkeletonPlayer } from './SkeletonPlayer'
+import { glossLabel, translationOf } from '../data/translations'
 
 interface Row {
   rec: SignRecording
@@ -162,8 +163,8 @@ export function LibraryView() {
           {rows.map(({ rec, bundled: isBundled }) => (
             <li className="rec-row" key={rec.id}>
               <div className="rec-main">
-                <span className="rec-gloss">
-                  {rec.gloss}
+                <span className="rec-gloss" title={translationOf(rec.gloss)}>
+                  {glossLabel(rec.gloss)}
                   {isBundled && <em className="badge">bundled</em>}
                   {rec.provisional && (
                     <em

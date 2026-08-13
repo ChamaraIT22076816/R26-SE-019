@@ -11,6 +11,7 @@ import { RUBRIC_BASIS, RUBRIC_LABEL, scoreTurn } from '../scenario/rubric'
 import type { RubricComponent, TurnScore } from '../scenario/rubric'
 import type { Scenario, ScenarioTurn } from '../scenario/types'
 import { SCENARIOS } from '../data/scenarios'
+import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
@@ -51,7 +52,8 @@ function RubricBars({ score }: { score: TurnScore }) {
  * blocking the scenario.
  */
 export function ScenarioView() {
-  const scenario: Scenario = SCENARIOS[0]
+  const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id)
+  const scenario: Scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]
 
   const [references, setReferences] = useState<Map<string, SignRecording>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -154,6 +156,31 @@ export function ScenarioView() {
           <h2>{scenario.title}</h2>
           <span className="library-count">{scenario.subtitle}</span>
         </div>
+
+        {SCENARIOS.length > 1 && (
+          <div className="gloss-chips">
+            {SCENARIOS.map((s) => {
+              const covered = s.turns.filter((t) => references.has(t.gloss)).length
+              return (
+                <button
+                  key={s.id}
+                  className={s.id === scenario.id ? 'chip active' : 'chip'}
+                  onClick={() => {
+                    // Results belong to the scenario they came from.
+                    setScenarioId(s.id)
+                    setIndex(0)
+                    setOutcomes([])
+                    setCurrent(null)
+                  }}
+                  title={`${covered} of ${s.turns.length} turns have a reference`}
+                >
+                  {s.title} {covered}/{s.turns.length}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <p className="hint-text">{scenario.description}</p>
 
         {loading ? (
@@ -163,7 +190,9 @@ export function ScenarioView() {
             <ol className="turn-preview">
               {scenario.turns.map((t) => (
                 <li key={t.id} className={references.has(t.gloss) ? '' : 'pending'}>
-                  <span className="rec-gloss">{t.gloss}</span>
+                  <span className="rec-gloss" title={translationOf(t.gloss)}>
+                    {glossLabel(t.gloss)}
+                  </span>
                   <span className="turn-prompt">{t.prompt}</span>
                   {!references.has(t.gloss) && <em className="badge">reference pending</em>}
                 </li>
@@ -352,7 +381,7 @@ export function ScenarioView() {
         </div>
 
         <p className="partner-line">{turn.partnerLine}</p>
-        <h2>Sign: {turn.gloss}</h2>
+        <h2>Sign: {glossLabel(turn.gloss)}</h2>
         <p className="hint-text">{turn.prompt}</p>
 
         {current ? (
