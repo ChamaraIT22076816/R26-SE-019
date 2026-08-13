@@ -5,6 +5,7 @@ import { listRecordings } from '../storage/recordingStore'
 import { loadBundledRecordings } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
 import { categoriesIn, categoryOf } from '../data/categories'
+import { glossLabel, matchesSearch, translationOf } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { suggestNext, summarizeAll } from '../learner/mastery'
@@ -179,11 +180,13 @@ export function PracticeView() {
   // converted), so it is searchable and grouped rather than one flat list.
   const categories = useMemo(() => categoriesIn(references), [references])
   const visible = useMemo(() => {
-    const needle = query.trim().toUpperCase()
+    const needle = query.trim()
     return references.filter(
       (r) =>
         (category === null || categoryOf(r) === category) &&
-        (needle === '' || r.gloss.includes(needle)),
+        // Matches the gloss or its English meaning, so a learner can find
+        // KANAWA by typing "eat".
+        matchesSearch(r.gloss, needle),
     )
   }, [references, query, category])
 
@@ -385,6 +388,7 @@ export function PracticeView() {
                         className={selected?.id === r.id ? 'chip active' : 'chip'}
                         onClick={() => setSelected(r)}
                         disabled={inputsLocked}
+                        title={translationOf(r.gloss)}
                       >
                         {r.gloss === suggested ? `${r.gloss} ★` : r.gloss}
                       </button>
@@ -394,7 +398,7 @@ export function PracticeView() {
 
                 {selected && (
                   <div className="reference-preview">
-                    <p className="compare-label">Sign this:</p>
+                    <p className="compare-label">Sign this: {glossLabel(selected.gloss)}</p>
                     {selected.provisional && (
                       <p className="provisional-note">
                         Provisional reference — recorded by the team to unblock development, not

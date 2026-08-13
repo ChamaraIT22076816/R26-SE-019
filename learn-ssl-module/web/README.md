@@ -217,8 +217,10 @@ Two design points worth stating explicitly:
 - **Practice chips need grouping.** The tab lists all 80 references as a flat
   chip list. It needs a category filter or search before the remaining
   categories (numbers, months, everyday words — ~66 more clips) are converted.
-- **Verb glosses are Sinhala transliterations** (`KANAWA`, `BONAWA`), taken from
-  the dataset's own filenames. English translations need a human who reads
-  Sinhala; add them as a display field, never by guessing. **The Restaurant
-  scenario's turn text assumes KANAWA=eat, BONAWA=drink, BILPATHA=bill,
-  MILADII GANNAWA=buy — unverified, flagged in the script's `_draftNote`.**
+- **67 of 141 glosses still have no English meaning.** Glosses are the dataset's
+  own Sinhala transliterations (`KANAWA`, `ADINAWA`), which a hearing learner
+  cannot act on. `src/data/translations.ts` holds *human-verified* meanings only
+  — 4 confirmed so far, the rest listed there as commented lines to fill in.
+  A missing meaning displays as the bare gloss, which is the safe default;
+  never guess one, since a wrong meaning teaches the learner the wrong word.
+  Letters, numbers and months need no entry.

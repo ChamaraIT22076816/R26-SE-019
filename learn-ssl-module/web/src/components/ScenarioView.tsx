@@ -11,6 +11,7 @@ import { RUBRIC_BASIS, RUBRIC_LABEL, scoreTurn } from '../scenario/rubric'
 import type { RubricComponent, TurnScore } from '../scenario/rubric'
 import type { Scenario, ScenarioTurn } from '../scenario/types'
 import { SCENARIOS } from '../data/scenarios'
+import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
@@ -189,7 +190,9 @@ export function ScenarioView() {
             <ol className="turn-preview">
               {scenario.turns.map((t) => (
                 <li key={t.id} className={references.has(t.gloss) ? '' : 'pending'}>
-                  <span className="rec-gloss">{t.gloss}</span>
+                  <span className="rec-gloss" title={translationOf(t.gloss)}>
+                    {glossLabel(t.gloss)}
+                  </span>
                   <span className="turn-prompt">{t.prompt}</span>
                   {!references.has(t.gloss) && <em className="badge">reference pending</em>}
                 </li>
@@ -378,7 +381,7 @@ export function ScenarioView() {
         </div>
 
         <p className="partner-line">{turn.partnerLine}</p>
-        <h2>Sign: {turn.gloss}</h2>
+        <h2>Sign: {glossLabel(turn.gloss)}</h2>
         <p className="hint-text">{turn.prompt}</p>
 
         {current ? (

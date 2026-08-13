@@ -3,7 +3,7 @@
   "title": "Restaurant",
   "subtitle": "Ordering a meal and settling the bill",
   "description": "You have sat down at a small restaurant. Work through ordering, asking the price, and paying — one sign at a time.",
-  "_draftNote": "DRAFT — pending validation by an SSL teacher (School for the Deaf, Ratmalana), on TWO counts. (1) The turn order is authored by the development team, not by a signer. (2) The English meanings assumed for the Sinhala dataset labels are UNVERIFIED — assumed here: KANAWA=eat, BONAWA=drink, BILPATHA=bill, MILADII GANNAWA=buy. If any of those are wrong, the turn text is wrong. Each turn asks for exactly ONE gloss; the surrounding text is English context describing intent, never a claim about SSL word order.",
+  "_draftNote": "DRAFT conversational order — pending validation by an SSL teacher (School for the Deaf, Ratmalana). The turn order is authored by the development team, not by a signer. The English meanings used here (KANAWA=eat, BONAWA=drink, BILPATHA=bill, MILADII GANNAWA=buy) were confirmed by a native Sinhala speaker in Aug 2026. Each turn asks for exactly ONE gloss; the surrounding text is English context describing intent, never a claim about SSL word order.",
   "turns": [
     {
       "id": "order-food",
