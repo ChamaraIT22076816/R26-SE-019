@@ -51,7 +51,8 @@ function RubricBars({ score }: { score: TurnScore }) {
  * blocking the scenario.
  */
 export function ScenarioView() {
-  const scenario: Scenario = SCENARIOS[0]
+  const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id)
+  const scenario: Scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]
 
   const [references, setReferences] = useState<Map<string, SignRecording>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -154,6 +155,31 @@ export function ScenarioView() {
           <h2>{scenario.title}</h2>
           <span className="library-count">{scenario.subtitle}</span>
         </div>
+
+        {SCENARIOS.length > 1 && (
+          <div className="gloss-chips">
+            {SCENARIOS.map((s) => {
+              const covered = s.turns.filter((t) => references.has(t.gloss)).length
+              return (
+                <button
+                  key={s.id}
+                  className={s.id === scenario.id ? 'chip active' : 'chip'}
+                  onClick={() => {
+                    // Results belong to the scenario they came from.
+                    setScenarioId(s.id)
+                    setIndex(0)
+                    setOutcomes([])
+                    setCurrent(null)
+                  }}
+                  title={`${covered} of ${s.turns.length} turns have a reference`}
+                >
+                  {s.title} {covered}/{s.turns.length}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <p className="hint-text">{scenario.description}</p>
 
         {loading ? (
