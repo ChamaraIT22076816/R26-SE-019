@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { listAttempts } from '../learner/attemptLog'
+import { buildExport, downloadFile, toCsv } from '../pilot/exportResults'
+
+const PARTICIPANT_KEY = 'ssl-learn-participant'
 import { practiceNeed, summarizeAll } from '../learner/mastery'
 import type { GlossMastery, MasteryLevel } from '../learner/mastery'
 import { listRecordings } from '../storage/recordingStore'
@@ -55,6 +58,20 @@ export function ProgressView() {
   const [attemptCount, setAttemptCount] = useState(0)
   const [avgRecent, setAvgRecent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [participantCode, setParticipantCode] = useState(
+    () => localStorage.getItem(PARTICIPANT_KEY) ?? '',
+  )
+
+  async function exportResults(format: 'json' | 'csv') {
+    const data = buildExport(participantCode, await listAttempts())
+    const stamp = data.exportedAt.slice(0, 10)
+    const base = `ssl-learn_${data.participantCode}_${stamp}`.replace(/[^\w.-]+/g, '_')
+    if (format === 'csv') {
+      downloadFile(`${base}.csv`, toCsv(data), 'text/csv')
+    } else {
+      downloadFile(`${base}.json`, JSON.stringify(data, null, 2), 'application/json')
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -88,6 +105,35 @@ export function ProgressView() {
         <h2>Progress</h2>
         <span className="library-count">sorted by what needs practice</span>
       </div>
+
+      {attemptCount > 0 && (
+        <div className="pilot-export">
+          <label className="field">
+            Participant code (for the study — not your name)
+            <input
+              type="text"
+              value={participantCode}
+              onChange={(e) => {
+                setParticipantCode(e.target.value)
+                localStorage.setItem(PARTICIPANT_KEY, e.target.value)
+              }}
+              placeholder="e.g. P01"
+            />
+          </label>
+          <div className="row-buttons">
+            <button className="btn btn-ghost" onClick={() => void exportResults('json')}>
+              Export results (JSON)
+            </button>
+            <button className="btn btn-ghost" onClick={() => void exportResults('csv')}>
+              Export results (CSV)
+            </button>
+          </div>
+          <p className="hint-text">
+            Your attempts stay in this browser until you export them. Send the file to the
+            researcher — it contains your scores, never any video.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <p className="empty-state">Loading…</p>

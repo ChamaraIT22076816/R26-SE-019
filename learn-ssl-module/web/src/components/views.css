@@ -458,6 +458,20 @@
 
 /* ---- progress dashboard ---- */
 
+.pilot-export {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.pilot-export .field input {
+  max-width: 220px;
+}
+
 .stat-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

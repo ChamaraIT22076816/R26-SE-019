@@ -32,6 +32,37 @@ Requires a webcam. `npm run build` produces a static `dist/` deployable anywhere
   `SkeletonPlayer` (replays recordings from landmarks alone — no video is stored).
 - `src/storage/recordingStore.ts` — recordings persist in IndexedDB.
 
+## Deploying (needed for user testing)
+
+The camera needs a secure context. `localhost` counts, but nobody else can reach
+your laptop — so a pilot requires a deployment.
+
+The app is a static build with no backend, so Vercel needs almost nothing:
+
+1. Import the repo at vercel.com → **New Project**.
+2. Set **Root Directory** to `learn-ssl-module/web`. This is the only setting
+   that matters; the rest is in `vercel.json`.
+3. Deploy. `npm install` runs the postinstall that vendors the MediaPipe WASM
+   runtime, so no extra build step is needed.
+
+First load pulls ~21 MB (7.8 MB hand model + reference recordings); `vercel.json`
+caches those immutably, so it is a one-off per participant.
+
+### Running a pilot session
+
+Attempts stay in the participant's own browser — nothing is uploaded, and no
+video is ever captured to disk, which is what keeps the ethics story simple. To
+collect data, have each participant open **Progress**, enter the participant
+code you assign them (a code, never their name), and hit **Export results**:
+
+- **CSV** — one row per attempt, for a spreadsheet or stats tool.
+- **JSON** — the same data plus per-sign summaries including `firstScore` and
+  `lastScore`, which is what a learning-gain measure is computed from.
+
+They send you the file. Each participant needs their own browser profile or
+device — two people sharing one browser share one IndexedDB and their data will
+merge.
+
 ## Reference recordings
 
 References ship bundled in `public/references/` (listed in `manifest.json`) and
