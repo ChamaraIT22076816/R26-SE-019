@@ -57,7 +57,8 @@ import 'react-native-reanimated';
 
 import { AudioGovernor } from '@/components/AudioGovernor';
 import { FlashOverlay } from '@/components/FlashOverlay';
-import { SosWatcher } from '@/components/SosWatcher';
+import { NotificationRouter } from '@/components/NotificationRouter';
+import { ThreatLockOverlay } from '@/components/ThreatLockOverlay';
 import { EngineProvider } from '@/providers/EngineProvider';
 import { SettingsProvider, useSettings } from '@/providers/SettingsProvider';
 import { ThemeProvider, useTheme } from '@/providers/ThemeProvider';
@@ -178,9 +179,14 @@ function AppShell() {
       </Stack>
 
       {/* Route-independent behaviour. Plain siblings of the navigator — none of
-          them creates navigation state. */}
+          them creates navigation state.
+
+          Order matters for the two overlays: the threat lock covers every route,
+          and the flash covers the lock. A strobe over the warning is legible; a
+          warning over the strobe would hide it. */}
       <AudioGovernor />
-      <SosWatcher />
+      <NotificationRouter />
+      <ThreatLockOverlay />
       <FlashOverlay />
 
       {/* Cosmetic boot cover. Painted over a live navigator so the first-run

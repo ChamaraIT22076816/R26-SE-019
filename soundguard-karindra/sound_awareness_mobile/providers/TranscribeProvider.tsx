@@ -38,6 +38,12 @@ export type TranscribeActions = {
   fullText: () => string;
   /** Re-check whether the device has a usable recogniser. */
   probe: () => boolean;
+  /** Is this language known to work on this device? Unknown counts as yes. */
+  isLocaleSupported: (locale: string) => boolean;
+  /** Does this language have an offline pack, so it works without a network? */
+  isLocaleInstalled: (locale: string) => boolean;
+  /** Ask Android to fetch a language pack. */
+  downloadLanguage: (locale: string) => Promise<{ ok: boolean; message: string }>;
 };
 
 type TranscribeContextValue = {
@@ -56,6 +62,9 @@ const FALLBACK: TranscribeContextValue = {
     clear: noop,
     fullText: () => '',
     probe: () => false,
+    isLocaleSupported: () => true,
+    isLocaleInstalled: () => false,
+    downloadLanguage: async () => ({ ok: false, message: '' }),
   },
   // Replaced by the provider; never read before it mounts.
   level: { value: 0 } as SharedValue<number>,
@@ -78,8 +87,14 @@ export function TranscribeProvider({ children }: PropsWithChildren) {
   }, [level]);
 
   // ── Capability probe, so the dashboard can be honest before anything opens ──
+  //
+  // The language probe is asynchronous and touches the platform recogniser, so
+  // it runs once here rather than from the picker: by the time somebody opens
+  // the language list, the answer is already in state and the list renders with
+  // its availability marks on the first frame.
   useEffect(() => {
     transcribeEngine.probe();
+    void transcribeEngine.probeLocales();
   }, []);
 
   // ── Push recogniser preferences down; a live session restarts in place ──
@@ -111,6 +126,9 @@ export function TranscribeProvider({ children }: PropsWithChildren) {
         clear: () => transcribeEngine.clear(),
         fullText: () => transcribeEngine.fullText(),
         probe: () => transcribeEngine.probe(),
+        isLocaleSupported: (locale: string) => transcribeEngine.isLocaleSupported(locale),
+        isLocaleInstalled: (locale: string) => transcribeEngine.isLocaleInstalled(locale),
+        downloadLanguage: (locale: string) => transcribeEngine.downloadLanguage(locale),
       }),
     }),
     [level],

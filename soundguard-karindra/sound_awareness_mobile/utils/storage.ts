@@ -16,10 +16,14 @@ const KEYS = {
   CONTACTS: '@soundguard/emergency_contacts',
   SETTINGS: '@soundguard/settings',
   DETECTION_LOG: '@soundguard/detection_log',
+  REPLY_HISTORY: '@soundguard/reply_history',
 } as const;
 
 /** Maximum detection events retained (oldest evicted first). */
 const MAX_DETECTION_LOG_SIZE = 300;
+
+/** Maximum typed replies remembered for one-tap reuse. */
+const MAX_REPLY_HISTORY = 12;
 
 // ─── Sound taxonomy ──────────────────────────────────────────────────────────
 
@@ -90,24 +94,115 @@ export function isSoundLabel(v: string): v is SoundLabel {
 // ─── Live Transcribe taxonomy ────────────────────────────────────────────────
 
 /**
- * English variants offered for speech recognition.
+ * Languages offered for speech recognition.
  *
- * Kept deliberately short. Every extra entry is a language pack the device may
- * not have installed, and a missing pack fails at `start()` with a terminal
- * `language-not-supported` error rather than degrading gracefully.
+ * ── Why Sinhala and Tamil are first ──────────────────────────────────────────
+ *
+ * SoundGuard is built for Sri Lanka, and a Deaf user in Colombo is far more
+ * likely to be spoken to in Sinhala or Tamil than in English. A captioning tool
+ * that can only read English is a tool that works in a lab and fails at a
+ * counter, in a clinic, or at home. Both national languages are therefore
+ * first-class entries, listed in their own scripts as well as in English so the
+ * picker is usable by someone who reads either.
+ *
+ * ── Availability is a device property, not an app property ───────────────────
+ *
+ * Each entry is a *request*, not a promise. Android's recogniser supports
+ * Sinhala and Tamil where the Google language packs are present; iOS's
+ * `SFSpeechRecognizer` supports Tamil but not Sinhala at all. Starting a session
+ * in a language the device cannot serve fails with a terminal
+ * `language-not-supported`, so `transcribeEngine` probes the device's real list
+ * at start-up, marks every entry accordingly, and offers `fallback` — a locale
+ * the same user is likely to accept — rather than dead-ending.
  */
-export const TRANSCRIBE_LOCALES = [
-  { value: 'en-US', label: 'English (US)' },
-  { value: 'en-GB', label: 'English (UK)' },
-  { value: 'en-IN', label: 'English (India)' },
-  { value: 'en-AU', label: 'English (Australia)' },
-] as const;
+export type TranscribeLocale = {
+  /** BCP-47 tag handed to the platform recogniser. */
+  value: string;
+  /** The language's own name, in its own script. */
+  native: string;
+  /** English name, for a reader who does not know the script. */
+  label: string;
+  /** Where to go if the device cannot serve this locale. */
+  fallback?: string;
+};
+
+export const TRANSCRIBE_LOCALES: TranscribeLocale[] = [
+  { value: 'si-LK', native: 'සිංහල', label: 'Sinhala', fallback: 'en-IN' },
+  { value: 'ta-LK', native: 'தமிழ்', label: 'Tamil (Sri Lanka)', fallback: 'ta-IN' },
+  { value: 'ta-IN', native: 'தமிழ்', label: 'Tamil (India)', fallback: 'en-IN' },
+  { value: 'en-IN', native: 'English', label: 'English (India)' },
+  { value: 'en-US', native: 'English', label: 'English (US)' },
+  { value: 'en-GB', native: 'English', label: 'English (UK)' },
+  { value: 'en-AU', native: 'English', label: 'English (Australia)' },
+];
 
 export function isTranscribeLocale(value: string): boolean {
   return TRANSCRIBE_LOCALES.some((locale) => locale.value === value);
 }
 
-/** Caption size ramp for Live Transcribe, as a multiplier of the base size. */
+export function findTranscribeLocale(value: string): TranscribeLocale | undefined {
+  return TRANSCRIBE_LOCALES.find((locale) => locale.value === value);
+}
+
+/** Human label for a locale tag, falling back to the raw tag. */
+export function transcribeLocaleLabel(value: string): string {
+  const locale = findTranscribeLocale(value);
+  if (!locale) return value;
+  return locale.native === locale.label ? locale.label : `${locale.native} · ${locale.label}`;
+}
+
+// ─── Two-way replies ─────────────────────────────────────────────────────────
+
+/**
+ * Ready-made replies for the typed side of the conversation.
+ *
+ * Transcription solves half of a two-way exchange: the Deaf user can now read
+ * what was said. The other half — answering — was still a hand gesture or a
+ * scramble for a notes app. These are the sentences that actually occur in the
+ * first ten seconds of an unplanned conversation with a stranger, written in the
+ * language the other person is most likely to be speaking, so the reply is one
+ * tap rather than one paragraph of typing.
+ *
+ * Keyed by the language subtag, so every regional variant of a language shares
+ * one set.
+ */
+const QUICK_REPLIES: Record<string, string[]> = {
+  si: [
+    'මට ඇහෙන්නේ නැහැ. කරුණාකර ලියන්න.',
+    'කරුණාකර සෙමින් කතා කරන්න.',
+    'ස්තූතියි!',
+    'මට උදව්වක් අවශ්‍යයි.',
+    'මොහොතක් ඉන්න.',
+    'ඔව්',
+    'නැහැ',
+  ],
+  ta: [
+    'எனக்குக் கேட்காது. தயவுசெய்து எழுதுங்கள்.',
+    'கொஞ்சம் மெதுவாகப் பேசுங்கள்.',
+    'நன்றி!',
+    'எனக்கு உதவி வேண்டும்.',
+    'ஒரு நிமிடம்.',
+    'ஆம்',
+    'இல்லை',
+  ],
+  en: [
+    'I am Deaf. Please type or speak clearly.',
+    'Could you say that more slowly?',
+    'Thank you!',
+    'I need some help, please.',
+    'One moment.',
+    'Yes',
+    'No',
+  ],
+};
+
+export function quickRepliesFor(locale: string): string[] {
+  const language = locale.split('-')[0] ?? 'en';
+  return QUICK_REPLIES[language] ?? QUICK_REPLIES.en!;
+}
+
+/** Caption size ramp, as a multiplier of the base size. Shared by both sides
+ *  of the conversation: the transcript and the typed reply. */
 export const TRANSCRIBE_TEXT_SCALES = [
   { label: 'Large', factor: 0.78 },
   { label: 'Larger', factor: 1 },
@@ -140,12 +235,14 @@ export type AppSettings = {
   sensitivity: number;
   /** Raise sensitivity one step between 21:00 and 06:00. */
   nightMode: boolean;
-  /** Vibrate when a sound is recognised. */
+  /** Vibrate with that sound's semantic signature when it is recognised. */
   hapticFeedback: boolean;
   /** Full-screen visual flash on a critical detection. */
   visualFlash: boolean;
-  /** Keep the microphone open when the app is backgrounded. */
+  /** Keep the microphone open when the app is backgrounded or the screen is off. */
   backgroundListening: boolean;
+  /** Post an OS notification for sounds detected while the app is not on screen. */
+  backgroundAlerts: boolean;
   /** Raw labels the engine must never surface. */
   mutedSounds: SoundLabel[];
   /** Write routine (safe) detections to history as well. */
@@ -164,13 +261,18 @@ export type AppSettings = {
   transcribeTextScale: number;
   /** Start Live Transcribe with the caption already rotated 180°. */
   transcribeFlipped: boolean;
+  /** Show a typed reply rotated toward the person opposite by default. */
+  replyFlipped: boolean;
 
   // Emergency
-  /** Escalate to the SOS screen after sustained critical detection. */
+  /** Lock the screen with a safety check when a critical sound is detected. */
   autoSos: boolean;
-  /** Seconds of continuous critical audio required before escalation. */
-  criticalHoldSeconds: number;
-  /** Seconds of abort window on the SOS screen. */
+  /**
+   * Seconds the user has to confirm they are safe before the SOS is sent
+   * automatically. This is the whole escalation protocol's one dial.
+   */
+  threatCountdownSeconds: number;
+  /** Seconds of abort window on the SOS screen itself. */
   sosCountdown: number;
   /** Attach GPS coordinates to the outgoing SOS message. */
   shareLocation: boolean;
@@ -200,18 +302,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hapticFeedback: true,
   visualFlash: true,
   backgroundListening: true,
+  backgroundAlerts: true,
   mutedSounds: [],
   logSafeEvents: false,
 
-  transcribeLocale: 'en-US',
+  // English (India) rather than (US): the majority of English actually spoken to
+  // this app's users is Sri Lankan, which the Indian acoustic model handles
+  // markedly better. Sinhala and Tamil are one tap away in the picker.
+  transcribeLocale: 'en-IN',
   transcribeInterim: true,
   transcribePunctuation: true,
   transcribeOffline: false,
   transcribeTextScale: 1,
   transcribeFlipped: false,
+  replyFlipped: true,
 
   autoSos: true,
-  criticalHoldSeconds: 6,
+  threatCountdownSeconds: 15,
   sosCountdown: 10,
   shareLocation: true,
   callFirstContact: false,
@@ -236,6 +343,14 @@ const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
  * shipped every existing install with the visual flash and the SOS escalation
  * switched off, which is why the strobe appeared to be dead code. The v1 keys
  * are now ignored and both features take their own defaults.
+ *
+ * NOTE ON `criticalHoldSeconds`. It meant "how long a critical sound must
+ * persist before escalating", which the threat escalation protocol no longer
+ * asks: a confirmed critical detection escalates at once, and the dial that
+ * remains is how long the user has to say they are safe. That is a different
+ * quantity with a different sensible range, so it is a new key rather than a
+ * silent reinterpretation of the old one. Unknown persisted keys are ignored,
+ * so the stale value simply falls away.
  */
 function normaliseSettings(raw: unknown): AppSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -266,6 +381,7 @@ function normaliseSettings(raw: unknown): AppSettings {
     hapticFeedback: bool('hapticFeedback', DEFAULT_SETTINGS.hapticFeedback),
     visualFlash: bool('visualFlash', DEFAULT_SETTINGS.visualFlash),
     backgroundListening: bool('backgroundListening', DEFAULT_SETTINGS.backgroundListening),
+    backgroundAlerts: bool('backgroundAlerts', DEFAULT_SETTINGS.backgroundAlerts),
     mutedSounds: muted,
     logSafeEvents: bool('logSafeEvents', DEFAULT_SETTINGS.logSafeEvents),
 
@@ -283,9 +399,18 @@ function normaliseSettings(raw: unknown): AppSettings {
       TRANSCRIBE_TEXT_SCALES.length - 1,
     ),
     transcribeFlipped: bool('transcribeFlipped', DEFAULT_SETTINGS.transcribeFlipped),
+    replyFlipped: bool('replyFlipped', DEFAULT_SETTINGS.replyFlipped),
 
     autoSos: bool('autoSos', DEFAULT_SETTINGS.autoSos),
-    criticalHoldSeconds: num('criticalHoldSeconds', DEFAULT_SETTINGS.criticalHoldSeconds, 2, 30),
+    // Floor of 5 s deliberately: anything shorter cannot be read, understood and
+    // answered by someone who has just been startled, which is the entire point
+    // of the window.
+    threatCountdownSeconds: num(
+      'threatCountdownSeconds',
+      DEFAULT_SETTINGS.threatCountdownSeconds,
+      5,
+      120,
+    ),
     sosCountdown: num('sosCountdown', DEFAULT_SETTINGS.sosCountdown, 3, 60),
     shareLocation: bool('shareLocation', DEFAULT_SETTINGS.shareLocation),
     callFirstContact: bool('callFirstContact', DEFAULT_SETTINGS.callFirstContact),
@@ -362,6 +487,52 @@ export async function saveDetectionEvent(event: DetectionEvent): Promise<void> {
 export async function clearDetectionLog(): Promise<void> {
   try {
     await AsyncStorage.removeItem(KEYS.DETECTION_LOG);
+  } catch {
+    /* no-op */
+  }
+}
+
+// ─── Typed replies ───────────────────────────────────────────────────────────
+
+/**
+ * The last few things the user typed to show someone.
+ *
+ * Conversations repeat themselves — "I am Deaf, please write it down" is said to
+ * every new person — and re-typing a sentence while someone waits is exactly the
+ * friction this feature exists to remove. Kept newest-first and de-duplicated,
+ * so the list stays short enough to scan at a glance.
+ */
+export async function getReplyHistory(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.REPLY_HISTORY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is string => typeof value === 'string' && value.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveReply(text: string): Promise<string[]> {
+  const trimmed = text.trim();
+  if (!trimmed) return getReplyHistory();
+
+  try {
+    const existing = await getReplyHistory();
+    const next = [trimmed, ...existing.filter((entry) => entry !== trimmed)].slice(
+      0,
+      MAX_REPLY_HISTORY,
+    );
+    await AsyncStorage.setItem(KEYS.REPLY_HISTORY, JSON.stringify(next));
+    return next;
+  } catch {
+    return getReplyHistory();
+  }
+}
+
+export async function clearReplyHistory(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEYS.REPLY_HISTORY);
   } catch {
     /* no-op */
   }

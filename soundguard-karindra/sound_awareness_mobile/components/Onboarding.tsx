@@ -62,21 +62,21 @@ const PAGES: Page[] = [
     ],
   },
   {
-    icon: 'notifications-outline',
-    eyebrow: 'Alerts you control',
-    title: 'Feel it, see it,\nor dismiss it',
-    body: 'Every detection arrives with a vibration pattern and an optional screen flash.',
+    icon: 'hand-left-outline',
+    eyebrow: 'A vibration alphabet',
+    title: 'Tell sounds apart\nwithout looking',
+    body: 'Every sound has its own rhythm, so you know what happened before you reach for the phone.',
     points: [
-      'Dismiss anything irrelevant with one tap',
-      'Mute a whole sound class permanently',
-      'Tune sensitivity at any time — changes apply instantly',
+      'A siren is long and unbroken; a knock is three even taps',
+      'The same rhythms work when the app is closed or the screen is off',
+      'Learn them any time in Settings → Vibration dictionary',
     ],
   },
   {
     icon: 'shield-checkmark-outline',
     eyebrow: 'Safety net',
     title: 'Help, when a\nsound means danger',
-    body: 'Sustained critical sounds such as breaking glass or a siren can escalate to an SOS with your location, sent to contacts you choose. You always get a countdown to cancel.',
+    body: 'A critical sound such as breaking glass or a siren takes over the screen with a countdown. Confirm you are safe and it stops. Say nothing, and SoundGuard messages the contacts you choose, with your location.',
   },
 ];
 

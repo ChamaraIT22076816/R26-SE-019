@@ -39,6 +39,7 @@ import { useEngineState } from '@/providers/EngineProvider';
 import { useTranscribeState } from '@/providers/TranscribeProvider';
 import { makeStyles, useColors } from '@/providers/ThemeProvider';
 import { audioArbiter, OWNER_LABELS } from '@/utils/audioArbiter';
+import { backgroundCapture } from '@/utils/backgroundService';
 import { getDetectionLog } from '@/utils/storage';
 
 function greeting(): string {
@@ -310,8 +311,11 @@ export default function DashboardScreen() {
 
   const soundguardChips = [
     { icon: 'hardware-chip-outline' as IconName, label: 'On-device AI' },
-    { icon: 'volume-high-outline' as IconName, label: '7 sound classes' },
-    { icon: 'shield-half-outline' as IconName, label: 'SOS escalation' },
+    { icon: 'hand-left-outline' as IconName, label: 'Haptic signatures' },
+    ...(backgroundCapture.available
+      ? [{ icon: 'moon-outline' as IconName, label: 'Runs in background' }]
+      : []),
+    { icon: 'shield-half-outline' as IconName, label: 'Threat escalation' },
   ];
   if (eventCount !== null && eventCount > 0) {
     soundguardChips.push({
@@ -402,14 +406,14 @@ export default function DashboardScreen() {
           <ModeCard
             eyebrow="Mode 2"
             title="Live Transcribe"
-            body="Turns speech into large, high-contrast text in real time — and flips it upside down so the person opposite can read your screen."
+            body="Turns speech into large, high-contrast text in real time — in Sinhala, Tamil or English — and lets you type an answer to show back."
             icon="chatbubbles"
             tint={c.accent}
             tintSoft={c.accentSoft}
             chips={[
-              { icon: 'mic-outline', label: 'Device speech engine' },
+              { icon: 'language-outline', label: 'සිංහල · தமிழ் · English' },
+              { icon: 'chatbox-ellipses-outline', label: 'Type a reply' },
               { icon: 'sync-outline', label: 'Flip for two-way' },
-              { icon: 'contrast-outline', label: 'High contrast' },
               ...(transcribe.available
                 ? []
                 : [{ icon: 'alert-circle-outline' as IconName, label: 'Unavailable here' }]),
