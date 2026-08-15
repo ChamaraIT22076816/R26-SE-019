@@ -86,15 +86,27 @@ def parse_label(path: Path) -> tuple[str, str | None]:
     return base.upper(), variant
 
 
-def safe_filename(gloss: str) -> str:
+def safe_filename(gloss: str, prefix: str = OUTPUT_PREFIX) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "_", gloss).strip("_")
-    return f"{OUTPUT_PREFIX}{slug}.json"
+    return f"{prefix}{slug}.json"
 
 
 # =========================== child process ==================================
 
 
-def run_worker(video: Path, out_path: Path, model: Path, max_width: int, dataset_name: str) -> int:
+def run_worker(
+    video: Path,
+    out_path: Path,
+    model: Path,
+    max_width: int,
+    dataset_name: str,
+    gloss: str,
+    variant: str | None,
+    source_category: str,
+    licence: str,
+    attribution: str,
+    source_id: str,
+) -> int:
     """Decode one clip and write its recording JSON. Runs in a child process."""
     import cv2  # imported here so the parent never pays for it
     import mediapipe as mp
@@ -176,15 +188,14 @@ def run_worker(video: Path, out_path: Path, model: Path, max_width: int, dataset
         f["timestampMs"] -= origin
     duration_ms = max(trimmed[-1]["timestampMs"], 1)
     coverage = sum(1 for f in trimmed if f["hands"]) / len(trimmed)
-    gloss, variant = parse_label(video)
     if not gloss:
-        print(json.dumps({"error": "no usable label in filename"}))
+        print(json.dumps({"error": "no usable label"}))
         return 1
 
     recording = {
-        "id": f"kaggle-{uuid.uuid5(uuid.NAMESPACE_URL, video.name)}",
+        "id": f"ref-{uuid.uuid5(uuid.NAMESPACE_URL, dataset_name + '/' + gloss + '/' + video.name)}",
         "gloss": gloss,
-        "signer": "kaggle-dataset",
+        "signer": source_id,
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "durationMs": duration_ms,
         "fps": round(fps, 2),
@@ -192,12 +203,14 @@ def run_worker(video: Path, out_path: Path, model: Path, max_width: int, dataset
         "videoHeight": height,
         "frames": trimmed,
         # --- provenance (extra fields; the app ignores what it does not read) ---
-        "source": "kaggle-dataset",
+        "source": source_id,
         "sourceDataset": dataset_name,
         "sourceFile": video.name,
-        "sourceCategory": video.parent.name,
+        "sourceCategory": source_category or video.parent.name,
         "sourceLabel": video.stem,
         "variant": variant,
+        "licence": licence,
+        "attribution": attribution or None,
         "note": "Gloss is the dataset's own label uppercased, not a translation.",
     }
     out_path.write_text(json.dumps(recording, separators=(",", ":")), encoding="utf-8")
@@ -221,10 +234,20 @@ def run_worker(video: Path, out_path: Path, model: Path, max_width: int, dataset
 
 
 def convert_one(
-    video: Path, tmp_dir: Path, args: argparse.Namespace
+    video: Path,
+    tmp_dir: Path,
+    args: argparse.Namespace,
+    gloss: str,
+    variant: str | None,
+    category_name: str,
 ) -> dict | None:
-    """Run one clip in a child process under a timeout. None on failure."""
-    target = tmp_dir / (re.sub(r"[^A-Za-z0-9]+", "_", video.stem).strip("_") + ".json")
+    """Run one clip in a child process under a timeout. None on failure.
+
+    The label is decided by the parent (the nested layout takes it from the
+    folder, not the filename) and passed down, so the worker never has to guess.
+    """
+    unique = re.sub(r"[^A-Za-z0-9]+", "_", f"{gloss}_{video.stem}").strip("_")
+    target = tmp_dir / f"{unique}.json"
     cmd = [
         sys.executable, str(Path(__file__).resolve()),
         "--worker",
@@ -233,7 +256,15 @@ def convert_one(
         "--model", str(args.model),
         "--max-width", str(args.max_width),
         "--dataset-name", args.dataset_name,
+        "--gloss", gloss,
+        "--source-category", category_name,
+        "--licence", args.licence,
+        "--attribution", args.attribution,
+        "--source-id", args.source_id,
+        "--prefix", args.prefix,
     ]
+    if variant:
+        cmd += ["--variant", variant]
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=args.timeout
@@ -259,6 +290,35 @@ def convert_one(
     return summary
 
 
+# How much a take is allowed to be penalised for being an odd length. Tracking
+# coverage alone is not a safe criterion: a truncated clip a fraction of the
+# normal length trivially scores 100%, and picking it would make the reference
+# teach half a sign.
+DURATION_PENALTY = 0.5
+
+
+def pick_take(takes: list[dict]) -> dict:
+    """Choose the most representative take for one gloss.
+
+    Balances tracking quality against being a normal length for that sign,
+    measured against the median of its own takes — so a sign that is genuinely
+    brief is not punished, only takes that are odd *for that sign*.
+    """
+    if len(takes) == 1:
+        return takes[0]
+    durations = sorted(t["durationMs"] for t in takes)
+    mid = len(durations) // 2
+    median = (
+        durations[mid] if len(durations) % 2 else (durations[mid - 1] + durations[mid]) / 2
+    ) or 1
+
+    def score(take: dict) -> float:
+        deviation = min(1.0, abs(take["durationMs"] - median) / median)
+        return take["coverage"] - DURATION_PENALTY * deviation
+
+    return max(takes, key=score)
+
+
 def write_manifest(out_dir: Path) -> list[str]:
     """List every reference JSON present, so browser exports are preserved."""
     files = sorted(p.name for p in out_dir.glob("*.json") if p.name != "manifest.json")
@@ -278,6 +338,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     p.add_argument("--dataset-name", default="dckahawearachchi/sinhala-sign-language-dataset")
+    # With more than one corpus in play, every reference has to carry its own
+    # licence: they are not interchangeable and one of them forbids commercial use.
+    p.add_argument("--licence", default="CC0-1.0",
+                   help="SPDX-style licence of the source dataset, recorded in every file")
+    p.add_argument("--attribution", default="",
+                   help="Credit line required by the licence, recorded in every file")
+    p.add_argument("--source-id", default="kaggle-dataset",
+                   help="Identifier recorded as the reference's source, e.g. yohan-dataset")
+    p.add_argument("--prefix", default="kaggle_",
+                   help="Filename prefix, keeping corpora distinguishable on disk")
     # 0.7, not 0.5: lead/tail rest frames are already trimmed, so a low figure
     # here means dropouts *mid-sign*. Such a reference teaches the wrong motion
     # and drags down the feedback accuracy the proposal is measured on.
@@ -291,9 +361,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="Convert at most N clips (0 = no limit)")
     p.add_argument("--dry-run", action="store_true", help="Report only; write nothing to --out")
     # internal
+    p.add_argument("--only", default="",
+                   help="Comma-separated sign names to convert, e.g. \"I,You,Can,Where\"")
+    # internal
     p.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--video", type=Path, help=argparse.SUPPRESS)
     p.add_argument("--worker-out", type=Path, help=argparse.SUPPRESS)
+    p.add_argument("--gloss", default="", help=argparse.SUPPRESS)
+    p.add_argument("--variant", default="", help=argparse.SUPPRESS)
+    p.add_argument("--source-category", default="", help=argparse.SUPPRESS)
     return p
 
 
@@ -301,7 +377,11 @@ def main() -> int:
     args = build_parser().parse_args()
 
     if args.worker:
-        return run_worker(args.video, args.worker_out, args.model, args.max_width, args.dataset_name)
+        return run_worker(
+            args.video, args.worker_out, args.model, args.max_width, args.dataset_name,
+            args.gloss, args.variant or None, args.source_category,
+            args.licence, args.attribution, args.source_id,
+        )
 
     if args.manifest_only:
         files = write_manifest(args.out)
@@ -320,21 +400,39 @@ def main() -> int:
     else:
         sys.exit("Pass --category NAME (repeatable) or --all")
 
-    videos: list[Path] = []
+    # Two corpus layouts are supported:
+    #   flat:   <category>/<Sign>.mp4                  (one take per sign)
+    #   nested: <category>/<Sign>/<Sign>_001.mp4 ...   (several takes per sign)
+    # In the nested layout the *folder* names the sign, not the file, because
+    # the files carry take numbers.
+    videos: list[tuple[Path, str, str | None, str]] = []  # (path, gloss, variant, category)
     unlabelled: list[Path] = []
+    only = {s.strip().upper() for s in args.only.split(",") if s.strip()} if args.only else None
+
     for category in categories:
         if not category.is_dir():
             print(f"! no such category: {category.name}", file=sys.stderr)
             continue
-        for path in sorted(category.glob("*.mp4")):
-            # The corpus holds a few clips with no usable label: hidden files
-            # literally named ".mp4", and names that are only a parenthetical
-            # note ("(1st way).mp4", "(ex- kunu).mp4"). A sign we cannot name is
-            # a sign we cannot practise, and guessing a gloss is not allowed.
-            if path.name.startswith(".") or not parse_label(path)[0]:
+
+        candidates: list[tuple[Path, Path]] = []  # (video, label source)
+        for sign_dir in sorted(p for p in category.iterdir() if p.is_dir()):
+            for take in sorted(sign_dir.glob("*.mp4")):
+                candidates.append((take, sign_dir))
+        for flat in sorted(category.glob("*.mp4")):
+            candidates.append((flat, flat))
+
+        for path, label_source in candidates:
+            # Some clips have no usable label: hidden files literally named
+            # ".mp4", and names that are only a parenthetical note
+            # ("(1st way).mp4"). A sign we cannot name is a sign we cannot
+            # practise, and guessing a gloss is not allowed.
+            gloss, variant = parse_label(label_source)
+            if path.name.startswith(".") or not gloss:
                 unlabelled.append(path)
                 continue
-            videos.append(path)
+            if only is not None and gloss not in only:
+                continue
+            videos.append((path, gloss, variant, category.name))
 
     if unlabelled:
         print(f"Ignoring {len(unlabelled)} clip(s) with no usable label:")
@@ -351,37 +449,44 @@ def main() -> int:
     started = time.time()
 
     best: dict[str, dict] = {}
+    takes: dict[str, list[dict]] = {}
     alternates: list[dict] = []
     skipped: list[str] = []
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
-        for n, video in enumerate(videos, 1):
-            summary = convert_one(video, tmp_dir, args)
+        for n, (video, gloss, variant, category_name) in enumerate(videos, 1):
+            summary = convert_one(video, tmp_dir, args, gloss, variant, category_name)
             if summary is None:
                 skipped.append(video.name)
-                continue
-            if summary["coverage"] < args.min_coverage:
+            elif summary["coverage"] < args.min_coverage:
                 print(f"  SKIP {video.name}: hands in only {summary['coverage']:.0%} of frames")
                 skipped.append(video.name)
-                continue
-
-            print(
-                f"  ok   [{n}/{len(videos)}] {summary['gloss']:<24} "
-                f"{summary['frames']:>4} frames  {summary['durationMs']/1000:>5.1f}s  "
-                f"hands {summary['coverage']:.0%}"
-                + (f"  [{summary['variant']}]" if summary.get("variant") else "")
-            )
-
-            gloss = summary["gloss"]
-            incumbent = best.get(gloss)
-            if incumbent is None:
-                best[gloss] = summary
-            elif summary["coverage"] > incumbent["coverage"]:
-                alternates.append(incumbent)
-                best[gloss] = summary
             else:
-                alternates.append(summary)
+                print(
+                    f"  ok   [{n}/{len(videos)}] {summary['gloss']:<24} "
+                    f"{summary['frames']:>4} frames  {summary['durationMs']/1000:>5.1f}s  "
+                    f"hands {summary['coverage']:.0%}"
+                    + (f"  [{summary['variant']}]" if summary.get("variant") else "")
+                )
+                takes.setdefault(gloss, []).append(summary)
+
+            # Flush as soon as a gloss's last take is done. The choice needs all
+            # of that gloss's takes, but not the whole corpus — and on a run of
+            # several hours, finished work should already be on disk if it dies.
+            #
+            # This must run even when the current clip was skipped: a gloss whose
+            # *final* take fails would otherwise never flush and be lost entirely,
+            # despite having perfectly good earlier takes.
+            is_last_take = n == len(videos) or videos[n][1] != gloss
+            if is_last_take and gloss in takes:
+                candidates = takes.pop(gloss)
+                winner = pick_take(candidates)
+                best[gloss] = winner
+                alternates.extend(t for t in candidates if t is not winner)
+                if not args.dry_run:
+                    args.out.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(winner["path"], args.out / safe_filename(gloss, args.prefix))
 
         elapsed = time.time() - started
         print(
@@ -401,12 +506,12 @@ def main() -> int:
             print("\nDry run - nothing written to the reference folder.")
             return 0
 
-        args.out.mkdir(parents=True, exist_ok=True)
-        total_bytes = 0
-        for gloss, summary in sorted(best.items()):
-            destination = args.out / safe_filename(gloss)
-            shutil.copyfile(summary["path"], destination)
-            total_bytes += destination.stat().st_size
+        # Files were already written as each gloss finished; just total them up.
+        total_bytes = sum(
+            (args.out / safe_filename(g, args.prefix)).stat().st_size
+            for g in best
+            if (args.out / safe_filename(g, args.prefix)).is_file()
+        )
 
     files = write_manifest(args.out)
     print(

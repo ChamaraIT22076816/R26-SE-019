@@ -60,9 +60,19 @@ describeRefs('bundled reference recordings', () => {
       expect(ref.videoHeight, `${ref.gloss}: has height`).toBeGreaterThan(0)
       // Every committed reference must declare where it came from, so nobody
       // has to guess whether a reference is authoritative SSL.
-      expect(['kaggle-dataset', 'team-recording'], `${ref.gloss}: known source`).toContain(
-        ref.source,
-      )
+      expect(typeof ref.source, `${ref.gloss}: declares a source`).toBe('string')
+      expect(ref.source?.length, `${ref.gloss}: source not empty`).toBeGreaterThan(0)
+    }
+  })
+
+  it('record the licence of every dataset-derived reference', () => {
+    // Two corpora with different licences are in play, one of which forbids
+    // commercial use. A reference that cannot say which it came under is a
+    // licensing accident waiting to happen.
+    for (const ref of references) {
+      if (ref.source === 'team-recording') continue
+      const licence = (ref as unknown as { licence?: string }).licence
+      expect(licence, `${ref.gloss}: declares a licence`).toBeTruthy()
     }
   })
 

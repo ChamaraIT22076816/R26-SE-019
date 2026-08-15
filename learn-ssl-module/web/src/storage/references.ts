@@ -17,10 +17,29 @@ export function pickReferences(recordings: SignRecording[]): Map<string, SignRec
   return byGloss
 }
 
+/**
+ * Effective capture rate. Corpora differ: one of ours samples at ~25 fps and
+ * another at ~10 fps for the same sign, and the finer sampling gives DTW more
+ * to align against.
+ */
+function captureRate(rec: SignRecording): number {
+  if (rec.durationMs <= 0 || rec.frames.length === 0) return 0
+  return (rec.frames.length / rec.durationMs) * 1000
+}
+
 function beats(candidate: SignRecording, incumbent: SignRecording): boolean {
+  // 1. Authoritative always beats a provisional team stand-in.
   const candidateProvisional = candidate.provisional === true
   const incumbentProvisional = incumbent.provisional === true
   if (candidateProvisional !== incumbentProvisional) return incumbentProvisional
+
+  // 2. Between two authoritative references for the same sign, prefer the one
+  //    with finer temporal sampling. Without this the winner would just be
+  //    whichever corpus was converted last, which is not a reason.
+  const rateDelta = captureRate(candidate) - captureRate(incumbent)
+  if (Math.abs(rateDelta) > 1) return rateDelta > 0
+
+  // 3. Otherwise the newer recording.
   return candidate.createdAt > incumbent.createdAt
 }
 

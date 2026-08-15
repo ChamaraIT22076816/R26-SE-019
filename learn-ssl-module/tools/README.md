@@ -3,7 +3,34 @@
 Turns SSL dataset videos into the reference recordings the web app scores
 against, so references come from real signers rather than team members.
 
-## Source dataset
+Two corpora are in use, under **different licences**. See
+`../web/public/references/LICENSES.md` — every converted file records its own
+`licence` and `attribution`, and the test suite fails if one does not.
+
+## Corpus 2 — Yohan Abhishek (CC BY-NC-SA 4.0)
+
+| | |
+|---|---|
+| Contents | 383 signs, 2,623 clips (~7 takes each), 16 grammatical categories |
+| Labels | **English** (`Can`, `Where`, `Hello`) — no translation needed |
+| **Licence** | **CC BY-NC-SA 4.0** — attribution, **non-commercial**, share-alike |
+| Layout | Nested: `<Category>/<Sign>/<Sign>_001.mp4` |
+| Pre-extracted CSVs | **Pose only** (33 landmarks). Our app is hand-based, so we process the videos ourselves and ignore them. |
+
+```bash
+python convert_references.py --dataset "<...>/Dataset - Original" --all \
+  --prefix "yohan_" --source-id "yohan-dataset" \
+  --dataset-name "YohanAbhishek Sinhala Sign Language dataset" \
+  --licence "CC-BY-NC-SA-4.0" \
+  --attribution "Yohan Abhishek, Sinhala Sign Language video dataset (CC BY-NC-SA 4.0)"
+```
+
+Covers 4 of the 7 avatar-aligned glosses (`I`→ME, `You`, `Can`, `Where`); NAME,
+WHAT and YOUR are absent. Its **Greetings** category (Ayubowan, Hello, How are
+you, Thank you) is a better basis for a first-meeting scenario than team
+recordings.
+
+## Corpus 1 — D. C. Kahawearachchi (CC0)
 
 | | |
 |---|---|
@@ -90,7 +117,9 @@ regenerated `manifest.json`.
 
 | Rule | Why |
 |---|---|
-| Gloss = the dataset's own filename, uppercased — never translated | The dataset labels signs in Sinhala transliteration (`kanawa`). Inventing an English gloss for a sign none of us can verify is not acceptable. Add verified translations later as a display field. |
+| Gloss = the corpus's own label, uppercased — never translated | Kahawearachchi's labels are Sinhala transliterations (`kanawa`). Inventing an English gloss for a sign none of us can verify is not acceptable; verified meanings live in `web/src/data/translations.ts`. Yohan's labels are already English. |
+| One reference per gloss: the take closest to that sign's **median duration**, then best tracking | Coverage alone is unsafe — a truncated clip a fraction of the normal length trivially scores 100% and would teach half a sign. Measuring against the sign's own median means a genuinely brief sign is not punished. |
+| Each finished gloss is written immediately | A full run is several hours; work already done should survive a crash. |
 | Leading/trailing frames with no hand are trimmed | Clips open and close on a rest pose; without trimming, DTW wastes alignment on hands-down frames. |
 | One reference per gloss, the take with the best hand tracking | PP2 ships one reference per sign; alternate takes (`B(first way)` / `B(second way)`) are reported for later multi-reference work. |
 | Clips below `--min-coverage` (default 50% of frames with a hand) are skipped | A reference the tracker could barely see would teach the learner the wrong thing. |
