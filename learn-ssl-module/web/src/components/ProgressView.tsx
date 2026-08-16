@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { listAttempts } from '../learner/attemptLog'
+import { listSamples } from '../metrics/latencyStore'
+import type { LatencySample } from '../metrics/latency'
 import { buildExport, downloadFile, toCsv } from '../pilot/exportResults'
+import { LatencyPanel } from './LatencyPanel'
 
 const PARTICIPANT_KEY = 'ssl-learn-participant'
 import { practiceNeed, summarizeAll } from '../learner/mastery'
@@ -58,12 +61,16 @@ export function ProgressView() {
   const [attemptCount, setAttemptCount] = useState(0)
   const [avgRecent, setAvgRecent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [latency, setLatency] = useState<LatencySample[]>([])
   const [participantCode, setParticipantCode] = useState(
     () => localStorage.getItem(PARTICIPANT_KEY) ?? '',
   )
 
   async function exportResults(format: 'json' | 'csv') {
-    const data = buildExport(participantCode, await listAttempts())
+    // Re-read rather than exporting the state loaded on mount, so attempts made
+    // since this tab was opened are in the file the participant hands over.
+    const [attempts, samples] = await Promise.all([listAttempts(), listSamples()])
+    const data = buildExport(participantCode, attempts, samples)
     const stamp = data.exportedAt.slice(0, 10)
     const base = `ssl-learn_${data.participantCode}_${stamp}`.replace(/[^\w.-]+/g, '_')
     if (format === 'csv') {
@@ -75,11 +82,13 @@ export function ProgressView() {
 
   useEffect(() => {
     void (async () => {
-      const [loc, bun, log] = await Promise.all([
+      const [loc, bun, log, samples] = await Promise.all([
         listRecordings(),
         loadBundledRecordings(),
         listAttempts(),
+        listSamples(),
       ])
+      setLatency(samples)
       const glosses = [...loc, ...bun].map((r) => r.gloss)
       const now = new Date()
       setSummaries(
@@ -192,6 +201,11 @@ export function ProgressView() {
           )}
         </>
       )}
+
+      {/* System metric rather than learner progress, so it sits below their own
+          results — but it stays on this tab because this is where a pilot
+          facilitator already comes to read and export a session. */}
+      {!loading && <LatencyPanel samples={latency} />}
     </section>
   )
 }

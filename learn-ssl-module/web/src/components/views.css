@@ -593,6 +593,74 @@
   white-space: nowrap;
 }
 
+/* ---- feedback latency panel ---- */
+
+/* A system metric rather than the learner's own progress, so it reads as a
+   separate section at the foot of the card instead of another tile group. No
+   background of its own — the tiles inside it need to stay the raised layer. */
+.latency-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.latency-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.latency-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.latency-target {
+  font: 13px var(--mono);
+  color: var(--text-dim);
+}
+
+/* The three stages of the feedback path, in the order they happen. */
+.latency-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.latency-stages li {
+  flex: 1 1 150px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.latency-stage-name {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.latency-stage-value {
+  font: 600 14px var(--mono);
+  color: var(--text);
+}
+
+/* Reserved for a figure that meets its target — currently the share of
+   attempts inside the latency budget. */
+.stat-value.good {
+  color: var(--accent-2);
+}
+
 /* ---- scenario ---- */
 
 .turn-preview {

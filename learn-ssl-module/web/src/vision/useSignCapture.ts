@@ -10,6 +10,13 @@ export interface CapturedTake {
   durationMs: number
   videoWidth: number
   videoHeight: number
+  /**
+   * Absolute `performance.now()` capture time of the take's final frame, or
+   * null if no frame arrived. Buffered frames carry take-relative timestamps,
+   * so this is the only surviving link to the monotonic clock — it is where the
+   * feedback-latency measurement starts (see metrics/latency.ts).
+   */
+  lastFrameAt: number | null
 }
 
 /**
@@ -32,6 +39,7 @@ export function useSignCapture(onCaptured: (take: CapturedTake) => void, countdo
   }
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
+  const lastFrameAtRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
   const maxMsRef = useRef(4000)
   const onCapturedRef = useRef(onCaptured)
@@ -44,6 +52,7 @@ export function useSignCapture(onCaptured: (take: CapturedTake) => void, countdo
     if (phaseRef.current !== 'recording') return
     if (startTsRef.current === null) startTsRef.current = frame.timestampMs
     const rel = frame.timestampMs - startTsRef.current
+    lastFrameAtRef.current = frame.timestampMs
     framesRef.current.push({ ...frame, timestampMs: rel })
     setElapsedMs(rel)
     if (rel >= maxMsRef.current) finishRef.current()
@@ -62,6 +71,7 @@ export function useSignCapture(onCaptured: (take: CapturedTake) => void, countdo
       durationMs,
       videoWidth: video?.videoWidth || 1280,
       videoHeight: video?.videoHeight || 720,
+      lastFrameAt: lastFrameAtRef.current,
     })
   }, [videoRef])
   finishRef.current = finish
@@ -80,6 +90,7 @@ export function useSignCapture(onCaptured: (take: CapturedTake) => void, countdo
           window.clearInterval(countdownRef.current)
           framesRef.current = []
           startTsRef.current = null
+          lastFrameAtRef.current = null
           setElapsedMs(0)
           setPhase('recording')
           return 0

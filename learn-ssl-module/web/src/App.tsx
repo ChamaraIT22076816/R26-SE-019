@@ -25,14 +25,17 @@ function App() {
         <p className="app-kicker">R26-SE-019 · Component 4 — Learning &amp; Practice Module</p>
         <h1>SSL Learn</h1>
         <p className="app-sub">
-          Sri Lankan Sign Language practice · dev build — weeks 1–5: capture → scoring →
-          learner model
+          Learn and practise Sri Lankan Sign Language — record a sign, get it scored against a
+          reference, and see what to fix.
         </p>
-        <nav className="tabs">
+        <nav className="tabs" aria-label="Sections">
           {TABS.map((t) => (
             <button
               key={t.id}
               className={tab === t.id ? 'tab active' : 'tab'}
+              // The active tab is otherwise signalled by colour alone, which a
+              // screen reader cannot convey.
+              aria-current={tab === t.id ? 'page' : undefined}
               onClick={() => setTab(t.id)}
             >
               {t.label}

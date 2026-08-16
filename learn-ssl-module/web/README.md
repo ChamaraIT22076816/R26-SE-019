@@ -55,9 +55,16 @@ video is ever captured to disk, which is what keeps the ethics story simple. To
 collect data, have each participant open **Progress**, enter the participant
 code you assign them (a code, never their name), and hit **Export results**:
 
-- **CSV** — one row per attempt, for a spreadsheet or stats tool.
+- **CSV** — one row per attempt, for a spreadsheet or stats tool, including the
+  measured feedback latency for that attempt.
 - **JSON** — the same data plus per-sign summaries including `firstScore` and
-  `lastScore`, which is what a learning-gain measure is computed from.
+  `lastScore`, which is what a learning-gain measure is computed from, and the
+  latency summary for that participant's machine.
+
+That single export therefore covers three of the four proposal targets:
+learning gain (`firstScore`/`lastScore`), feedback latency (measured), and the
+attempt data behind accuracy. SUS is the one that still needs a questionnaire
+outside the app.
 
 They send you the file. Each participant needs their own browser profile or
 device — two people sharing one browser share one IndexedDB and their data will
@@ -276,6 +283,82 @@ Two design points worth stating explicitly:
 > validation by an SSL teacher** (School for the Deaf, Ratmalana). Each turn
 > asks for a single gloss; the surrounding text is English context, never a
 > claim about SSL word order.
+
+## Feedback latency — proposal target ≤300 ms
+
+*This section is written to be quotable in the report and defensible in a viva.*
+
+The proposal commits to feedback within 300 ms. That was previously supported
+only by component figures, which is a weaker claim than it sounds: it omitted
+React's commit, the browser's paint, and the fact that a scenario turn scores an
+attempt several times over. The app now measures the whole path on real
+attempts.
+
+### Operational definition
+
+The clock starts at the **capture of the final frame of the attempt** — the
+earliest instant the system could know the sign was finished — and stops when
+the **corrective feedback has been painted**:
+
+| Stage | What it covers |
+|---|---|
+| **Hand tracking** | MediaPipe landmark inference on that final frame, the skeleton overlay draw, and the hand-off to scoring |
+| **Sign scoring** | DTW alignment against the reference; in a scenario turn, also the rubric's appropriateness pass over the scenario vocabulary |
+| **Showing feedback** | React's commit plus the browser's paint of the score and hints |
+
+**Excluded, because JavaScript cannot observe them:** the camera's own
+sensor→browser delay before the frame reaches us, and the display's response
+time after we paint. Every figure is therefore a *software pipeline* latency and
+should be quoted as such — not as glass-to-glass.
+
+The measurement **errs high** in two places, which is the safe direction for an
+"under 300 ms" claim: the take ends on whichever frame arrived last, charging us
+up to one frame interval (~33 ms at 30 fps) of waiting; and the paint mark is
+taken at the frame boundary *after* the paint, adding up to one more.
+`src/metrics/useFeedbackLatency.ts` explains why a layout effect and two nested
+`requestAnimationFrame`s are both needed to land that mark honestly — the
+obvious alternatives (`useEffect`, a single rAF) each silently mis-measure.
+
+Samples taken while the tab is backgrounded are discarded: `requestAnimationFrame`
+is throttled there, so the number would measure the tab being hidden rather than
+the app being slow.
+
+### Where the numbers appear
+
+- **Progress tab** — median, 95th percentile, share within 300 ms, and the
+  stage breakdown, from that browser's own attempts. Marked *provisional* below
+  20 samples, where a 95th percentile is really just "the second slowest one".
+- **Pilot export** — the JSON carries the summary plus every sample; the CSV
+  carries four latency columns per attempt row, joined on the attempt id and
+  **left blank, never 0, where no sample was taken**. This is the point of
+  measuring it during the pilot: the target is a claim about real machines, and
+  a pilot is where a spread of them gets tested.
+
+### What can be measured without a camera
+
+`src/metrics/scoring.bench.test.ts` times the **scoring stage** against the real
+reference corpus on every `npm test`, regenerating
+[`latency-report.md`](latency-report.md) — the same pattern as
+`calibration-report.md` and `weight-fit-report.md`.
+
+Two things about that bench are worth stating, because both were mistakes caught
+while writing it:
+
+1. **The stand-in attempt is built at webcam frame rate, not the reference's.**
+   DTW fills an n×m matrix, and a learner records for `reference duration +
+   1500 ms` at ~30 fps, so a take carries far more frames than the reference
+   does. Timing a reference against itself measured a workload roughly a third
+   of the real size. Recycling the reference's frames to the right *length* is
+   sound here precisely because this path's cost depends only on the two
+   sequence lengths and never on the landmark values.
+2. **Its figures are the cost of the algorithm, not what a learner waits for.**
+   Each is the median of repeated runs after a warm-up; a single cold run
+   inflated the 95th percentile by roughly 8× through JIT and GC noise. The
+   number a participant actually experiences is the live end-to-end one, which
+   keeps its noise.
+
+So: quote the bench as *scoring cost*, and the Progress tab / pilot export as
+*feedback latency*. They are not interchangeable.
 
 ## Roadmap (PP2)
 

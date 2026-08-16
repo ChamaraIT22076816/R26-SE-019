@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildExport, toCsv } from './exportResults'
 import type { AttemptLogEntry } from '../learner/attemptLog'
+import type { LatencySample } from '../metrics/latency'
 
 let n = 0
 function attempt(gloss: string, score: number, createdAt: string): AttemptLogEntry {
@@ -12,6 +13,20 @@ const ATTEMPTS = [
   attempt('BONAWA', 55, '2026-08-06T10:01:00.000Z'),
   attempt('KANAWA', 80, '2026-08-06T10:02:00.000Z'),
 ]
+
+function latencyFor(a: AttemptLogEntry, totalMs: number): LatencySample {
+  return {
+    id: a.id,
+    source: 'practice',
+    gloss: a.gloss,
+    trackingMs: 20,
+    scoringMs: 30,
+    renderMs: totalMs - 50,
+    totalMs,
+    frameCount: 90,
+    createdAt: a.createdAt,
+  }
+}
 
 describe('buildExport', () => {
   it('summarises a session', () => {
@@ -51,6 +66,18 @@ describe('buildExport', () => {
     expect(out.totals.meanScore).toBeNull()
     expect(out.perSign).toEqual([])
   })
+
+  it('summarises the latency measured on this participant’s hardware', () => {
+    const samples = [latencyFor(ATTEMPTS[0], 120), latencyFor(ATTEMPTS[1], 180)]
+    const out = buildExport('P01', ATTEMPTS, samples)
+    expect(out.latency.summary?.n).toBe(2)
+    expect(out.latency.summary?.withinTargetPct).toBe(100)
+    expect(out.latency.samples).toHaveLength(2)
+  })
+
+  it('reports a session with no latency samples as null, not as a passing zero', () => {
+    expect(buildExport('P01', ATTEMPTS).latency.summary).toBeNull()
+  })
 })
 
 describe('toCsv', () => {
@@ -58,9 +85,22 @@ describe('toCsv', () => {
     const lines = toCsv(buildExport('P01', ATTEMPTS)).trim().split('\n')
     expect(lines).toHaveLength(4)
     expect(lines[0]).toBe(
-      'participant_code,attempt_index,gloss,score,worst_fingers,reference_id,created_at',
+      'participant_code,attempt_index,gloss,score,worst_fingers,reference_id,created_at,' +
+        'latency_total_ms,latency_tracking_ms,latency_scoring_ms,latency_render_ms',
     )
     expect(lines[1]).toContain('P01,1,KANAWA,40')
+  })
+
+  it('joins each attempt to its latency sample', () => {
+    const out = buildExport('P01', ATTEMPTS, [latencyFor(ATTEMPTS[0], 120)])
+    const lines = toCsv(out).trim().split('\n')
+    expect(lines[1].endsWith('120,20,30,70')).toBe(true)
+  })
+
+  it('leaves latency blank — never 0 — for an attempt that was not sampled', () => {
+    const out = buildExport('P01', ATTEMPTS, [latencyFor(ATTEMPTS[0], 120)])
+    const lines = toCsv(out).trim().split('\n')
+    expect(lines[2].endsWith(',,,,')).toBe(true)
   })
 
   it('escapes values that would otherwise break the CSV', () => {

@@ -19,6 +19,14 @@
   box-sizing: border-box;
 }
 
+/* One visible keyboard-focus indicator for everything interactive. Several
+   controls set `outline: none` and signal focus with a border colour alone,
+   which is easy to miss and disappears entirely on the plain buttons. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -71,8 +79,12 @@ body {
 
 /* ---- tabs ---- */
 
+/* Wraps rather than scrolls: five tabs overflow a phone viewport, and a
+   horizontally scrolling strip hides whole tabs behind an affordance people
+   miss. Wrapping keeps every tab reachable at any width. */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 18px;
 }
@@ -95,6 +107,20 @@ body {
   color: var(--text);
   background: var(--surface);
   border-color: var(--border);
+}
+
+@media (max-width: 480px) {
+  #root {
+    padding: 20px 14px 36px;
+  }
+
+  .tab {
+    padding: 8px 12px;
+  }
+
+  .app-header h1 {
+    font-size: 26px;
+  }
 }
 
 /* ---- buttons ---- */

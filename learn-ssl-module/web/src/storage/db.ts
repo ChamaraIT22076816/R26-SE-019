@@ -2,16 +2,17 @@
 // adding a store; onupgradeneeded creates whatever is missing, so both fresh
 // installs and upgrades from any older version end up with the same schema.
 const DB_NAME = 'ssl-learn'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 export const RECORDINGS_STORE = 'recordings' // reference recordings (keyPath: id)
 export const ATTEMPTS_STORE = 'attempts' // scored practice attempts (keyPath: id)
+export const LATENCY_STORE = 'latency' // feedback-latency samples (keyPath: id)
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
-      for (const store of [RECORDINGS_STORE, ATTEMPTS_STORE]) {
+      for (const store of [RECORDINGS_STORE, ATTEMPTS_STORE, LATENCY_STORE]) {
         if (!req.result.objectStoreNames.contains(store)) {
           req.result.createObjectStore(store, { keyPath: 'id' })
         }

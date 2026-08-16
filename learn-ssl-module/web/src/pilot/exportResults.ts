@@ -1,5 +1,7 @@
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { summarizeAll } from '../learner/mastery'
+import { summarizeLatency } from '../metrics/latency'
+import type { LatencySample, LatencySummary } from '../metrics/latency'
 
 /**
  * Pilot data export.
@@ -30,11 +32,22 @@ export interface PilotExport {
     lastScore: number | null
   }>
   attempts: AttemptLogEntry[]
+  /**
+   * Feedback latency measured on this participant's own hardware — which is
+   * the point: the ≤300 ms target is a claim about real machines, and a pilot
+   * is the only place a spread of them gets tested. Null summary means the
+   * session produced no samples.
+   */
+  latency: {
+    summary: LatencySummary | null
+    samples: LatencySample[]
+  }
 }
 
 export function buildExport(
   participantCode: string,
   attempts: AttemptLogEntry[],
+  latency: LatencySample[] = [],
   now: Date = new Date(),
 ): PilotExport {
   const ordered = [...attempts].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -67,6 +80,10 @@ export function buildExport(
     },
     perSign,
     attempts: ordered,
+    latency: {
+      summary: summarizeLatency(latency),
+      samples: [...latency].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    },
   }
 }
 
@@ -75,7 +92,13 @@ function csvCell(value: string | number | null): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** One row per attempt — the shape a stats tool or spreadsheet wants. */
+/**
+ * One row per attempt — the shape a stats tool or spreadsheet wants.
+ *
+ * Latency columns are joined on the attempt id and left blank where no sample
+ * was taken (a take with no frames, or the tab in the background). Blank means
+ * *not measured*; it must not be read as zero.
+ */
 export function toCsv(data: PilotExport): string {
   const header = [
     'participant_code',
@@ -85,9 +108,15 @@ export function toCsv(data: PilotExport): string {
     'worst_fingers',
     'reference_id',
     'created_at',
+    'latency_total_ms',
+    'latency_tracking_ms',
+    'latency_scoring_ms',
+    'latency_render_ms',
   ]
-  const rows = data.attempts.map((a, i) =>
-    [
+  const byId = new Map(data.latency.samples.map((s) => [s.id, s]))
+  const rows = data.attempts.map((a, i) => {
+    const l = byId.get(a.id)
+    return [
       data.participantCode,
       i + 1,
       a.gloss,
@@ -95,10 +124,14 @@ export function toCsv(data: PilotExport): string {
       a.worstFingers.join(' '),
       a.referenceId,
       a.createdAt,
+      l?.totalMs ?? null,
+      l?.trackingMs ?? null,
+      l?.scoringMs ?? null,
+      l?.renderMs ?? null,
     ]
       .map(csvCell)
-      .join(','),
-  )
+      .join(',')
+  })
   return [header.join(','), ...rows].join('\n') + '\n'
 }
 

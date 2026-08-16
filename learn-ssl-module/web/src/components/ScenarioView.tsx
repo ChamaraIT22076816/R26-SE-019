@@ -7,6 +7,7 @@ import { loadBundledRecordings } from '../storage/bundledReferences'
 import { pickReferences } from '../storage/references'
 import { addAttempt } from '../learner/attemptLog'
 import { topFingers } from '../scoring/score'
+import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { RUBRIC_BASIS, RUBRIC_LABEL, scoreTurn } from '../scenario/rubric'
 import type { RubricComponent, TurnScore } from '../scenario/rubric'
 import type { Scenario, ScenarioTurn } from '../scenario/types'
@@ -90,6 +91,8 @@ export function ScenarioView() {
     return [...references.values()].filter((r) => glosses.has(r.gloss))
   }, [scenario.turns, references])
 
+  const latency = useFeedbackLatency('scenario')
+
   const handleCaptured = useCallback(
     (take: CapturedTake) => {
       if (!turn || !reference) return
@@ -104,9 +107,26 @@ export function ScenarioView() {
         videoHeight: take.videoHeight,
         frames: take.frames,
       }
+      const scoreStartAt = performance.now()
       const score = scoreTurn(attempt, reference, scenarioVocabulary)
+      const scoreEndAt = performance.now()
       setCurrent(score)
       setOutcomes((prev) => [...prev.filter((o) => o.turn.id !== turn.id), { turn, score, attempt }])
+
+      // Worth measuring separately from Practice: a scenario turn also runs the
+      // rubric's appropriateness pass, one extra DTW alignment per competing
+      // sign in the scenario vocabulary.
+      if (take.lastFrameAt !== null) {
+        latency.arm(
+          { captureAt: take.lastFrameAt, scoreStartAt, scoreEndAt },
+          {
+            id: attempt.id,
+            gloss: turn.gloss,
+            frameCount: take.frames.length,
+            createdAt: attempt.createdAt,
+          },
+        )
+      }
 
       // Log the DTW accuracy — not the rubric total — so "mastery" means the
       // same thing whether a sign was practised here or in the Practice tab.
@@ -119,7 +139,7 @@ export function ScenarioView() {
         createdAt: attempt.createdAt,
       }).catch((e: unknown) => console.error('Failed to log scenario attempt', e))
     },
-    [turn, reference, scenarioVocabulary],
+    [turn, reference, scenarioVocabulary, latency],
   )
 
   const capture = useSignCapture(handleCaptured)

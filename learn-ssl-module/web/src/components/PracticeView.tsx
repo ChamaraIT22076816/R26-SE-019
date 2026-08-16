@@ -12,6 +12,7 @@ import { suggestNext, summarizeAll } from '../learner/mastery'
 import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
+import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
@@ -49,6 +50,12 @@ export function PracticeView() {
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
   const didPreselectRef = useRef(false)
+  // Absolute capture time of the newest frame, kept before the buffer rewrites
+  // timestamps to be take-relative. It is where the feedback-latency clock
+  // starts — see metrics/latency.ts.
+  const lastFrameAtRef = useRef<number | null>(null)
+
+  const latency = useFeedbackLatency('practice')
 
   // Capture a bit longer than the reference so a slightly slower attempt fits.
   const captureMs = selected ? Math.max(selected.durationMs + 1500, 2500) : 3500
@@ -57,6 +64,7 @@ export function PracticeView() {
     if (phaseRef.current !== 'recording') return
     if (startTsRef.current === null) startTsRef.current = frame.timestampMs
     const rel = frame.timestampMs - startTsRef.current
+    lastFrameAtRef.current = frame.timestampMs
     framesRef.current.push({ ...frame, timestampMs: rel })
     setElapsedMs(rel)
     if (rel >= captureMs) finishRecording()
@@ -113,6 +121,7 @@ export function PracticeView() {
           window.clearInterval(countdownRef.current)
           framesRef.current = []
           startTsRef.current = null
+          lastFrameAtRef.current = null
           setElapsedMs(0)
           setPhase('recording')
           return 0
@@ -149,10 +158,27 @@ export function PracticeView() {
       videoHeight: video?.videoHeight || 720,
       frames,
     }
+    const captureAt = lastFrameAtRef.current
+    const scoreStartAt = performance.now()
     const scored = scoreAttempt(att, reference)
+    const scoreEndAt = performance.now()
     setAttempt(att)
     setResult(scored)
     setPhase('result')
+
+    // A take with no frames has no capture instant to measure from, so it is
+    // left unsampled rather than recorded as an implausibly fast one.
+    if (captureAt !== null) {
+      latency.arm(
+        { captureAt, scoreStartAt, scoreEndAt },
+        {
+          id: att.id,
+          gloss: reference.gloss,
+          frameCount: frames.length,
+          createdAt: att.createdAt,
+        },
+      )
+    }
 
     // Log the attempt: feeds mastery/suggestions now, error mining later.
     const entry: AttemptLogEntry = {
