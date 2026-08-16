@@ -164,9 +164,33 @@ rendition, so a genuinely correct attempt scored zero.**
 > **Still provisional:** every calibration take is by one fluent signer, so this
 > captures natural variation of a *correct* rendition, not a learner's wider
 > spread. Re-fit against real learner attempts graded by an SSL teacher before
-> quoting the proposal's ≥90%-accuracy figure. A tried-and-rejected change is
-> recorded too: replacing per-frame hand-size normalisation with a
-> sequence-stable one moved separation 73.7% → 73.4%, i.e. nowhere.
+> quoting the proposal's ≥90%-accuracy figure.
+
+### Fitted feature weights, and three rejected changes
+
+`W_SHAPE`/`W_TRAJ` are fitted by grid search over the same corpus
+(`src/scoring/weights.fit.test.ts` → [`weight-fit-report.md`](weight-fit-report.md)),
+now **0.8 / 0.2** rather than the assumed 0.7 / 0.3.
+
+Separation rises monotonically with `W_SHAPE`, peaking at **78.6% when movement
+is discarded entirely**. We deliberately did not take that maximum: the search
+optimises *"is this the same sign?"*, a classification objective, while this
+scorer *grades a known sign*. Movement is a phonological parameter of SSL, and a
+scorer blind to it would award full marks to a learner with the right handshape
+and the wrong movement. Optimising the available metric instead of the actual
+goal is the mistake being avoided here.
+
+Changes tried and rejected — each is a result, not a dead end:
+
+| Change | Effect | Verdict |
+|---|---|---|
+| Sequence-stable instead of per-frame hand-size scaling | 73.7% → 73.4% | No effect; reverted |
+| Trajectory as frame-to-frame **velocity** instead of centred position | 73.5% → 75.5% separation | **Reverted despite winning.** Per-frame velocity differences are small next to hand size, so a learner moving in entirely the wrong direction still scored 100 — caught by `score.test.ts`. |
+| `W_SHAPE` = 1.0 (drop movement) | 78.6%, the maximum | Rejected on the same grounds |
+
+The velocity result is worth keeping in view: absolute position genuinely does
+carry noise (where the signer stood), so a *scale-aware* movement feature that
+keeps gross-path sensitivity would likely beat both. That is future work.
 
 ## Learner model v1 (heuristic)
 

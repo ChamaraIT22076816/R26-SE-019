@@ -9,20 +9,20 @@ Yohan Abhishek corpus (CC BY-NC-SA 4.0), one fluent signer.
 
 | pair | n | mean | p10 | median | p90 |
 |---|---|---|---|---|---|
-| same sign, another take | 524 | 0.491 | 0.220 | 0.474 | 0.788 |
-| a different sign | 992 | 0.668 | 0.396 | 0.661 | 0.949 |
+| same sign, another take | 524 | 0.483 | 0.222 | 0.459 | 0.767 |
+| a different sign | 992 | 0.669 | 0.405 | 0.662 | 0.954 |
 
 ## Separation
 
-Best single cut-off: distance **0.351** →
-**73.8%** accuracy distinguishing a correct
+Best single cut-off: distance **0.370** →
+**74.6%** accuracy distinguishing a correct
 rendition from a different sign.
 
 ## Score anchors
 
-Current: `D_PERFECT` 0.22, `D_ZERO` 0.8.
+Current: `D_PERFECT` 0.22, `D_ZERO` 0.77.
 
-A correct rendition has median distance **0.474**.
+A correct rendition has median distance **0.459**.
 The anchors sit sensibly relative to the data.
 
 ## Limitation

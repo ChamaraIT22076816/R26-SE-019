@@ -10,6 +10,13 @@ import { MIDDLE_FINGER_MCP, NUM_LANDMARKS, WRIST } from './landmarks'
  *    and divided by hand size, so it captures the path the hand travels.
  *    Length 3.
  *
+ * Frame-to-frame velocity was tried here and rejected. It separates signs
+ * better (75.5% vs 73.5%, weight-fit-report.md) because absolute position
+ * carries where the signer happened to stand, which is noise — but per-frame
+ * velocity differences are small next to hand size, so a learner moving the
+ * hand in entirely the wrong direction still scored 100. Catching that is the
+ * point of the block, so centred position stays.
+ *
  * Splitting them lets the comparison weight "did you make the right shape"
  * separately from "did you move it the right way", and drives per-joint
  * feedback from the shape block.
@@ -117,7 +124,11 @@ export function extractHandFeatures(
   const seqScale = median(scales) || 1
   const wrists = present.map((h) => correct(h.landmarks[WRIST], aspect))
   const centroid = wrists.reduce(
-    (acc, w) => ({ x: acc.x + w.x / wrists.length, y: acc.y + w.y / wrists.length, z: acc.z + w.z / wrists.length }),
+    (acc, w) => ({
+      x: acc.x + w.x / wrists.length,
+      y: acc.y + w.y / wrists.length,
+      z: acc.z + w.z / wrists.length,
+    }),
     { x: 0, y: 0, z: 0 },
   )
 

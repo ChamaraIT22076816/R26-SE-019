@@ -6,20 +6,41 @@ import { FINGER_LABEL, LANDMARK_FINGER, NUM_LANDMARKS } from './landmarks'
 import type { Finger } from './landmarks'
 
 // --- tunables -------------------------------------------------------------
-// How much handshape vs. trajectory contribute to the per-frame distance.
-// Handshape is the stronger cue for most signs, so it's weighted higher.
-const W_SHAPE = 0.7
-const W_TRAJ = 0.3
+// Relative contribution of handshape vs. movement to the per-frame distance,
+// constrained to sum to 1 so the distance scale — and the anchors below — stay
+// comparable across weightings.
+//
+// Fitted by grid search over the calibration corpus (weights.fit.test.ts →
+// weight-fit-report.md). Separation rises monotonically with W_SHAPE, peaking at
+// 78.6% for W_SHAPE = 1.0, i.e. discarding movement entirely.
+//
+// We deliberately do NOT take that maximum. The search optimises "is this the
+// same sign?", a classification objective; this scorer's job is to *grade a
+// known sign*, and movement is a phonological parameter of SSL. A learner with
+// the correct handshape and the wrong movement has made an error worth
+// reporting, and a scorer blind to it would grade them as perfect. 0.8/0.2 keeps
+// movement in scope while taking the measured gain (73.5% → 74.3%).
+const W_SHAPE = 0.8
+const W_TRAJ = 0.2
+
+/** Weighting of the two feature blocks in the per-frame distance. */
+export interface DistanceWeights {
+  shape: number
+  traj: number
+}
+
+export const DEFAULT_WEIGHTS: DistanceWeights = { shape: W_SHAPE, traj: W_TRAJ }
 
 // Map the average per-frame distance `d` (in hand-size units) to a 0–100 score
 // between two linear anchors: d ≤ D_PERFECT scores 100, d ≥ D_ZERO scores 0.
 //
 // Derived from measured data, not guessed. Across 557 takes of 33 signs by one
-// fluent signer, two takes of the *same* sign sit at distance p10 0.218,
-// median 0.476, p90 0.804 (src/scoring/calibration.test.ts →
+// fluent signer, two takes of the *same* sign sit at distance p10 0.222,
+// median 0.459, p90 0.767 (src/scoring/calibration.test.ts →
 // calibration-report.md). The anchors are set to that p10/p90, so the best
 // tenth of correct renditions score 100, a typical one lands mid-scale, and the
-// worst tenth score 0.
+// worst tenth score 0. Re-derive these whenever the feature or weights change:
+// they are expressed in distance units, which those changes move.
 //
 // The previous values (0.05 / 0.35) predated any data and were far too tight:
 // D_ZERO sat *below* the median correct rendition, so a genuinely correct
@@ -37,7 +58,7 @@ const W_TRAJ = 0.3
 // Re-fit against real learner attempts graded by an SSL teacher before quoting
 // the ≥90%-accuracy figure.
 export const D_PERFECT = 0.22
-export const D_ZERO = 0.8
+export const D_ZERO = 0.77
 
 // A hand the reference expects but the learner never showed: heavy penalty.
 const MISSING_HAND_SCORE = 0
@@ -107,8 +128,8 @@ function rms(a: number[], b: number[]): number {
 }
 
 /** Per-frame distance = weighted RMS of the shape block + the trajectory block. */
-function frameDistance(a: FrameFeature, b: FrameFeature): number {
-  return W_SHAPE * rms(a.shape, b.shape) + W_TRAJ * rms(a.traj, b.traj)
+function frameDistance(a: FrameFeature, b: FrameFeature, w: DistanceWeights): number {
+  return w.shape * rms(a.shape, b.shape) + w.traj * rms(a.traj, b.traj)
 }
 
 function distanceToScore(d: number): number {
@@ -137,7 +158,11 @@ function perLandmarkDeviation(
   return totals.map((t) => t / Math.max(path.length, 1))
 }
 
-function scoreHand(attempt: HandFeatureSequence, reference: HandFeatureSequence): HandScore {
+function scoreHand(
+  attempt: HandFeatureSequence,
+  reference: HandFeatureSequence,
+  w: DistanceWeights,
+): HandScore {
   if (attempt.frames.length === 0) {
     return {
       handedness: reference.handedness,
@@ -148,7 +173,7 @@ function scoreHand(attempt: HandFeatureSequence, reference: HandFeatureSequence)
     }
   }
   const result = dtw(attempt.frames.length, reference.frames.length, (i, j) =>
-    frameDistance(attempt.frames[i], reference.frames[j]),
+    frameDistance(attempt.frames[i], reference.frames[j], w),
   )
   return {
     handedness: reference.handedness,
@@ -200,10 +225,11 @@ function buildHints(
 function evaluate(
   refSeqs: HandFeatureSequence[],
   attemptSeqs: HandFeatureSequence[],
+  w: DistanceWeights,
 ): { hands: HandScore[]; score: number } {
   const hands = refSeqs.map((ref) => {
     const att = attemptSeqs.find((a) => a.handedness === ref.handedness)
-    return scoreHand(att ?? { handedness: ref.handedness, frames: [] }, ref)
+    return scoreHand(att ?? { handedness: ref.handedness, frames: [] }, ref, w)
   })
 
   // Weight each hand by how many reference frames it appears in, so the
@@ -226,7 +252,11 @@ function evaluate(
  * left-dominant learner performing a right-handed reference is correct, not
  * wrong, and must not be scored as a missing hand.
  */
-export function scoreAttempt(attempt: SignRecording, reference: SignRecording): ScoreResult {
+export function scoreAttempt(
+  attempt: SignRecording,
+  reference: SignRecording,
+  weights: DistanceWeights = DEFAULT_WEIGHTS,
+): ScoreResult {
   const refSeqs = handednessesIn(reference.frames)
     .map((h) =>
       extractHandFeatures(reference.frames, h, reference.videoWidth, reference.videoHeight),
@@ -249,8 +279,8 @@ export function scoreAttempt(attempt: SignRecording, reference: SignRecording): 
   const attemptSeqs = (['Left', 'Right'] as const).map((h) =>
     extractHandFeatures(attempt.frames, h, attempt.videoWidth, attempt.videoHeight),
   )
-  const direct = evaluate(refSeqs, attemptSeqs)
-  const flipped = evaluate(refSeqs, attemptSeqs.map(mirrorHandFeatures))
+  const direct = evaluate(refSeqs, attemptSeqs, weights)
+  const flipped = evaluate(refSeqs, attemptSeqs.map(mirrorHandFeatures), weights)
 
   const mirrored = flipped.score > direct.score
   const { hands, score } = mirrored ? flipped : direct
