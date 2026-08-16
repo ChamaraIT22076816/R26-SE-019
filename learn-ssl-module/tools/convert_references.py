@@ -361,6 +361,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="Convert at most N clips (0 = no limit)")
     p.add_argument("--dry-run", action="store_true", help="Report only; write nothing to --out")
     # internal
+    p.add_argument("--all-takes-out", type=Path, default=None,
+                   help="Also write every usable take here, for threshold calibration")
     p.add_argument("--only", default="",
                    help="Comma-separated sign names to convert, e.g. \"I,You,Can,Where\"")
     # internal
@@ -487,6 +489,15 @@ def main() -> int:
                 if not args.dry_run:
                     args.out.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(winner["path"], args.out / safe_filename(gloss, args.prefix))
+                    # Optionally keep every usable take. Several takes of one
+                    # sign by one signer are natural variation of a *correct*
+                    # rendition, which is what the score scale is calibrated
+                    # against (see web/src/scoring/calibration.test.ts).
+                    if args.all_takes_out:
+                        args.all_takes_out.mkdir(parents=True, exist_ok=True)
+                        slug = re.sub(r"[^A-Za-z0-9]+", "_", gloss).strip("_")
+                        for i, take in enumerate(candidates, 1):
+                            shutil.copyfile(take["path"], args.all_takes_out / f"{slug}__{i}.json")
 
         elapsed = time.time() - started
         print(

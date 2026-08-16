@@ -25,3 +25,8 @@ public/wasm
 *.njsproj
 *.sln
 *.sw?
+
+# Calibration takes: ~15 MB, regenerated deterministically by
+# tools/convert_references.py --all-takes-out (see calibration.test.ts).
+# tools/calibration_signs.txt defines the set and IS committed.
+calibration/

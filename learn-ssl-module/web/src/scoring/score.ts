@@ -11,13 +11,33 @@ import type { Finger } from './landmarks'
 const W_SHAPE = 0.7
 const W_TRAJ = 0.3
 
-// Map the average per-frame distance `d` (in hand-size units) to a 0–100
-// score with two linear anchor points: d ≤ D_PERFECT scores 100, d ≥ D_ZERO
-// scores 0. PROVISIONAL — these must be calibrated against real reference
-// recordings + expert judgement (the ≥90%-accuracy study). Self-comparison
-// gives d = 0 → 100 regardless of the anchors, which is the invariant we test.
-const D_PERFECT = 0.05
-const D_ZERO = 0.35
+// Map the average per-frame distance `d` (in hand-size units) to a 0–100 score
+// between two linear anchors: d ≤ D_PERFECT scores 100, d ≥ D_ZERO scores 0.
+//
+// Derived from measured data, not guessed. Across 557 takes of 33 signs by one
+// fluent signer, two takes of the *same* sign sit at distance p10 0.218,
+// median 0.476, p90 0.804 (src/scoring/calibration.test.ts →
+// calibration-report.md). The anchors are set to that p10/p90, so the best
+// tenth of correct renditions score 100, a typical one lands mid-scale, and the
+// worst tenth score 0.
+//
+// The previous values (0.05 / 0.35) predated any data and were far too tight:
+// D_ZERO sat *below* the median correct rendition, so a genuinely correct
+// attempt scored 0.
+//
+// KNOWN LIMIT — this scale grades *how well a known target sign was performed*.
+// It is not a sign classifier. Measured cross-sign distances start at 0.134
+// (30 vs 40), i.e. some distinct signs are closer together than two takes of
+// one sign typically are, so a high score is not proof the right sign was made.
+// That is why appropriateness (rubric.ts) compares only within a scenario's
+// small vocabulary rather than all 351 references.
+//
+// Still to do: every calibration take is by one fluent signer, so this captures
+// natural variation of a *correct* rendition, not a learner's wider spread.
+// Re-fit against real learner attempts graded by an SSL teacher before quoting
+// the ≥90%-accuracy figure.
+export const D_PERFECT = 0.22
+export const D_ZERO = 0.8
 
 // A hand the reference expects but the learner never showed: heavy penalty.
 const MISSING_HAND_SCORE = 0
@@ -47,6 +67,12 @@ export interface HandScore {
 export interface ScoreResult {
   /** Overall 0–100, frame-weighted average of the per-hand scores. */
   score: number
+  /**
+   * Weighted mean DTW distance behind that score, in hand-size units, before
+   * the 0–100 mapping. The score saturates at both ends by design; this does
+   * not, so it is what threshold calibration has to work from.
+   */
+  normalizedDistance: number
   hands: HandScore[]
   /** Worst joints across all hands, most deviant first — feeds feedback text. */
   worstJoints: JointDeviation[]
@@ -210,6 +236,7 @@ export function scoreAttempt(attempt: SignRecording, reference: SignRecording): 
   if (refSeqs.length === 0) {
     return {
       score: 0,
+      normalizedDistance: Infinity,
       hands: [],
       worstJoints: [],
       hints: ['No hands were tracked in the reference.'],
@@ -238,8 +265,19 @@ export function scoreAttempt(attempt: SignRecording, reference: SignRecording): 
   }
   worstJoints.sort((a, b) => b.deviation - a.deviation)
 
+  // Same weighting as the score, but over the raw distances, so calibration can
+  // see past the 0–100 saturation.
+  const distanceWeights = hands.map((h) => (h.missing ? 0 : 1))
+  const distanceTotal = distanceWeights.reduce((a: number, b: number) => a + b, 0)
+  const normalizedDistance =
+    distanceTotal === 0
+      ? Infinity
+      : hands.reduce((acc, h, i) => acc + (h.missing ? 0 : h.normalizedDistance) * distanceWeights[i], 0) /
+        distanceTotal
+
   return {
     score,
+    normalizedDistance,
     hands,
     worstJoints,
     hints: buildHints(hands, worstJoints, twoHanded),

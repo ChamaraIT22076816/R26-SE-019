@@ -134,10 +134,39 @@ Tested with `npm test` (vitest): self-match → 100; invariant to translation,
 zoom, signing speed and capture resolution; discriminates wrong handshapes and
 trajectories; points feedback at the finger that deviates.
 
-> **Calibration TODO:** the distance→score anchors (`D_PERFECT`, `D_ZERO` in
-> `score.ts`) and the shape/trajectory weights are provisional. Calibrate them
-> against real reference recordings + expert judgement for the ≥90%-accuracy
-> target.
+### Score-scale calibration
+
+The distance→score anchors are **fitted to measured data**, not guessed. The
+corpus records many takes of each sign by one signer, which labels itself: two
+takes of one sign are a correct rendition performed twice, takes of different
+signs are a wrong-sign attempt. `src/scoring/calibration.test.ts` measures both
+distributions over 557 takes of 33 signs and regenerates
+[`calibration-report.md`](calibration-report.md) on every run.
+
+| pair | p10 | median | p90 |
+|---|---|---|---|
+| same sign, another take | 0.220 | **0.474** | 0.788 |
+| a different sign | 0.396 | 0.661 | 0.949 |
+
+`D_PERFECT`/`D_ZERO` are set to the correct-rendition p10/p90, so the best tenth
+of correct renditions score 100 and the worst tenth score 0. **The previous
+values (0.05/0.35) were far too tight — `D_ZERO` sat below the median correct
+rendition, so a genuinely correct attempt scored zero.**
+
+> **This grades; it does not classify.** Best achievable separation between the
+> two distributions is **73.8%**, and measured cross-sign distances start at
+> 0.134 (`30` vs `40`) — some distinct signs are closer together than two takes
+> of one sign typically are. A high score means *this target sign was performed
+> well*, not *this was the right sign*. Appropriateness (`rubric.ts`) therefore
+> compares only within a scenario's small vocabulary, never all 351 references.
+> `src/scoring/anchors.probe.test.ts` reports the closest confusable pairs.
+
+> **Still provisional:** every calibration take is by one fluent signer, so this
+> captures natural variation of a *correct* rendition, not a learner's wider
+> spread. Re-fit against real learner attempts graded by an SSL teacher before
+> quoting the proposal's ≥90%-accuracy figure. A tried-and-rejected change is
+> recorded too: replacing per-frame hand-size normalisation with a
+> sequence-stable one moved separation 73.7% → 73.4%, i.e. nowhere.
 
 ## Learner model v1 (heuristic)
 
