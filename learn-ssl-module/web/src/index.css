@@ -262,6 +262,10 @@ body::before {
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font: 600 var(--fs-md) var(--sans);
   color: var(--text-dim);
   background: transparent;
@@ -269,7 +273,17 @@ body::before {
   border-radius: var(--r-sm);
   padding: var(--s-2) 18px;
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+/* Desktop keeps the text pills it had; the glyph is a mobile-bar affordance. */
+.tab-icon {
+  display: none;
+  width: 22px;
+  height: 22px;
+  flex: none;
 }
 
 .tab:hover {
@@ -286,9 +300,98 @@ body::before {
   #root {
     padding: var(--s-5) 14px 36px;
   }
+}
+
+/* ---- mobile: navigation moves into the thumb arc -------------------------
+   Five wrapping text pills at the top of a phone screen are both hard to hit
+   and far from where the thumb rests. Below 760px the same nav becomes a fixed
+   bottom bar. It is the same markup and the same DOM order, so the landmark
+   and focus order are unchanged.
+
+   Solid background rather than a blurred one on purpose: a backdrop-filter
+   composites the whole strip every frame, and on the Practice tab it would sit
+   directly over a live camera feed on exactly the devices least able to afford
+   it. */
+@media (max-width: 760px) {
+  .tabs {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    margin: 0;
+    padding: 6px var(--s-1) calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--border-subtle);
+    box-shadow: var(--elev-3);
+  }
 
   .tab {
-    padding: var(--s-2) var(--s-3);
+    flex-direction: column;
+    gap: 3px;
+    min-height: 50px;
+    padding: 6px 2px;
+    border: none;
+    font-size: var(--fs-2xs);
+    font-weight: 600;
+  }
+
+  .tab-icon {
+    display: block;
+  }
+
+  /* In a bar, the active item reads by colour and weight rather than by a
+     pill — a filled pill in a five-up grid looks like a stuck button. */
+  .tab.active {
+    background: transparent;
+    color: var(--accent);
+  }
+
+  /* Clear the fixed bar so the footer and the last control stay reachable. */
+  #root {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---- touch ---------------------------------------------------------------
+   Keyed to the pointer, not the viewport, so a touchscreen laptop is handled
+   and a phone-sized desktop window is not.
+
+   Sized against the 44px comfort guideline (Apple HIG, WCAG 2.1 AAA 2.5.5).
+   Note the AA floor is the much lower 24x24 of WCAG 2.2 SC 2.5.8, which the
+   old 24px chips met with nothing to spare — this is a comfort fix, not a
+   conformance one, and the chips are the deliberate exception: 351 of them at
+   44px would turn the picker into a scroll marathon, so they get a smaller
+   bump plus more separation instead. */
+@media (pointer: coarse) {
+  .btn,
+  .field input,
+  .picker-search {
+    min-height: 44px;
+  }
+
+  .chip {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .gloss-chips,
+  .category-chips {
+    gap: var(--s-2);
+  }
+
+  /* Inline links keep their text flow; the tap area grows around them. */
+  .link-button {
+    position: relative;
+  }
+
+  .link-button::after {
+    content: '';
+    position: absolute;
+    /* 18px of text + 13px either side = a 44px tap target. */
+    inset: -13px -8px;
   }
 }
 
