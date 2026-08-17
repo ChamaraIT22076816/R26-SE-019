@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSignCapture } from '../vision/useSignCapture'
 import type { CapturedTake } from '../vision/useSignCapture'
-import type { SignRecording } from '../vision/types'
+import type { RecordingMeta, SignRecording } from '../vision/types'
+import { toMeta } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
-import { loadBundledRecordings } from '../storage/bundledReferences'
+import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferences } from '../storage/references'
 import { addAttempt } from '../learner/attemptLog'
 import { topFingers } from '../scoring/score'
@@ -56,7 +57,14 @@ export function ScenarioView() {
   const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id)
   const scenario: Scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]
 
-  const [references, setReferences] = useState<Map<string, SignRecording>>(new Map())
+  // Metadata drives the intro list and decides which turns are playable.
+  const [references, setReferences] = useState<Map<string, RecordingMeta>>(new Map())
+  const [localRecs, setLocalRecs] = useState<SignRecording[]>([])
+  // Frames for this scenario's vocabulary, fetched once when it starts. The
+  // whole vocabulary is needed, not just the current turn: the rubric's
+  // appropriateness component scores the attempt against every competing sign.
+  const [vocab, setVocab] = useState<Map<string, SignRecording>>(new Map())
+  const [loadingVocab, setLoadingVocab] = useState(false)
   const [loading, setLoading] = useState(true)
   const [stage, setStage] = useState<Stage>('intro')
   const [index, setIndex] = useState(0)
@@ -65,8 +73,9 @@ export function ScenarioView() {
 
   useEffect(() => {
     void (async () => {
-      const [local, bundled] = await Promise.all([listRecordings(), loadBundledRecordings()])
-      setReferences(pickReferences([...local, ...bundled]))
+      const [local, index] = await Promise.all([listRecordings(), loadReferenceIndex()])
+      setLocalRecs(local)
+      setReferences(pickReferences([...local.map(toMeta), ...index]))
       setLoading(false)
     })()
   }, [])
@@ -80,16 +89,13 @@ export function ScenarioView() {
   const pending = scenario.turns.filter((t) => !references.has(t.gloss))
 
   const turn: ScenarioTurn | undefined = playable[index]
-  const reference = turn ? references.get(turn.gloss) : undefined
+  const reference = turn ? vocab.get(turn.gloss) : undefined
   const captureMs = reference ? Math.max(reference.durationMs + 1500, 2500) : 3500
 
   // Appropriateness is judged against this scenario's own vocabulary — the
   // signs the learner could plausibly have confused this turn with — not the
   // whole library. See scoreTurn for why.
-  const scenarioVocabulary = useMemo(() => {
-    const glosses = new Set(scenario.turns.map((t) => t.gloss))
-    return [...references.values()].filter((r) => glosses.has(r.gloss))
-  }, [scenario.turns, references])
+  const scenarioVocabulary = useMemo(() => [...vocab.values()], [vocab])
 
   const latency = useFeedbackLatency('scenario')
 
@@ -152,11 +158,29 @@ export function ScenarioView() {
     if (stage !== 'playing') stopTracking()
   }, [stage, stopTracking])
 
-  function startScenario() {
+  async function startScenario() {
     setIndex(0)
     setOutcomes([])
     setCurrent(null)
     setStage('playing')
+    // Fetch the frames for every playable turn up front. It is a handful of
+    // signs, and doing it here means no turn stalls mid-conversation.
+    if (vocab.size > 0) return
+    setLoadingVocab(true)
+    const metas = playable
+      .map((t) => references.get(t.gloss))
+      .filter((m): m is RecordingMeta => m !== undefined)
+    const loaded = new Map<string, SignRecording>()
+    await Promise.all(
+      metas.map(async (m) => {
+        const full = m.file
+          ? await loadReferenceFrames(m.file)
+          : (localRecs.find((r) => r.id === m.id) ?? null)
+        if (full) loaded.set(m.gloss, full)
+      }),
+    )
+    setVocab(loaded)
+    setLoadingVocab(false)
   }
 
   function nextTurn() {
@@ -186,11 +210,14 @@ export function ScenarioView() {
                   key={s.id}
                   className={s.id === scenario.id ? 'chip active' : 'chip'}
                   onClick={() => {
-                    // Results belong to the scenario they came from.
+                    // Results belong to the scenario they came from — and so
+                    // does the loaded vocabulary, which sets the bar that
+                    // appropriateness is judged against.
                     setScenarioId(s.id)
                     setIndex(0)
                     setOutcomes([])
                     setCurrent(null)
+                    setVocab(new Map())
                   }}
                   title={`${covered} of ${s.turns.length} turns have a reference`}
                 >
@@ -231,7 +258,11 @@ export function ScenarioView() {
             </p>
 
             <div className="row-buttons">
-              <button className="btn" onClick={startScenario} disabled={playable.length === 0}>
+              <button
+                className="btn"
+                onClick={() => void startScenario()}
+                disabled={playable.length === 0}
+              >
                 {playable.length === 0 ? 'No references yet' : 'Start scenario'}
               </button>
             </div>
@@ -330,7 +361,7 @@ export function ScenarioView() {
         </div>
 
         <div className="row-buttons">
-          <button className="btn" onClick={startScenario}>
+          <button className="btn" onClick={() => void startScenario()}>
             Run it again
           </button>
           <button className="btn btn-ghost" onClick={() => setStage('intro')}>
@@ -342,6 +373,14 @@ export function ScenarioView() {
   }
 
   // ---- playing --------------------------------------------------------------
+  if (loadingVocab) {
+    return (
+      <section className="library-card">
+        <p className="empty-state">Loading the signs for this conversation…</p>
+      </section>
+    )
+  }
+
   if (!turn || !reference) {
     return (
       <section className="library-card">

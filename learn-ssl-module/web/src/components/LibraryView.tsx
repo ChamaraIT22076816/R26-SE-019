@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SignRecording } from '../vision/types'
+import type { RecordingMeta, SignRecording } from '../vision/types'
+import { toMeta } from '../vision/types'
 import { deleteRecording, listRecordings, saveRecording } from '../storage/recordingStore'
-import { loadBundledRecordings } from '../storage/bundledReferences'
+import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { glossLabel, translationOf } from '../data/translations'
 
 interface Row {
-  rec: SignRecording
+  meta: RecordingMeta
   bundled: boolean
 }
 
 /** Reference library: local (IndexedDB) + bundled recordings, replay, JSON export/import. */
 export function LibraryView() {
   const [local, setLocal] = useState<SignRecording[]>([])
-  const [bundled, setBundled] = useState<SignRecording[]>([])
+  const [bundled, setBundled] = useState<RecordingMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
+  // Frames for the one open player. Rows themselves are rendered from metadata,
+  // so browsing the library downloads nothing.
+  const [openRec, setOpenRec] = useState<SignRecording | null>(null)
+  const [openFailed, setOpenFailed] = useState(false)
+  const openIdRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const refreshLocal = useCallback(async () => {
@@ -24,12 +30,21 @@ export function LibraryView() {
 
   useEffect(() => {
     void (async () => {
-      const [loc, bun] = await Promise.all([listRecordings(), loadBundledRecordings()])
+      const [loc, index] = await Promise.all([listRecordings(), loadReferenceIndex()])
       setLocal(loc)
-      setBundled(bun)
+      setBundled(index)
       setLoading(false)
     })()
   }, [])
+
+  /** A row shows metadata; this fetches the frames behind it when one is needed. */
+  const resolveFull = useCallback(
+    async (meta: RecordingMeta): Promise<SignRecording | null> => {
+      if (meta.file) return loadReferenceFrames(meta.file)
+      return local.find((r) => r.id === meta.id) ?? null
+    },
+    [local],
+  )
 
   function isRecording(value: unknown): value is SignRecording {
     const rec = value as SignRecording
@@ -69,7 +84,7 @@ export function LibraryView() {
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
-  function fileNameFor(rec: SignRecording, taken: Set<string>): string {
+  function fileNameFor(rec: { gloss: string; signer: string }, taken: Set<string>): string {
     const base = `${rec.gloss}_${rec.signer}`.replace(/[^\w-]+/g, '_')
     let name = `${base}.json`
     let n = 2
@@ -78,8 +93,13 @@ export function LibraryView() {
     return name
   }
 
-  function exportRecording(rec: SignRecording) {
-    download(fileNameFor(rec, new Set()), JSON.stringify(rec))
+  async function exportRecording(meta: RecordingMeta) {
+    const full = await resolveFull(meta)
+    if (!full) {
+      window.alert(`Could not load the frames for ${meta.gloss}, so it cannot be exported.`)
+      return
+    }
+    download(fileNameFor(full, new Set()), JSON.stringify(full))
   }
 
   /**
@@ -104,19 +124,43 @@ export function LibraryView() {
     )
   }
 
-  async function handleDelete(rec: SignRecording) {
-    if (!window.confirm(`Delete ${rec.gloss} by ${rec.signer}? This cannot be undone.`)) return
-    await deleteRecording(rec.id)
-    if (openId === rec.id) setOpenId(null)
+  async function togglePlay(meta: RecordingMeta) {
+    if (openIdRef.current === meta.id) {
+      openIdRef.current = null
+      setOpenId(null)
+      setOpenRec(null)
+      setOpenFailed(false)
+      return
+    }
+    openIdRef.current = meta.id
+    setOpenId(meta.id)
+    setOpenRec(null)
+    setOpenFailed(false)
+    const full = await resolveFull(meta)
+    // The learner may have opened a different row while this was in flight.
+    if (openIdRef.current !== meta.id) return
+    if (full) setOpenRec(full)
+    else setOpenFailed(true)
+  }
+
+  async function handleDelete(meta: RecordingMeta) {
+    if (!window.confirm(`Delete ${meta.gloss} by ${meta.signer}? This cannot be undone.`)) return
+    await deleteRecording(meta.id)
+    if (openIdRef.current === meta.id) {
+      openIdRef.current = null
+      setOpenId(null)
+      setOpenRec(null)
+    }
     await refreshLocal()
   }
 
   const rows: Row[] = [
-    ...local.map((rec) => ({ rec, bundled: false })),
-    ...bundled.map((rec) => ({ rec, bundled: true })),
+    ...local.map((rec) => ({ meta: toMeta(rec), bundled: false })),
+    ...bundled.map((meta) => ({ meta, bundled: true })),
   ].sort(
     (a, b) =>
-      a.rec.gloss.localeCompare(b.rec.gloss) || b.rec.createdAt.localeCompare(a.rec.createdAt),
+      a.meta.gloss.localeCompare(b.meta.gloss) ||
+      b.meta.createdAt.localeCompare(a.meta.createdAt),
   )
 
   return (
@@ -160,13 +204,13 @@ export function LibraryView() {
         </p>
       ) : (
         <ul className="rec-list">
-          {rows.map(({ rec, bundled: isBundled }) => (
-            <li className="rec-row" key={rec.id}>
+          {rows.map(({ meta, bundled: isBundled }) => (
+            <li className="rec-row" key={meta.id}>
               <div className="rec-main">
-                <span className="rec-gloss" title={translationOf(rec.gloss)}>
-                  {glossLabel(rec.gloss)}
+                <span className="rec-gloss" title={translationOf(meta.gloss)}>
+                  {glossLabel(meta.gloss)}
                   {isBundled && <em className="badge">bundled</em>}
-                  {rec.provisional && (
+                  {meta.provisional && (
                     <em
                       className="badge badge-warn"
                       title="Team recording — a stand-in for development, not authoritative SSL"
@@ -176,33 +220,39 @@ export function LibraryView() {
                   )}
                 </span>
                 <span className="rec-meta">
-                  {rec.signer} · {(rec.durationMs / 1000).toFixed(1)} s · {rec.frames.length}{' '}
-                  frames · {new Date(rec.createdAt).toLocaleDateString()}
+                  {meta.signer} · {(meta.durationMs / 1000).toFixed(1)} s · {meta.frameCount}{' '}
+                  frames · {new Date(meta.createdAt).toLocaleDateString()}
                 </span>
               </div>
               <div className="rec-actions">
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setOpenId(openId === rec.id ? null : rec.id)}
-                >
-                  {openId === rec.id ? 'Close' : 'Play'}
+                <button className="btn btn-ghost" onClick={() => void togglePlay(meta)}>
+                  {openId === meta.id ? 'Close' : 'Play'}
                 </button>
-                <button className="btn btn-ghost" onClick={() => exportRecording(rec)}>
+                <button className="btn btn-ghost" onClick={() => void exportRecording(meta)}>
                   Export
                 </button>
                 {!isBundled && (
-                  <button className="btn btn-ghost btn-danger" onClick={() => void handleDelete(rec)}>
+                  <button
+                    className="btn btn-ghost btn-danger"
+                    onClick={() => void handleDelete(meta)}
+                  >
                     Delete
                   </button>
                 )}
               </div>
-              {openId === rec.id && (
+              {openId === meta.id && (
                 <div className="rec-player">
-                  <SkeletonPlayer
-                    frames={rec.frames}
-                    videoWidth={rec.videoWidth}
-                    videoHeight={rec.videoHeight}
-                  />
+                  {openRec ? (
+                    <SkeletonPlayer
+                      frames={openRec.frames}
+                      videoWidth={openRec.videoWidth}
+                      videoHeight={openRec.videoHeight}
+                    />
+                  ) : openFailed ? (
+                    <p className="camera-error">Could not load this recording.</p>
+                  ) : (
+                    <p className="hint-text">Loading frames…</p>
+                  )}
                 </div>
               )}
             </li>

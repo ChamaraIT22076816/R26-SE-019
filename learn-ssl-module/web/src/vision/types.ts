@@ -61,6 +61,48 @@ export interface SignRecording {
   frames: HandFrame[]
 }
 
+/**
+ * A recording described without its frames.
+ *
+ * Frames are the overwhelming bulk of a recording — the 362 bundled references
+ * are 18.5 MB of JSON, of which the metadata is ~220 KB. The picker, the
+ * library list and the progress dashboard need only this, so they load only
+ * this; frames are fetched per sign when one is actually replayed or scored.
+ *
+ * `frameCount` stands in for `frames.length`, which the reference-selection
+ * rule needs to compare capture rates (see storage/references.ts).
+ */
+export interface RecordingMeta {
+  id: string
+  gloss: string
+  signer: string
+  source?: 'kaggle-dataset' | 'team-recording' | string
+  sourceCategory?: string
+  provisional?: boolean
+  createdAt: string
+  durationMs: number
+  fps: number
+  videoWidth: number
+  videoHeight: number
+  frameCount: number
+  /** Licence and attribution travel with the metadata so the Library can
+   *  credit a corpus without loading a single frame. */
+  licence?: string
+  attribution?: string
+  /**
+   * Filename under public/references/. Present only for bundled references —
+   * a recording the learner made in this browser lives in IndexedDB and is
+   * fetched by `id` instead.
+   */
+  file?: string
+}
+
+/** Describe a fully-loaded recording without its frames. */
+export function toMeta(rec: SignRecording): RecordingMeta {
+  const { frames, ...meta } = rec
+  return { ...meta, frameCount: frames.length }
+}
+
 export function toHandFrame(result: HandLandmarkerResult, timestampMs: number): HandFrame {
   return {
     timestampMs,

@@ -4,9 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/build-reference-index.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/build-reference-index.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "pretest": "node scripts/build-reference-index.mjs",
     "test": "vitest run",
     "preview": "vite preview",
     "postinstall": "node scripts/copy-wasm.mjs"

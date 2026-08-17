@@ -9,7 +9,7 @@ const PARTICIPANT_KEY = 'ssl-learn-participant'
 import { practiceNeed, summarizeAll } from '../learner/mastery'
 import type { GlossMastery, MasteryLevel } from '../learner/mastery'
 import { listRecordings } from '../storage/recordingStore'
-import { loadBundledRecordings } from '../storage/bundledReferences'
+import { loadReferenceIndex } from '../storage/bundledReferences'
 
 const LEVEL_LABEL: Record<MasteryLevel, string> = {
   new: 'New',
@@ -82,9 +82,10 @@ export function ProgressView() {
 
   useEffect(() => {
     void (async () => {
+      // Only the gloss names are needed here, so this never touches frames.
       const [loc, bun, log, samples] = await Promise.all([
         listRecordings(),
-        loadBundledRecordings(),
+        loadReferenceIndex(),
         listAttempts(),
         listSamples(),
       ])

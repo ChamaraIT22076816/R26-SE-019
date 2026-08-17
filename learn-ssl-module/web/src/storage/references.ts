@@ -1,4 +1,16 @@
-import type { SignRecording } from '../vision/types'
+/**
+ * Fields the selection rule needs. Declared structurally rather than as
+ * `RecordingMeta` so these functions work on anything carrying them — the
+ * bundled index, a locally-recorded sign described by `toMeta`, or a richer
+ * object a caller wants back unchanged (hence the generic).
+ */
+interface Pickable {
+  gloss: string
+  provisional?: boolean
+  createdAt: string
+  durationMs: number
+  frameCount: number
+}
 
 /**
  * Choose one reference per gloss from every recording available.
@@ -8,8 +20,8 @@ import type { SignRecording } from '../vision/types'
  * in place of a team stand-in takes effect immediately, without anyone having
  * to delete the stand-in. Among equals, the newest wins.
  */
-export function pickReferences(recordings: SignRecording[]): Map<string, SignRecording> {
-  const byGloss = new Map<string, SignRecording>()
+export function pickReferences<T extends Pickable>(recordings: T[]): Map<string, T> {
+  const byGloss = new Map<string, T>()
   for (const rec of recordings) {
     const incumbent = byGloss.get(rec.gloss)
     if (!incumbent || beats(rec, incumbent)) byGloss.set(rec.gloss, rec)
@@ -21,13 +33,16 @@ export function pickReferences(recordings: SignRecording[]): Map<string, SignRec
  * Effective capture rate. Corpora differ: one of ours samples at ~25 fps and
  * another at ~10 fps for the same sign, and the finer sampling gives DTW more
  * to align against.
+ *
+ * Uses `frameCount` rather than `frames.length` so the rule can run against the
+ * bundled index, before any frames have been downloaded.
  */
-function captureRate(rec: SignRecording): number {
-  if (rec.durationMs <= 0 || rec.frames.length === 0) return 0
-  return (rec.frames.length / rec.durationMs) * 1000
+function captureRate(rec: Pickable): number {
+  if (rec.durationMs <= 0 || rec.frameCount === 0) return 0
+  return (rec.frameCount / rec.durationMs) * 1000
 }
 
-function beats(candidate: SignRecording, incumbent: SignRecording): boolean {
+function beats(candidate: Pickable, incumbent: Pickable): boolean {
   // 1. Authoritative always beats a provisional team stand-in.
   const candidateProvisional = candidate.provisional === true
   const incumbentProvisional = incumbent.provisional === true
@@ -44,6 +59,6 @@ function beats(candidate: SignRecording, incumbent: SignRecording): boolean {
 }
 
 /** Same selection, as a list sorted by gloss — for chip lists and pickers. */
-export function pickReferenceList(recordings: SignRecording[]): SignRecording[] {
+export function pickReferenceList<T extends Pickable>(recordings: T[]): T[] {
   return [...pickReferences(recordings).values()].sort((a, b) => a.gloss.localeCompare(b.gloss))
 }

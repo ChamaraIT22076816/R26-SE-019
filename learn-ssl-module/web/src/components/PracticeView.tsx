@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useHandTracking } from '../vision/useHandTracking'
-import type { HandFrame, SignRecording } from '../vision/types'
+import type { HandFrame, RecordingMeta, SignRecording } from '../vision/types'
+import { toMeta } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
-import { loadBundledRecordings } from '../storage/bundledReferences'
+import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
 import { categoriesIn, categoryOf } from '../data/categories'
 import { glossLabel, matchesSearch, translationOf } from '../data/translations'
@@ -26,8 +27,13 @@ type Phase = 'idle' | 'countdown' | 'recording' | 'result'
  * get a DTW match score with corrective hints and a side-by-side replay.
  */
 export function PracticeView() {
-  const [references, setReferences] = useState<SignRecording[]>([])
-  const [selected, setSelected] = useState<SignRecording | null>(null)
+  // The picker runs entirely on metadata — 220 KB for all 362 signs. Only the
+  // selected sign's frames are fetched, because only it is replayed and scored.
+  const [references, setReferences] = useState<RecordingMeta[]>([])
+  const [localRecs, setLocalRecs] = useState<SignRecording[]>([])
+  const [selected, setSelected] = useState<RecordingMeta | null>(null)
+  const [reference, setReference] = useState<SignRecording | null>(null)
+  const [refFailed, setRefFailed] = useState(false)
   const [phase, setPhaseState] = useState<Phase>('idle')
   const [count, setCount] = useState(COUNTDOWN_S)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -44,8 +50,12 @@ export function PracticeView() {
     phaseRef.current = p
     setPhaseState(p)
   }
-  const selectedRef = useRef<SignRecording | null>(null)
+  const selectedRef = useRef<RecordingMeta | null>(null)
   selectedRef.current = selected
+  // Scoring needs the frames, not just the metadata, and finishRecording runs
+  // outside React's render so it reads them through a ref.
+  const referenceRef = useRef<SignRecording | null>(null)
+  referenceRef.current = reference
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
@@ -72,15 +82,37 @@ export function PracticeView() {
 
   useEffect(() => {
     void (async () => {
-      const [loc, bun, log] = await Promise.all([
+      const [loc, index, log] = await Promise.all([
         listRecordings(),
-        loadBundledRecordings(),
+        loadReferenceIndex(),
         listAttempts(),
       ])
-      setReferences(pickReferenceList([...loc, ...bun]))
+      setLocalRecs(loc)
+      setReferences(pickReferenceList([...loc.map(toMeta), ...index]))
       setEntries(log)
     })()
   }, [])
+
+  // Fetch the frames for whichever sign is selected. A bundled reference comes
+  // from public/references/ (cached module-side); the learner's own recordings
+  // are already in memory from the initial IndexedDB read.
+  useEffect(() => {
+    setReference(null)
+    setRefFailed(false)
+    if (!selected) return
+    let cancelled = false
+    void (async () => {
+      const full = selected.file
+        ? await loadReferenceFrames(selected.file)
+        : (localRecs.find((r) => r.id === selected.id) ?? null)
+      if (cancelled) return
+      if (full) setReference(full)
+      else setRefFailed(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selected, localRecs])
 
   // Keep the suggestion in step with the log — it changes on load and after
   // every scored attempt.
@@ -110,7 +142,9 @@ export function PracticeView() {
   useEffect(() => () => window.clearInterval(countdownRef.current), [])
 
   function beginCountdown() {
-    if (tracking.status !== 'running' || !selectedRef.current) return
+    // Frames must be in hand before the take starts — there is nothing to score
+    // against otherwise, and the countdown would strand the learner.
+    if (tracking.status !== 'running' || !referenceRef.current) return
     setResult(null)
     setAttempt(null)
     setCount(COUNTDOWN_S)
@@ -138,7 +172,7 @@ export function PracticeView() {
 
   function finishRecording() {
     if (phaseRef.current !== 'recording') return
-    const reference = selectedRef.current
+    const reference = referenceRef.current
     const frames = framesRef.current
     framesRef.current = []
     if (!reference) {
@@ -308,11 +342,11 @@ export function PracticeView() {
             <div className="compare-grid">
               <div>
                 <p className="compare-label">Reference</p>
-                {selected && (
+                {reference && (
                   <SkeletonPlayer
-                    frames={selected.frames}
-                    videoWidth={selected.videoWidth}
-                    videoHeight={selected.videoHeight}
+                    frames={reference.frames}
+                    videoWidth={reference.videoWidth}
+                    videoHeight={reference.videoHeight}
                   />
                 )}
               </div>
@@ -431,11 +465,20 @@ export function PracticeView() {
                         verified SSL.
                       </p>
                     )}
-                    <SkeletonPlayer
-                      frames={selected.frames}
-                      videoWidth={selected.videoWidth}
-                      videoHeight={selected.videoHeight}
-                    />
+                    {reference ? (
+                      <SkeletonPlayer
+                        frames={reference.frames}
+                        videoWidth={reference.videoWidth}
+                        videoHeight={reference.videoHeight}
+                      />
+                    ) : refFailed ? (
+                      <p className="camera-error">
+                        Could not load this reference recording. Pick another sign, or check your
+                        connection and select it again.
+                      </p>
+                    ) : (
+                      <p className="hint-text">Loading reference…</p>
+                    )}
                   </div>
                 )}
 
@@ -451,13 +494,17 @@ export function PracticeView() {
                   <button
                     className="btn"
                     onClick={beginCountdown}
-                    disabled={tracking.status !== 'running' || !selected}
+                    disabled={tracking.status !== 'running' || !reference}
                     title={
                       tracking.status !== 'running'
                         ? 'Start the camera first'
                         : !selected
                           ? 'Choose a sign first'
-                          : undefined
+                          : refFailed
+                            ? 'This reference could not be loaded'
+                            : !reference
+                              ? 'Loading the reference recording…'
+                              : undefined
                     }
                   >
                     Record attempt
