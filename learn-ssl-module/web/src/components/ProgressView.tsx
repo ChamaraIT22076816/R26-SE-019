@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react'
 import { listAttempts } from '../learner/attemptLog'
-import { listSamples } from '../metrics/latencyStore'
-import type { LatencySample } from '../metrics/latency'
-import { buildExport, downloadFile, toCsv } from '../pilot/exportResults'
-import { LatencyPanel } from './LatencyPanel'
-
-const PARTICIPANT_KEY = 'ssl-learn-participant'
 import { practiceNeed, summarizeAll } from '../learner/mastery'
 import type { GlossMastery, MasteryLevel } from '../learner/mastery'
 import { listRecordings } from '../storage/recordingStore'
@@ -55,41 +49,27 @@ function Sparkline({ scores }: { scores: number[] }) {
   )
 }
 
-/** Mastery dashboard: summary tiles + per-sign progress, weakest first. */
+/**
+ * Mastery dashboard: summary tiles + per-sign progress, weakest first.
+ *
+ * The learner's own results only. Pilot export and the feedback-latency panel
+ * moved to the author-only Study tab — they are the researcher's instruments,
+ * and a participant met them here while looking at their own learning.
+ */
 export function ProgressView() {
   const [summaries, setSummaries] = useState<GlossMastery[]>([])
   const [attemptCount, setAttemptCount] = useState(0)
   const [avgRecent, setAvgRecent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [latency, setLatency] = useState<LatencySample[]>([])
-  const [participantCode, setParticipantCode] = useState(
-    () => localStorage.getItem(PARTICIPANT_KEY) ?? '',
-  )
-
-  async function exportResults(format: 'json' | 'csv') {
-    // Re-read rather than exporting the state loaded on mount, so attempts made
-    // since this tab was opened are in the file the participant hands over.
-    const [attempts, samples] = await Promise.all([listAttempts(), listSamples()])
-    const data = buildExport(participantCode, attempts, samples)
-    const stamp = data.exportedAt.slice(0, 10)
-    const base = `ssl-learn_${data.participantCode}_${stamp}`.replace(/[^\w.-]+/g, '_')
-    if (format === 'csv') {
-      downloadFile(`${base}.csv`, toCsv(data), 'text/csv')
-    } else {
-      downloadFile(`${base}.json`, JSON.stringify(data, null, 2), 'application/json')
-    }
-  }
 
   useEffect(() => {
     void (async () => {
       // Only the gloss names are needed here, so this never touches frames.
-      const [loc, bun, log, samples] = await Promise.all([
+      const [loc, bun, log] = await Promise.all([
         listRecordings(),
         loadReferenceIndex(),
         listAttempts(),
-        listSamples(),
       ])
-      setLatency(samples)
       const glosses = [...loc, ...bun].map((r) => r.gloss)
       const now = new Date()
       setSummaries(
@@ -115,35 +95,6 @@ export function ProgressView() {
         <h2>Progress</h2>
         <span className="library-count">sorted by what needs practice</span>
       </div>
-
-      {attemptCount > 0 && (
-        <div className="pilot-export">
-          <label className="field">
-            Participant code (for the study — not your name)
-            <input
-              type="text"
-              value={participantCode}
-              onChange={(e) => {
-                setParticipantCode(e.target.value)
-                localStorage.setItem(PARTICIPANT_KEY, e.target.value)
-              }}
-              placeholder="e.g. P01"
-            />
-          </label>
-          <div className="row-buttons">
-            <button className="btn btn-ghost" onClick={() => void exportResults('json')}>
-              Export results (JSON)
-            </button>
-            <button className="btn btn-ghost" onClick={() => void exportResults('csv')}>
-              Export results (CSV)
-            </button>
-          </div>
-          <p className="hint-text">
-            Your attempts stay in this browser until you export them. Send the file to the
-            researcher — it contains your scores, never any video.
-          </p>
-        </div>
-      )}
 
       {loading ? (
         <p className="empty-state">Loading…</p>
@@ -202,11 +153,6 @@ export function ProgressView() {
           )}
         </>
       )}
-
-      {/* System metric rather than learner progress, so it sits below their own
-          results — but it stays on this tab because this is where a pilot
-          facilitator already comes to read and export a session. */}
-      {!loading && <LatencyPanel samples={latency} />}
     </section>
   )
 }

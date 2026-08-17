@@ -4,9 +4,12 @@ import { RecordView } from './components/RecordView'
 import { LibraryView } from './components/LibraryView'
 import { ProgressView } from './components/ProgressView'
 import { ScenarioView } from './components/ScenarioView'
+import { StudyView } from './components/StudyView'
+import { persistMode, readMode } from './app/mode'
+import type { AppMode } from './app/mode'
 import './components/views.css'
 
-type Tab = 'practice' | 'scenario' | 'record' | 'library' | 'progress'
+type Tab = 'practice' | 'scenario' | 'record' | 'library' | 'progress' | 'study'
 
 /**
  * Tab glyphs. Inline paths rather than an icon package — five icons is not
@@ -27,18 +30,38 @@ const ICONS: Record<Tab, string> = {
   library: 'M4 7h16M4 12h16M4 17h10',
   // a rising bar chart
   progress: 'M4 20V12m5 8V5m5 15v-6m5 6V9',
+  // a clipboard
+  study: 'M9 4h6v3H9zM9 5.5H6v14h12v-14h-3M9 12h6M9 16h4',
 }
 
-const TABS: Array<{ id: Tab; label: string }> = [
-  { id: 'practice', label: 'Practice' },
-  { id: 'scenario', label: 'Scenario' },
-  { id: 'record', label: 'Record' },
-  { id: 'library', label: 'Library' },
-  { id: 'progress', label: 'Progress' },
-]
+const ALL_TABS: Record<Tab, string> = {
+  practice: 'Practice',
+  scenario: 'Scenario',
+  progress: 'Progress',
+  record: 'Record',
+  library: 'Library',
+  study: 'Study',
+}
+
+/** What a learner sees. Record and Library author reference data; Study is the
+ *  researcher's pilot tooling. None of the three is the learner's job. */
+const LEARNER_TABS: Tab[] = ['practice', 'scenario', 'progress']
+const AUTHOR_TABS: Tab[] = [...LEARNER_TABS, 'record', 'library', 'study']
 
 function App() {
   const [tab, setTab] = useState<Tab>('practice')
+  const [mode, setModeState] = useState<AppMode>(readMode)
+
+  const tabs = mode === 'author' ? AUTHOR_TABS : LEARNER_TABS
+
+  function setMode(next: AppMode) {
+    setModeState(next)
+    persistMode(next)
+    // Leaving author mode while standing on an author-only tab would otherwise
+    // render nothing at all.
+    const allowed = next === 'author' ? AUTHOR_TABS : LEARNER_TABS
+    setTab((cur) => (allowed.includes(cur) ? cur : 'practice'))
+  }
 
   // The tracking engine is a lazy chunk (see vision/handTracker.ts), which
   // keeps it off the critical path. Warm it once the page is idle so that
@@ -56,6 +79,19 @@ function App() {
 
   return (
     <div className="app">
+      {mode === 'author' && (
+        // Deliberately loud: a screenshot taken in this mode has to be
+        // unambiguous about which build it shows.
+        <div className="mode-banner">
+          <span>
+            <strong>Author &amp; researcher tools.</strong> This is not what a learner sees.
+          </span>
+          <button className="btn btn-ghost" onClick={() => setMode('learner')}>
+            Exit to learner view
+          </button>
+        </div>
+      )}
+
       <header className="app-header">
         <p className="app-kicker">R26-SE-019 · Component 4 — Learning &amp; Practice Module</p>
         <h1>SSL Learn</h1>
@@ -63,15 +99,15 @@ function App() {
           Learn and practise Sri Lankan Sign Language — record a sign, get it scored against a
           reference, and see what to fix.
         </p>
-        <nav className="tabs" aria-label="Sections">
-          {TABS.map((t) => (
+        <nav className="tabs" aria-label="Sections" data-count={tabs.length}>
+          {tabs.map((id) => (
             <button
-              key={t.id}
-              className={tab === t.id ? 'tab active' : 'tab'}
+              key={id}
+              className={tab === id ? 'tab active' : 'tab'}
               // The active tab is otherwise signalled by colour alone, which a
               // screen reader cannot convey.
-              aria-current={tab === t.id ? 'page' : undefined}
-              onClick={() => setTab(t.id)}
+              aria-current={tab === id ? 'page' : undefined}
+              onClick={() => setTab(id)}
             >
               <svg
                 className="tab-icon"
@@ -83,9 +119,9 @@ function App() {
                 strokeLinejoin="round"
                 aria-hidden="true"
               >
-                <path d={ICONS[t.id]} />
+                <path d={ICONS[id]} />
               </svg>
-              <span className="tab-label">{t.label}</span>
+              <span className="tab-label">{ALL_TABS[id]}</span>
             </button>
           ))}
         </nav>
@@ -97,11 +133,19 @@ function App() {
         {tab === 'record' && <RecordView />}
         {tab === 'library' && <LibraryView />}
         {tab === 'progress' && <ProgressView />}
+        {tab === 'study' && <StudyView />}
       </main>
 
       <footer className="app-footer">
-        Hand tracking runs fully in your browser (MediaPipe HandLandmarker) — no video ever
-        leaves your device.
+        <p>
+          Hand tracking runs fully in your browser (MediaPipe HandLandmarker) — no video ever
+          leaves your device.
+        </p>
+        {mode === 'learner' && (
+          <button className="link-button" onClick={() => setMode('author')}>
+            Research &amp; authoring tools
+          </button>
+        )}
       </footer>
     </div>
   )
