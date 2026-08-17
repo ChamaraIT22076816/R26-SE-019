@@ -17,6 +17,7 @@ import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
+import { STACKED_LAYOUT, useMediaQuery } from './useMediaQuery'
 
 const COUNTDOWN_S = 3
 
@@ -66,6 +67,11 @@ export function PracticeView() {
   const lastFrameAtRef = useRef<number | null>(null)
 
   const latency = useFeedbackLatency('practice')
+
+  // Where the reference replay lives. Stacked (phone) it goes inside the camera
+  // stage, so the learner can watch it and stay in frame at once; side by side
+  // it stays in the panel, which already has room for it and its transport.
+  const stacked = useMediaQuery(STACKED_LAYOUT)
 
   // Capture a bit longer than the reference so a slightly slower attempt fits.
   const captureMs = selected ? Math.max(selected.durationMs + 1500, 2500) : 3500
@@ -260,6 +266,15 @@ export function PracticeView() {
           error={tracking.error}
           onStart={() => void tracking.start()}
           idleHint="Start the camera, choose a sign, and record your attempt."
+          pip={
+            stacked && reference && phase !== 'result' ? (
+              <SkeletonPlayer
+                frames={reference.frames}
+                videoWidth={reference.videoWidth}
+                videoHeight={reference.videoHeight}
+              />
+            ) : undefined
+          }
         >
           {phase === 'countdown' && (
             <div className="countdown-overlay">
@@ -362,7 +377,7 @@ export function PracticeView() {
               </div>
             </div>
 
-            <div className="row-buttons">
+            <div className="row-buttons panel-actions">
               <button className="btn" onClick={beginCountdown} disabled={tracking.status !== 'running'}>
                 Try again
               </button>
@@ -466,11 +481,15 @@ export function PracticeView() {
                       </p>
                     )}
                     {reference ? (
-                      <SkeletonPlayer
-                        frames={reference.frames}
-                        videoWidth={reference.videoWidth}
-                        videoHeight={reference.videoHeight}
-                      />
+                      // Stacked, the player itself is in the camera stage — the
+                      // gloss and the provisional note above stay here either way.
+                      !stacked && (
+                        <SkeletonPlayer
+                          frames={reference.frames}
+                          videoWidth={reference.videoWidth}
+                          videoHeight={reference.videoHeight}
+                        />
+                      )
                     ) : refFailed ? (
                       <p className="camera-error">
                         Could not load this reference recording. Pick another sign, or check your
@@ -482,38 +501,44 @@ export function PracticeView() {
                   </div>
                 )}
 
-                {phase === 'countdown' ? (
-                  <button className="btn btn-ghost" onClick={cancelCountdown}>
-                    Cancel
-                  </button>
-                ) : phase === 'recording' ? (
-                  <button className="btn" onClick={finishRecording}>
-                    Stop &amp; score
-                  </button>
-                ) : (
-                  <button
-                    className="btn"
-                    onClick={beginCountdown}
-                    disabled={tracking.status !== 'running' || !reference}
-                    title={
-                      tracking.status !== 'running'
-                        ? 'Start the camera first'
-                        : !selected
-                          ? 'Choose a sign first'
-                          : refFailed
-                            ? 'This reference could not be loaded'
-                            : !reference
-                              ? 'Loading the reference recording…'
-                              : undefined
-                    }
-                  >
-                    Record attempt
-                  </button>
-                )}
                 <p className="hint-text">
                   Watch the reference, then record yourself signing it. You'll get a match score
                   and tips on what to fix.
                 </p>
+
+                {/* Last in the panel so it can stick to the bottom of the
+                    viewport on a phone, within thumb reach, instead of landing
+                    hundreds of pixels below the fold. */}
+                <div className="panel-actions">
+                  {phase === 'countdown' ? (
+                    <button className="btn btn-ghost" onClick={cancelCountdown}>
+                      Cancel
+                    </button>
+                  ) : phase === 'recording' ? (
+                    <button className="btn" onClick={finishRecording}>
+                      Stop &amp; score
+                    </button>
+                  ) : (
+                    <button
+                      className="btn"
+                      onClick={beginCountdown}
+                      disabled={tracking.status !== 'running' || !reference}
+                      title={
+                        tracking.status !== 'running'
+                          ? 'Start the camera first'
+                          : !selected
+                            ? 'Choose a sign first'
+                            : refFailed
+                              ? 'This reference could not be loaded'
+                              : !reference
+                                ? 'Loading the reference recording…'
+                                : undefined
+                      }
+                    >
+                      Record attempt
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </>

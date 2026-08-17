@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import type { TrackingStatus } from '../vision/useHandTracking'
 
@@ -8,6 +9,13 @@ interface CameraStageProps {
   error: string
   onStart: () => void
   idleHint: string
+  /**
+   * Reference replay, shown as a picture-in-picture inside the stage. On a
+   * phone this is the difference between the interaction working and not: the
+   * learner has to see themselves and the sign they are copying at the same
+   * time, and stacked panels put one of them off screen.
+   */
+  pip?: ReactNode
   /** Extra overlays rendered above the video (countdown, REC badge, …). */
   children?: ReactNode
 }
@@ -20,13 +28,45 @@ export function CameraStage({
   error,
   onStart,
   idleHint,
+  pip,
   children,
 }: CameraStageProps) {
+  // Which layer is full-bleed. Purely presentational, so it lives here rather
+  // than in every view that mounts a stage.
+  const [swapped, setSwapped] = useState(false)
+
   return (
-    <div className="camera-stage">
-      <video ref={videoRef} playsInline muted />
-      <canvas ref={canvasRef} />
+    <div className={swapped ? 'camera-stage camera-stage--swapped' : 'camera-stage'}>
+      <div className="stage-live">
+        <video ref={videoRef} playsInline muted />
+        <canvas ref={canvasRef} />
+      </div>
+
+      {pip && (
+        <div className="stage-pip">
+          {pip}
+          {/* A visible control, not a hidden gesture on the panel itself —
+              a tap target that only sighted mouse users could discover would
+              strand keyboard and screen-reader users. */}
+          <button
+            type="button"
+            className="stage-pip-swap"
+            onClick={() => setSwapped((s) => !s)}
+            aria-pressed={swapped}
+            aria-label={
+              swapped ? 'Show my camera full size' : 'Show the reference sign full size'
+            }
+            title={swapped ? 'Show my camera full size' : 'Show the reference full size'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M4 8h11l-3-3M20 16H9l3 3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {children}
+
       {status !== 'running' && (
         <div className="camera-placeholder">
           {status === 'error' ? (

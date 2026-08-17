@@ -17,6 +17,7 @@ import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
+import { STACKED_LAYOUT, useMediaQuery } from './useMediaQuery'
 
 type Stage = 'intro' | 'playing' | 'summary'
 
@@ -98,6 +99,10 @@ export function ScenarioView() {
   const scenarioVocabulary = useMemo(() => [...vocab.values()], [vocab])
 
   const latency = useFeedbackLatency('scenario')
+
+  // See PracticeView: the reference replay moves into the camera stage when the
+  // layout stacks, so a phone shows the sign and the signer together.
+  const stacked = useMediaQuery(STACKED_LAYOUT)
 
   const handleCaptured = useCallback(
     (take: CapturedTake) => {
@@ -404,6 +409,15 @@ export function ScenarioView() {
           error={capture.tracking.error}
           onStart={() => void capture.tracking.start()}
           idleHint="Start the camera to take part in the conversation."
+          pip={
+            stacked && !current ? (
+              <SkeletonPlayer
+                frames={reference.frames}
+                videoWidth={reference.videoWidth}
+                videoHeight={reference.videoHeight}
+              />
+            ) : undefined
+          }
         >
           {capture.phase === 'countdown' && (
             <div className="countdown-overlay">
@@ -485,33 +499,39 @@ export function ScenarioView() {
                   Provisional reference — a team stand-in, not verified SSL.
                 </p>
               )}
-              <SkeletonPlayer
-                frames={reference.frames}
-                videoWidth={reference.videoWidth}
-                videoHeight={reference.videoHeight}
-              />
+              {/* Stacked, the player is in the camera stage; the label and the
+                  provisional note stay here at every width. */}
+              {!stacked && (
+                <SkeletonPlayer
+                  frames={reference.frames}
+                  videoWidth={reference.videoWidth}
+                  videoHeight={reference.videoHeight}
+                />
+              )}
             </div>
             {turn.hint && <p className="hint-text">💡 {turn.hint}</p>}
-            {capture.phase === 'countdown' ? (
-              <button className="btn btn-ghost" onClick={capture.cancel}>
-                Cancel
-              </button>
-            ) : capture.phase === 'recording' ? (
-              <button className="btn" onClick={capture.finish}>
-                Stop &amp; score
-              </button>
-            ) : (
-              <button
-                className="btn"
-                onClick={() => capture.begin(captureMs)}
-                disabled={capture.tracking.status !== 'running'}
-                title={
-                  capture.tracking.status !== 'running' ? 'Start the camera first' : undefined
-                }
-              >
-                Sign it
-              </button>
-            )}
+            <div className="panel-actions">
+              {capture.phase === 'countdown' ? (
+                <button className="btn btn-ghost" onClick={capture.cancel}>
+                  Cancel
+                </button>
+              ) : capture.phase === 'recording' ? (
+                <button className="btn" onClick={capture.finish}>
+                  Stop &amp; score
+                </button>
+              ) : (
+                <button
+                  className="btn"
+                  onClick={() => capture.begin(captureMs)}
+                  disabled={capture.tracking.status !== 'running'}
+                  title={
+                    capture.tracking.status !== 'running' ? 'Start the camera first' : undefined
+                  }
+                >
+                  Sign it
+                </button>
+              )}
+            </div>
           </>
         )}
 

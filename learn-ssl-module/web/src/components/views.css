@@ -13,8 +13,17 @@
   background: var(--stage);
 }
 
-.camera-stage video,
-.camera-stage canvas {
+/* The live self-view and its landmark overlay, as one unit. Scoped to
+   .stage-live rather than written as a descendant selector on .camera-stage:
+   the stage now also contains the reference picture-in-picture, whose canvas
+   must NOT be stretched full-bleed. */
+.stage-live {
+  position: absolute;
+  inset: 0;
+}
+
+.stage-live > video,
+.stage-live > canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -35,6 +44,86 @@
   padding: 24px;
   text-align: center;
   background: radial-gradient(ellipse at center, var(--glow-stage), transparent 70%);
+}
+
+/* ---- reference picture-in-picture ---- */
+
+.stage-pip {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  width: 38%;
+  max-width: 180px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--stage);
+  box-shadow: var(--elev-2);
+}
+
+/* The PiP loops continuously, and a scrub bar inside a 180px thumbnail is not
+   a control anyone can operate — the transport belongs to the full-size player. */
+.stage-pip .player-controls {
+  display: none;
+}
+
+.stage-pip .skeleton-player canvas {
+  display: block;
+  border: none;
+  border-radius: 0;
+}
+
+.stage-pip-swap {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--on-overlay);
+  background: var(--scrim);
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+
+.stage-pip-swap svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Swapped: the reference takes the stage and the self-view drops to the corner,
+   for when the learner wants a proper look at the sign before copying it. */
+.camera-stage--swapped .stage-pip {
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.camera-stage--swapped .stage-live {
+  inset: auto 10px 10px auto;
+  z-index: 2;
+  width: 38%;
+  max-width: 180px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--elev-2);
+}
+
+@media (pointer: coarse) {
+  .stage-pip-swap {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .camera-hint {
@@ -94,9 +183,45 @@
   align-items: start;
 }
 
+/* ---- mobile: the camera stays put, the panel scrolls under it --------------
+   Stacked, the camera used to scroll away and leave the learner signing at a
+   control they could see but a frame they could not. Pinning it means "am I in
+   frame" and "what am I copying" are both always on screen, and the primary
+   action rides at the bottom in the thumb arc instead of 700-900px down. */
 @media (max-width: 900px) {
   .record-layout {
     grid-template-columns: 1fr;
+  }
+
+  .camera-card {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  /* A 16/9 band on a 9/16 screen makes the learner tiny in their own frame.
+     Squarer crops the sides — which a signer does not need — and buys height.
+     Capped in dvh so it cannot eat the panel on a short screen. */
+  .camera-stage {
+    aspect-ratio: 1 / 1;
+    max-height: 44dvh;
+  }
+
+  .panel-actions {
+    position: sticky;
+    bottom: calc(var(--nav-offset) + var(--s-2));
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    margin: 0 calc(var(--s-5) * -1) calc(var(--s-5) * -1);
+    padding: var(--s-3) var(--s-5) var(--s-4);
+    background: var(--surface);
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .panel-actions .btn {
+    width: 100%;
   }
 }
 

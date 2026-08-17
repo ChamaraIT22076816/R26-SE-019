@@ -139,6 +139,11 @@
   /* ---- motion -------------------------------------------------------------
      Reduced motion is enforced by collapsing these tokens (below), so an
      animation written against them cannot forget to honour the preference. */
+  /* How much of the viewport bottom the fixed nav occupies. 0 while the nav is
+     a top strip; set in the mobile block below. Anything that sticks to the
+     bottom of the viewport offsets by this so it never hides under the bar. */
+  --nav-offset: 0px;
+
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
@@ -313,6 +318,10 @@ body::before {
    directly over a live camera feed on exactly the devices least able to afford
    it. */
 @media (max-width: 760px) {
+  :root {
+    --nav-offset: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
   .tabs {
     position: fixed;
     inset: auto 0 0 0;
