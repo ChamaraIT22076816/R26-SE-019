@@ -1,4 +1,7 @@
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
+// Type-only: erased at build, so it creates no bundle edge. The library itself
+// is imported dynamically in createHandLandmarker below, which keeps ~135 KB
+// off the initial chunk — a learner who never starts the camera never pays it.
+import type { HandLandmarker } from '@mediapipe/tasks-vision'
 
 // Both the WASM runtime and the model are served from our own origin
 // (scripts/copy-wasm.mjs fills public/wasm on install; the model lives in
@@ -25,6 +28,7 @@ export function getHandLandmarker(): Promise<HandLandmarker> {
 }
 
 async function createHandLandmarker(): Promise<HandLandmarker> {
+  const { FilesetResolver, HandLandmarker } = await import('@mediapipe/tasks-vision')
   const fileset = await FilesetResolver.forVisionTasks(WASM_DIR)
   return HandLandmarker.createFromOptions(fileset, {
     baseOptions: {

@@ -1,4 +1,14 @@
-import type { HandLandmarkerResult } from '@mediapipe/tasks-vision'
+/**
+ * The shape of a MediaPipe detection result, declared structurally rather than
+ * imported. types.ts is pulled in by scoring, storage and every view, so an
+ * `import type` here is an easy way for someone to later add a value import and
+ * drag the 135 KB library back into the initial bundle. HandLandmarkerResult is
+ * assignable to this.
+ */
+interface HandResultLike {
+  landmarks: { x: number; y: number; z: number }[][]
+  handedness: { categoryName: string; score: number }[][]
+}
 
 /** One 3D point from MediaPipe. x/y are image-normalised to [0,1]; z is relative depth. */
 export interface Landmark {
@@ -103,7 +113,7 @@ export function toMeta(rec: SignRecording): RecordingMeta {
   return { ...meta, frameCount: frames.length }
 }
 
-export function toHandFrame(result: HandLandmarkerResult, timestampMs: number): HandFrame {
+export function toHandFrame(result: HandResultLike, timestampMs: number): HandFrame {
   return {
     timestampMs,
     hands: result.landmarks.map((landmarks, i) => ({

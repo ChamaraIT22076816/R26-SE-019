@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { DrawingUtils } from '@mediapipe/tasks-vision'
 import { drawHands } from '../vision/drawing'
 import type { HandFrame } from '../vision/types'
 
@@ -34,16 +33,24 @@ export function SkeletonPlayer({
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
-    const drawer = new DrawingUtils(ctx)
 
     let idx = 0
+    // Recordings run at ~25 fps but rAF fires at the display's refresh rate, so
+    // most ticks would repaint pixel-identical output. Skipping those is the
+    // difference between two idle canvases costing something and nothing.
+    let lastDrawn = -1
     const renderAt = (t: number) => {
-      if (frames[idx] && frames[idx].timestampMs > t) idx = 0 // looped back
+      if (frames[idx] && frames[idx].timestampMs > t) {
+        idx = 0 // looped back
+        lastDrawn = -1
+      }
       while (idx + 1 < frames.length && frames[idx + 1].timestampMs <= t) idx++
+      lastTRef.current = t
+      if (idx === lastDrawn) return
+      lastDrawn = idx
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       const frame = frames[idx]
-      if (frame) drawHands(drawer, frame.hands)
-      lastTRef.current = t
+      if (frame) drawHands(ctx, frame.hands)
     }
     renderAtRef.current = renderAt
 

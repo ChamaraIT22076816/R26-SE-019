@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PracticeView } from './components/PracticeView'
 import { RecordView } from './components/RecordView'
 import { LibraryView } from './components/LibraryView'
@@ -18,6 +18,20 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 function App() {
   const [tab, setTab] = useState<Tab>('practice')
+
+  // The tracking engine is a lazy chunk (see vision/handTracker.ts), which
+  // keeps it off the critical path. Warm it once the page is idle so that
+  // "Start camera" is still a cache hit rather than a cold 135 KB fetch.
+  useEffect(() => {
+    const warm = () => void import('@mediapipe/tasks-vision')
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(warm)
+      return () => cancelIdleCallback(id)
+    }
+    // Safari has no requestIdleCallback; a timeout is close enough for a prefetch.
+    const id = window.setTimeout(warm, 2000)
+    return () => window.clearTimeout(id)
+  }, [])
 
   return (
     <div className="app">

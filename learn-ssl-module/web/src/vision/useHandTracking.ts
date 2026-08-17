@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DrawingUtils } from '@mediapipe/tasks-vision'
 import { getHandLandmarker } from './handTracker'
 import { drawHands } from './drawing'
 import { toHandFrame } from './types'
@@ -15,6 +14,11 @@ export interface TrackingStats {
 }
 
 function describeError(e: unknown): string {
+  // The tracking engine is a lazily-imported chunk, so a flaky connection or a
+  // stale cache after a redeploy can fail the import rather than the camera.
+  if (e instanceof Error && /dynamically imported module|Importing a module script failed/i.test(e.message)) {
+    return 'Could not load the hand-tracking engine. Check your connection and try again — if you have just reloaded, refresh the page once more.'
+  }
   if (e instanceof DOMException) {
     switch (e.name) {
       case 'NotAllowedError':
@@ -36,7 +40,6 @@ function describeError(e: unknown): string {
 export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const drawerRef = useRef<DrawingUtils | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
   // Guards the frame loop. processFrame awaits the landmarker, so a stop() that
@@ -77,9 +80,8 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
 
       const ctx = canvas.getContext('2d')
       if (ctx) {
-        if (!drawerRef.current) drawerRef.current = new DrawingUtils(ctx)
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-        drawHands(drawerRef.current, frame.hands)
+        drawHands(ctx, frame.hands)
       }
 
       onFrameRef.current?.(frame)
@@ -169,7 +171,6 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
       cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
-      drawerRef.current = null
     }
   }, [])
 
