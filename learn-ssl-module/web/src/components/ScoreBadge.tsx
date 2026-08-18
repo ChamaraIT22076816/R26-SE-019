@@ -8,7 +8,16 @@ function band(score: number): { klass: string; label: string } {
   return { klass: 'low', label: 'Keep practising' }
 }
 
-/** Circular progress ring showing a 0–100 sign-match score. */
+/**
+ * Circular progress ring showing a 0–100 sign-match score.
+ *
+ * The numeral is rendered at its final value immediately — it is the actual
+ * feedback, and the ≤300 ms latency figure is only honest if the score is
+ * readable on the frame that gets measured. The ring is a redundant encoding of
+ * the same number, so it is the part allowed to animate; it sweeps once the
+ * reveal is armed (see useFeedbackLatency's onSampled), and simply renders full
+ * when it is not, which is also what happens under reduced motion.
+ */
 export function ScoreBadge({ score }: ScoreBadgeProps) {
   const r = 52
   const c = 2 * Math.PI * r
@@ -25,6 +34,14 @@ export function ScoreBadge({ score }: ScoreBadgeProps) {
           r={r}
           className="ring-value"
           strokeDasharray={c}
+          // Both ends of the sweep, handed to CSS so the keyframe can run
+          // entirely on the compositor without React re-rendering per frame.
+          style={
+            {
+              '--ring-empty': c,
+              '--ring-offset': offset,
+            } as React.CSSProperties
+          }
           strokeDashoffset={offset}
           transform="rotate(-90 60 60)"
         />

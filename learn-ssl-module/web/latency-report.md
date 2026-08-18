@@ -23,8 +23,8 @@ Measured in Node on a development machine, not in a participant's browser.
 
 | Path | n | median | p95 | max |
 |---|---|---|---|---|
-| Practice — one attempt vs one reference | 40 | 1.8 ms | 8.4 ms | 18.2 ms |
-| Scenario turn — plus appropriateness over 5 signs | 5 | 10.5 ms | 34.7 ms | 34.7 ms |
+| Practice — one attempt vs one reference | 40 | 2.5 ms | 9.7 ms | 17.3 ms |
+| Scenario turn — plus appropriateness over 5 signs | 5 | 9.6 ms | 32.5 ms | 32.5 ms |
 
 ## What was scored
 

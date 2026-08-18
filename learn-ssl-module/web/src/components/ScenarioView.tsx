@@ -98,7 +98,10 @@ export function ScenarioView() {
   // whole library. See scoreTurn for why.
   const scenarioVocabulary = useMemo(() => [...vocab.values()], [vocab])
 
-  const latency = useFeedbackLatency('scenario')
+  // See PracticeView / useFeedbackLatency: the score commits in its final form
+  // on the measured frame, and only then is the reveal released.
+  const [revealArmed, setRevealArmed] = useState(false)
+  const latency = useFeedbackLatency('scenario', () => setRevealArmed(true))
 
   // See PracticeView: the reference replay moves into the camera stage when the
   // layout stacks, so a phone shows the sign and the signer together.
@@ -121,6 +124,7 @@ export function ScenarioView() {
       const scoreStartAt = performance.now()
       const score = scoreTurn(attempt, reference, scenarioVocabulary)
       const scoreEndAt = performance.now()
+      setRevealArmed(false)
       setCurrent(score)
       setOutcomes((prev) => [...prev.filter((o) => o.turn.id !== turn.id), { turn, score, attempt }])
 
@@ -137,6 +141,9 @@ export function ScenarioView() {
             createdAt: attempt.createdAt,
           },
         )
+      } else {
+        // Unmeasurable take — release the reveal anyway.
+        requestAnimationFrame(() => setRevealArmed(true))
       }
 
       // Log the DTW accuracy — not the rubric total — so "mastery" means the
@@ -190,6 +197,7 @@ export function ScenarioView() {
 
   function nextTurn() {
     setCurrent(null)
+    setRevealArmed(false)
     if (index + 1 >= playable.length) {
       setStage('summary')
     } else {
@@ -446,7 +454,7 @@ export function ScenarioView() {
         </div>
       </section>
 
-      <aside className="record-panel">
+      <aside className="record-panel" data-reveal={revealArmed ? 'on' : undefined}>
         <div className="turn-progress">
           {playable.map((t, i) => (
             <span key={t.id} className={i < index ? 'done' : i === index ? 'active' : ''} />
@@ -482,6 +490,7 @@ export function ScenarioView() {
                 className="btn btn-ghost"
                 onClick={() => {
                   setCurrent(null)
+                  setRevealArmed(false)
                   capture.begin(captureMs)
                 }}
                 disabled={capture.tracking.status !== 'running'}

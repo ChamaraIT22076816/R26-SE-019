@@ -66,7 +66,11 @@ export function PracticeView() {
   // starts — see metrics/latency.ts.
   const lastFrameAtRef = useRef<number | null>(null)
 
-  const latency = useFeedbackLatency('practice')
+  // Act 1 is the commit that gets measured: final score, final hints, nothing
+  // moving. Act 2 is everything expressive, released one frame later by
+  // useFeedbackLatency once the sample has been taken. See its doc comment.
+  const [revealArmed, setRevealArmed] = useState(false)
+  const latency = useFeedbackLatency('practice', () => setRevealArmed(true))
 
   // Where the reference replay lives. Stacked (phone) it goes inside the camera
   // stage, so the learner can watch it and stay in frame at once; side by side
@@ -153,6 +157,7 @@ export function PracticeView() {
     if (tracking.status !== 'running' || !referenceRef.current) return
     setResult(null)
     setAttempt(null)
+    setRevealArmed(false)
     setCount(COUNTDOWN_S)
     setPhase('countdown')
     countdownRef.current = window.setInterval(() => {
@@ -204,6 +209,7 @@ export function PracticeView() {
     const scoreEndAt = performance.now()
     setAttempt(att)
     setResult(scored)
+    setRevealArmed(false)
     setPhase('result')
 
     // A take with no frames has no capture instant to measure from, so it is
@@ -218,6 +224,10 @@ export function PracticeView() {
           createdAt: att.createdAt,
         },
       )
+    } else {
+      // Nothing to measure, so nothing will release the reveal — do it here, or
+      // this attempt's result would sit frozen in its pre-animation state.
+      requestAnimationFrame(() => setRevealArmed(true))
     }
 
     // Log the attempt: feeds mastery/suggestions now, error mining later.
@@ -313,7 +323,7 @@ export function PracticeView() {
         </div>
       </section>
 
-      <aside className="record-panel">
+      <aside className="record-panel" data-reveal={revealArmed ? 'on' : undefined}>
         {phase === 'result' && result ? (
           <>
             <h2>{selected?.gloss}</h2>
@@ -386,6 +396,7 @@ export function PracticeView() {
                 onClick={() => {
                   setResult(null)
                   setAttempt(null)
+                  setRevealArmed(false)
                   setPhase('idle')
                 }}
               >

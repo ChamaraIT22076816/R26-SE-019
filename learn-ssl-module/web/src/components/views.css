@@ -505,6 +505,8 @@
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
+  /* Anchors the celebratory glow pseudo-element (see the reveal block below). */
+  position: relative;
 }
 
 .score-badge .ring-track {
@@ -517,7 +519,104 @@
   fill: none;
   stroke-width: 10;
   stroke-linecap: round;
-  transition: stroke-dashoffset 700ms ease;
+}
+
+/* ---- the score reveal ------------------------------------------------------
+   Two acts, and the rule between them is what keeps the latency figure honest.
+
+   ACT 1 — the measured commit. Everything below renders at its final value with
+   nothing animating. The score numeral, the hints and the finger chips are all
+   readable on the frame that useFeedbackLatency times.
+
+   ACT 2 — under [data-reveal='on'], released one frame after the paint mark,
+   once the sample has been taken.
+
+   THE RULE every animation here obeys: information-bearing elements animate
+   `transform` only. They start offset and settle to 0, always at full opacity,
+   always legible at frame one. An `opacity` fade from 0 would mean the feedback
+   is not actually on screen at the instant we claim it is — which would make
+   the ≤300 ms number untrue in substance even while staying true as arithmetic.
+
+   The ring is the one exception, and it earns it by being redundant: the same
+   score is already printed inside it as text. So the ring may sweep from empty. */
+
+[data-reveal='on'] .score-badge .ring-value {
+  animation: ring-sweep var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes ring-sweep {
+  from {
+    stroke-dashoffset: var(--ring-empty);
+  }
+  to {
+    stroke-dashoffset: var(--ring-offset);
+  }
+}
+
+/* Decorative, and marked aria-hidden nowhere because it is a pseudo-element —
+   it carries no text and no meaning beyond "that went well". */
+[data-reveal='on'] .score-badge.good::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: var(--r-full);
+  pointer-events: none;
+  background: radial-gradient(circle, var(--glow-success), transparent 65%);
+  animation: score-glow var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes score-glow {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Transform only — full opacity throughout, so every hint is readable on the
+   measured frame and merely settles into place afterwards. */
+[data-reveal='on'] .hint-list li {
+  animation: lift-in var(--dur-base) var(--ease-out) both;
+}
+
+[data-reveal='on'] .hint-list li:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+[data-reveal='on'] .hint-list li:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+[data-reveal='on'] .hint-list li:nth-child(n + 4) {
+  animation-delay: 180ms;
+}
+
+[data-reveal='on'] .finger-chips {
+  animation: lift-in var(--dur-base) var(--ease-out) 200ms both;
+}
+
+[data-reveal='on'] .rubric-list li {
+  animation: lift-in var(--dur-base) var(--ease-out) both;
+}
+
+[data-reveal='on'] .rubric-list li:nth-child(2) {
+  animation-delay: 70ms;
+}
+
+[data-reveal='on'] .rubric-list li:nth-child(3) {
+  animation-delay: 140ms;
+}
+
+@keyframes lift-in {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .score-badge .ring-score {
