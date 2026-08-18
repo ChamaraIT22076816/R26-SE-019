@@ -408,7 +408,7 @@ export function ScenarioView() {
   }
 
   return (
-    <div className="record-layout">
+    <div className="record-layout" data-phase={capture.phase}>
       <section className="camera-card">
         <CameraStage
           videoRef={capture.tracking.videoRef}
@@ -429,14 +429,14 @@ export function ScenarioView() {
         >
           {capture.phase === 'countdown' && (
             <div className="countdown-overlay">
-              <span>{capture.count}</span>
+              <span key={capture.count}>{capture.count}</span>
             </div>
           )}
           {capture.phase === 'recording' && (
             <>
               <div className="rec-badge">● REC {(capture.elapsedMs / 1000).toFixed(1)} s</div>
               <div className="rec-progress">
-                <div style={{ width: `${Math.min(capture.elapsedMs / captureMs, 1) * 100}%` }} />
+                <div style={{ transform: `scaleX(${Math.min(capture.elapsedMs / captureMs, 1)})` }} />
               </div>
             </>
           )}

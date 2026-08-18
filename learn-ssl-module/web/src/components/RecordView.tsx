@@ -149,7 +149,7 @@ export function RecordView() {
   const coverage = review ? handCoverage(review.frames) : 0
 
   return (
-    <div className="record-layout">
+    <div className="record-layout" data-phase={phase}>
       <section className="camera-card">
         <CameraStage
           videoRef={tracking.videoRef}
@@ -161,14 +161,14 @@ export function RecordView() {
         >
           {phase === 'countdown' && (
             <div className="countdown-overlay">
-              <span>{count}</span>
+              <span key={count}>{count}</span>
             </div>
           )}
           {phase === 'recording' && (
             <>
               <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
               <div className="rec-progress">
-                <div style={{ width: `${Math.min(elapsedMs / MAX_MS, 1) * 100}%` }} />
+                <div style={{ transform: `scaleX(${Math.min(elapsedMs / MAX_MS, 1)})` }} />
               </div>
             </>
           )}

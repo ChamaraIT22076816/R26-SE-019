@@ -183,6 +183,38 @@
   align-items: start;
 }
 
+/* ---- capture focus mode ----------------------------------------------------
+   Driven off one data-phase attribute on the layout root rather than a handful
+   of conditional classes, so the whole idle → countdown → recording → result
+   machine is described in one place.
+
+   During a take the picker is already disabled; quieting it puts the attention
+   on the frame, where it belongs. Nothing here hides information the learner
+   needs mid-take — the reference, the prompt and the stop control all stay at
+   full strength. */
+.picker-filters,
+.gloss-chips-scroll {
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.record-layout[data-phase='countdown'] .picker-filters,
+.record-layout[data-phase='recording'] .picker-filters,
+.record-layout[data-phase='countdown'] .gloss-chips-scroll,
+.record-layout[data-phase='recording'] .gloss-chips-scroll {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* A second, non-colour cue that recording is live, reinforcing the REC badge —
+   box-shadow composites and never reflows the camera. */
+.camera-card {
+  transition: box-shadow var(--dur-base) var(--ease-out);
+}
+
+.record-layout[data-phase='recording'] .camera-card {
+  box-shadow: 0 0 0 2px var(--recording);
+}
+
 /* ---- mobile: the camera stays put, the panel scrolls under it --------------
    Stacked, the camera used to scroll away and leave the learner signing at a
    control they could see but a frame they could not. Pinning it means "am I in
@@ -350,6 +382,21 @@
   font: 800 120px var(--sans);
   color: var(--on-overlay);
   text-shadow: var(--shadow-text);
+  /* Each number is keyed in React, so it remounts and replays this. Starting
+     at 0.55 rather than 0 keeps the digit readable for its whole life — the
+     learner is timing themselves against it. */
+  animation: countdown-pop var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes countdown-pop {
+  from {
+    transform: scale(1.55);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .rec-badge {
@@ -372,8 +419,13 @@
   background: var(--track-on-overlay);
 }
 
+/* Scaled, not widened. This bar updates on every captured frame — the busiest
+   the main thread ever is — and animating `width` forces layout each time.
+   transform runs on the compositor and touches nothing else on the page. */
 .rec-progress > div {
   height: 100%;
+  width: 100%;
+  transform-origin: left center;
   background: var(--recording);
 }
 
