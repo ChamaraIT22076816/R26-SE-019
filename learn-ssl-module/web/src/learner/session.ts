@@ -1,5 +1,6 @@
 import { practiceNeed } from './mastery'
 import type { GlossMastery } from './mastery'
+import { isSymbolLabel } from '../data/categories'
 
 /**
  * A practice session: a small, finite set of signs with a completion state.
@@ -44,27 +45,80 @@ export const SESSION_SIZE = 5
 const KEY = 'ssl-learn-session'
 
 /**
- * The N signs most in need of practice, by the same ranking `suggestNext` uses:
- * highest need first, ties alphabetical. `buildSession(...)[0]` is therefore
- * always `suggestNext(...)`, which session.test.ts pins.
+ * How close two signs' practice needs must be before category is allowed to
+ * separate them. Small on purpose: variety may break a near-tie, never override
+ * a real difference in what the learner actually needs to practise.
+ */
+const TIE_EPSILON = 0.05
+
+/**
+ * The N signs most in need of practice, highest need first.
+ *
+ * Without `categoryOf` this is exactly `suggestNext` generalised from one sign
+ * to N — same ranking, same alphabetical tie-break — which session.test.ts pins.
+ *
+ * `categoryOf` changes *ties only*, and exists because the ranking is degenerate
+ * for a learner with no history: every sign scores 1.0, so something arbitrary
+ * decides. Alphabetically that is "1, 100, 100 METERS, 1000, 10000" — the
+ * corpus's earliest labels are numerals. Among signs of near-equal need this
+ * prefers a word over a fingerspelled letter or a numeral, and then a category
+ * not yet in the session. It claims only "vocabulary before symbols"; the order
+ * within either group is untouched.
+ *
+ * Practice need always wins. Variety and word-preference can separate signs the
+ * model rates the same; they can never promote a sign the learner needs less.
  */
 export function buildSession(
   summaries: GlossMastery[],
   size: number = SESSION_SIZE,
   now: Date = new Date(),
+  categoryOf?: (gloss: string) => string,
 ): string[] {
-  return [...summaries]
-    .sort((a, b) => practiceNeed(b, now) - practiceNeed(a, now) || a.gloss.localeCompare(b.gloss))
-    .slice(0, size)
-    .map((s) => s.gloss)
+  const ranked = [...summaries].sort(
+    (a, b) => practiceNeed(b, now) - practiceNeed(a, now) || a.gloss.localeCompare(b.gloss),
+  )
+  if (!categoryOf) return ranked.slice(0, size).map((s) => s.gloss)
+
+  const remaining = [...ranked]
+  const picked: GlossMastery[] = []
+  const usedCategories = new Set<string>()
+
+  while (picked.length < size && remaining.length > 0) {
+    // Only signs the model rates within a hair of the best remaining are
+    // eligible to be re-ordered.
+    const bestNeed = practiceNeed(remaining[0], now)
+    const bandEnd = remaining.findIndex((s) => practiceNeed(s, now) < bestNeed - TIE_EPSILON)
+    const band = bandEnd === -1 ? remaining : remaining.slice(0, bandEnd)
+
+    let choice = 0
+    let bestScore = -1
+    for (let i = 0; i < band.length; i++) {
+      const gloss = band[i].gloss
+      const category = categoryOf(gloss)
+      // A word outranks a fresh category; both outrank neither.
+      const score =
+        (isSymbolLabel(gloss, category) ? 0 : 2) + (usedCategories.has(category) ? 0 : 1)
+      if (score > bestScore) {
+        bestScore = score
+        choice = i
+      }
+    }
+
+    const [chosen] = remaining.splice(choice, 1)
+    picked.push(chosen)
+    usedCategories.add(categoryOf(chosen.gloss))
+  }
+
+  return picked.map((s) => s.gloss)
 }
 
 export function startSession(
   summaries: GlossMastery[],
   size: number = SESSION_SIZE,
   now: Date = new Date(),
+  categoryOf?: (gloss: string) => string,
 ): PracticeSession {
-  const glosses = buildSession(summaries, size, now)
+  const glosses = buildSession(summaries, size, now, categoryOf)
   const startMastery: Record<string, number> = {}
   for (const s of summaries) {
     if (glosses.includes(s.gloss)) startMastery[s.gloss] = s.mastery

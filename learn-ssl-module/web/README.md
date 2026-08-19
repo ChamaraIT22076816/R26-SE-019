@@ -409,13 +409,20 @@ So: quote the bench as *scoring cost*, and the Progress tab / pilot export as
   ME/YOU/NAME/WHAT/WHERE/CAN/YOUR — they occur only inside sentence clips, and
   segmenting those is scoped as future work. The scenario degrades gracefully
   meanwhile, but needs a decision on its vocabulary source.
-- **Practice chips need grouping.** The tab lists all 80 references as a flat
-  chip list. It needs a category filter or search before the remaining
-  categories (numbers, months, everyday words — ~66 more clips) are converted.
-- **67 of 141 glosses still have no English meaning.** Glosses are the dataset's
-  own Sinhala transliterations (`KANAWA`, `ADINAWA`), which a hearing learner
-  cannot act on. `src/data/translations.ts` holds *human-verified* meanings only
-  — 4 confirmed so far, the rest listed there as commented lines to fill in.
-  A missing meaning displays as the bare gloss, which is the safe default;
-  never guess one, since a wrong meaning teaches the learner the wrong word.
-  Letters, numbers and months need no entry.
+- ~~Practice chips need grouping~~ ✅ The picker has search and category filters.
+- ~~67 of 141 glosses have no English meaning~~ ✅ **Closed.** Every Sinhala
+  transliteration in the corpus now has a human-verified meaning (75 entries in
+  `src/data/translations.ts`, confirmed by kvn); the remaining 276 labels are
+  already English words and need none. Audited against
+  `public/reference-index.json`: zero transliteration-shaped glosses are
+  unglossed. The rule still stands for anything added later — never guess a
+  meaning, since a wrong one teaches the learner the wrong word.
+- **What a learner meets first is a curriculum decision, and only a shallow one
+  has been made.** With no attempt history every sign scores the same practice
+  need, so the ordering is decided by a tie-break. That tie-break now prefers
+  words over fingerspelled letters and numerals, and spreads across categories —
+  which is why a first session is `ADINAWA, AFTER, AGAIN, APRIL, ARTICLE` rather
+  than `1, 100, 100 METERS, 1000, 10000`. It claims nothing about the order
+  *within* vocabulary; that is alphabetical, which is not pedagogy. A signer-
+  chosen starter set would be a real improvement and needs the School for the
+  Deaf, not code.

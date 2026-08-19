@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHandTracking } from '../vision/useHandTracking'
 import type { HandFrame, RecordingMeta, SignRecording } from '../vision/types'
 import { toMeta } from '../vision/types'
@@ -9,9 +9,10 @@ import { categoriesIn, categoryOf } from '../data/categories'
 import { glossLabel, matchesSearch, translationOf } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
-import { suggestNext, summarizeAll } from '../learner/mastery'
+import { summarizeAll } from '../learner/mastery'
 import {
   SESSION_SIZE,
+  buildSession,
   clearSession,
   currentGloss,
   isComplete,
@@ -159,11 +160,23 @@ export function PracticeView() {
     }
   }, [selected, localRecs])
 
+  // Category lookup for the practice ranking's tie-break. It only separates
+  // signs the model rates equally — see buildSession.
+  const categoryFor = useCallback(
+    (gloss: string) => {
+      const rec = references.find((r) => r.gloss === gloss)
+      return rec ? categoryOf(rec) : 'Other'
+    },
+    [references],
+  )
+
   // Keep the suggestion in step with the log — it changes on load and after
-  // every scored attempt.
+  // every scored attempt. Sourced from buildSession rather than suggestNext so
+  // the sign named here is the one a session would actually open on.
   useEffect(() => {
     if (references.length === 0) return
-    const next = suggestNext(summarizeAll(references.map((r) => r.gloss), entries))
+    const summaries = summarizeAll(references.map((r) => r.gloss), entries)
+    const next = buildSession(summaries, 1, new Date(), categoryFor)[0] ?? null
     setSuggested(next)
     // Pre-select the suggestion once, so the learner can start straight away
     // without stealing their choice on later re-ranks.
@@ -171,7 +184,7 @@ export function PracticeView() {
       didPreselectRef.current = true
       setSelected((cur) => cur ?? references.find((r) => r.gloss === next) ?? null)
     }
-  }, [references, entries])
+  }, [references, entries, categoryFor])
 
   // Abandon a take if the camera stops mid-recording.
   useEffect(() => {
@@ -212,7 +225,7 @@ export function PracticeView() {
             summaries.filter((s) => glosses.includes(s.gloss)).map((s) => [s.gloss, s.mastery]),
           ),
         }
-      : startSession(summaries, SESSION_SIZE)
+      : startSession(summaries, SESSION_SIZE, new Date(), categoryFor)
     setSession(next)
     selectGloss(next.glosses[0] ?? null)
   }
