@@ -37,16 +37,44 @@ Requires a webcam. `npm run build` produces a static `dist/` deployable anywhere
 The camera needs a secure context. `localhost` counts, but nobody else can reach
 your laptop — so a pilot requires a deployment.
 
-The app is a static build with no backend, so Vercel needs almost nothing:
+The app is a static build with no backend, so Vercel needs almost nothing.
 
-1. Import the repo at vercel.com → **New Project**.
-2. Set **Root Directory** to `learn-ssl-module/web`. This is the only setting
-   that matters; the rest is in `vercel.json`.
-3. Deploy. `npm install` runs the postinstall that vendors the MediaPipe WASM
-   runtime, so no extra build step is needed.
+**Deploy from the CLI**, not by importing the repo. Vercel's "Import Git
+Repository" flow only lists repositories the Vercel account *owns*, and this
+module lives in a repo owned by a teammate — being a collaborator is not enough.
+The CLI uploads the folder from disk and never touches GitHub, and the resulting
+project belongs to whoever ran it:
 
-First load pulls ~21 MB (7.8 MB hand model + reference recordings); `vercel.json`
-caches those immutably, so it is a one-off per participant.
+```bash
+cd learn-ssl-module/web
+npx vercel@latest login
+npx vercel@latest --prod
+```
+
+Answer `./` for the code directory (you are already in `web`) and decline the
+offer to customise build settings — `vercel.json` sets framework, build command
+and output directory, and Vercel's own Vite detection agrees with it. The upload
+honours `.gitignore`, so `public/wasm` is not sent; `npm install` regenerates it
+there via the postinstall hook.
+
+Note that `vercel.json` cannot carry comments — the schema rejects unknown
+properties, including a `"// note"` key — so the reasoning lives here instead.
+The `Cache-Control: immutable` rule covers `models`, `references` and `wasm`
+because every file in them is content-addressed by name and never changes in
+place. `public/reference-index.json` is deliberately **outside** those
+directories: it is regenerated whenever the corpus changes, so caching it for a
+year would serve a stale vocabulary.
+
+What a participant actually downloads:
+
+| When | What |
+|---|---|
+| First paint | ~80 kB gzip JS + CSS, plus a 23 kB gzip reference index |
+| Choosing a sign | that one recording's frames (tens of kB), cached after |
+| First **Start camera** | ~11 MB WASM runtime + 7.8 MB hand model, cached immutably |
+
+The heavy tracking assets are deferred until the camera is actually started, and
+are a one-off per participant.
 
 ### Running a pilot session
 
