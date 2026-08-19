@@ -560,6 +560,51 @@
   min-width: 0;
 }
 
+/* ---- practice session -----------------------------------------------------
+   A finite unit of work, so practice has an end. The segment bar is the same
+   .turn-progress the scenario uses — same meaning, same rendering. */
+.session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+
+.session-bar .turn-progress {
+  flex-basis: 100%;
+}
+
+.session-line {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.session-line strong {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+/* The exit is always visible and never styled as a penalty. */
+.session-bar .link-button {
+  margin-left: auto;
+}
+
+.session-complete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.session-complete h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
 /* ---- coach strip ----------------------------------------------------------
    The last correction, held on screen through the countdown and the take.
    Without it, "Try again" unmounted the score, the hints and the finger chips

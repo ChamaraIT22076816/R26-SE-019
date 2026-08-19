@@ -10,6 +10,17 @@ import { glossLabel, matchesSearch, translationOf } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { suggestNext, summarizeAll } from '../learner/mastery'
+import {
+  SESSION_SIZE,
+  clearSession,
+  currentGloss,
+  isComplete,
+  loadSession,
+  markAttempted,
+  saveSession,
+  startSession,
+} from '../learner/session'
+import type { PracticeSession } from '../learner/session'
 import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
@@ -62,6 +73,9 @@ export function PracticeView() {
   const [logFailed, setLogFailed] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string | null>(null)
+  // A finite set of signs with an end, so practice has a unit of work. Survives
+  // a reload; the attempt log stays the source of truth for progress.
+  const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
 
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (p: Phase) => {
@@ -171,6 +185,62 @@ export function PracticeView() {
 
   useEffect(() => () => window.clearInterval(countdownRef.current), [])
 
+  useEffect(() => {
+    if (session) saveSession(session)
+    else clearSession()
+  }, [session])
+
+  function selectGloss(gloss: string | null) {
+    if (!gloss) return
+    const next = references.find((r) => r.gloss === gloss)
+    if (next) setSelected(next)
+  }
+
+  function beginSession(glosses?: string[]) {
+    const summaries = summarizeAll(
+      references.map((r) => r.gloss),
+      entries,
+    )
+    // "Practise these again" keeps the same set; a fresh session re-ranks.
+    const next = glosses
+      ? {
+          glosses,
+          done: [],
+          startedAt: new Date().toISOString(),
+          startMastery: Object.fromEntries(
+            summaries.filter((s) => glosses.includes(s.gloss)).map((s) => [s.gloss, s.mastery]),
+          ),
+        }
+      : startSession(summaries, SESSION_SIZE)
+    setSession(next)
+    selectGloss(next.glosses[0] ?? null)
+  }
+
+  /** Leave the result view without touching the session. */
+  function leaveResult() {
+    setResult(null)
+    setAttempt(null)
+    setRevealArmed(false)
+    setPhase('idle')
+  }
+
+  // Per-sign change over the session, from the log rather than anything the
+  // session stores about how well it went.
+  const sessionDeltas = useMemo(() => {
+    if (!session) return []
+    return summarizeAll(session.glosses, entries).map((s) => {
+      const before = session.startMastery[s.gloss] ?? 0
+      return { gloss: s.gloss, before, after: s.mastery, delta: s.mastery - before }
+    })
+  }, [session, entries])
+
+  const bestGain = sessionDeltas.reduce<(typeof sessionDeltas)[number] | null>(
+    (best, d) => (d.delta > 0 && (!best || d.delta > best.delta) ? d : best),
+    null,
+  )
+
+  const sessionDone = session !== null && isComplete(session)
+
   // The result panel replaces the picker wholesale, which leaves keyboard focus
   // on a button that no longer exists — a screen-reader user is stranded at the
   // document root. Put focus on the action they are most likely to want next.
@@ -247,6 +317,8 @@ export function PracticeView() {
     })
     setRevealArmed(false)
     setPhase('result')
+    // One scored attempt completes a session sign, whatever the score.
+    setSession((prev) => (prev ? markAttempted(prev, reference.gloss) : prev))
 
     // A take with no frames has no capture instant to measure from, so it is
     // left unsampled rather than recorded as an implausibly fast one.
@@ -374,14 +446,32 @@ export function PracticeView() {
                 {/* Beside the score rather than below two skeleton players:
                     retrying is the whole loop, and it was previously the last
                     control on a long panel. */}
-                <button
-                  ref={retryRef}
-                  className="btn"
-                  onClick={beginCountdown}
-                  disabled={tracking.status !== 'running'}
-                >
-                  Try again
-                </button>
+                <div className="row-buttons">
+                  <button
+                    ref={retryRef}
+                    className="btn"
+                    onClick={beginCountdown}
+                    disabled={tracking.status !== 'running'}
+                  >
+                    Try again
+                  </button>
+                  {session &&
+                    (isComplete(session) ? (
+                      <button className="btn btn-ghost" onClick={leaveResult}>
+                        See summary
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          leaveResult()
+                          selectGloss(currentGloss(session))
+                        }}
+                      >
+                        Next sign
+                      </button>
+                    ))}
+                </div>
               </div>
             </div>
 
@@ -470,7 +560,87 @@ export function PracticeView() {
               </div>
             )}
 
-            <h2>Practice a sign</h2>
+            {sessionDone && session ? (
+              <div className="session-complete">
+                <h2>Session complete</h2>
+                <p className="hint-text">
+                  You practised {session.glosses.length} signs. Mastery is a recency-weighted
+                  estimate from your scores, so it moves with your latest attempts.
+                </p>
+                <ul className="mastery-list">
+                  {sessionDeltas.map((d) => (
+                    <li className="mastery-row" key={d.gloss}>
+                      <span className="rec-gloss">{glossLabel(d.gloss)}</span>
+                      <div className="mastery-bar">
+                        <div style={{ width: `${Math.round(d.after * 100)}%` }} />
+                      </div>
+                      <span className="mastery-pct">{Math.round(d.after * 100)}%</span>
+                      <span className="mastery-meta">
+                        {d.delta >= 0 ? '+' : ''}
+                        {Math.round(d.delta * 100)} pts
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {bestGain && (
+                  <p className="hint-text">
+                    Biggest gain: <strong>{glossLabel(bestGain.gloss)}</strong>, up{' '}
+                    {Math.round(bestGain.delta * 100)} points.
+                  </p>
+                )}
+                <div className="row-buttons">
+                  <button className="btn" onClick={() => beginSession()}>
+                    Start a new session
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => beginSession(session.glosses)}>
+                    Practise these again
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setSession(null)}>
+                    Free practice
+                  </button>
+                </div>
+              </div>
+            ) : session ? (
+              <div className="session-bar">
+                <div className="turn-progress" aria-hidden="true">
+                  {session.glosses.map((g) => (
+                    <span
+                      key={g}
+                      className={
+                        session.done.includes(g)
+                          ? 'done'
+                          : g === currentGloss(session)
+                            ? 'active'
+                            : ''
+                      }
+                    />
+                  ))}
+                </div>
+                <p className="session-line">
+                  Sign {Math.min(session.done.length + 1, session.glosses.length)} of{' '}
+                  {session.glosses.length} — <strong>{glossLabel(currentGloss(session) ?? '')}</strong>
+                </p>
+                {/* Never a trap: the way out is always one click away. */}
+                <button className="link-button" onClick={() => setSession(null)}>
+                  End session
+                </button>
+              </div>
+            ) : (
+              references.length > 0 && (
+                <div className="session-bar">
+                  <p className="session-line">
+                    Practise the {SESSION_SIZE} signs that need it most, then stop.
+                  </p>
+                  <button className="btn" onClick={() => beginSession()}>
+                    Start a session
+                  </button>
+                </div>
+              )
+            )}
+
+            {!sessionDone && (
+              <>
+                <h2>Practice a sign</h2>
             {references.length === 0 ? (
               <p className="hint-text">
                 No reference signs yet. Record some in the <strong>Record</strong> tab first —
@@ -614,6 +784,8 @@ export function PracticeView() {
                     </button>
                   )}
                 </div>
+              </>
+            )}
               </>
             )}
           </>
