@@ -74,25 +74,33 @@
   border-radius: 0;
 }
 
-.stage-pip-swap {
+/* Above both layers, in either swap state. */
+.stage-swap {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: var(--s-2);
+  right: var(--s-2);
+  z-index: 3;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   color: var(--on-overlay);
   background: var(--scrim);
   border: none;
   border-radius: var(--r-full);
   cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-.stage-pip-swap svg {
-  width: 16px;
-  height: 16px;
+.stage-swap:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.stage-swap svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Swapped: the reference takes the stage and the self-view drops to the corner,
@@ -120,9 +128,9 @@
 }
 
 @media (pointer: coarse) {
-  .stage-pip-swap {
-    width: 40px;
-    height: 40px;
+  .stage-swap {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -231,12 +239,18 @@
     z-index: 10;
   }
 
-  /* A 16/9 band on a 9/16 screen makes the learner tiny in their own frame.
-     Squarer crops the sides — which a signer does not need — and buys height.
-     Capped in dvh so it cannot eat the panel on a short screen. */
+  /* A 16/9 band on a 9/16 screen makes the learner tiny in their own frame, so
+     the stage goes squarer: it crops the sides, which a signer does not need,
+     and buys height.
+
+     Height is set directly rather than via `aspect-ratio` plus `max-height`.
+     Those two together are a trap: when the max-height binds, the browser
+     shrinks the WIDTH as well to preserve the ratio, which left the stage as a
+     square island with dead space beside it on any viewport wide enough for the
+     cap to bite. Driving height alone keeps the stage full-bleed at every width. */
   .camera-stage {
-    aspect-ratio: 1 / 1;
-    max-height: 44dvh;
+    aspect-ratio: auto;
+    height: min(95vw, 44dvh);
   }
 
   .panel-actions {
@@ -1089,21 +1103,35 @@
 
 .turn-progress {
   display: flex;
+  align-items: center;
   gap: 6px;
+  /* Reserve the tallest state's height so the row does not jog as it advances. */
+  min-height: 8px;
 }
 
+/* "Done" and "current" were --success and --accent, which sit about 1.16:1
+   apart in greyscale — indistinguishable to most colour-vision types and in a
+   greyscale printout of the report. Height now carries the distinction, and
+   colour merely reinforces it.
+
+   These bars are aria-hidden wherever they appear: the same position is stated
+   in text next to them ("Sign 3 of 5 — ME", "Turn 2 of 5"), which is the
+   authoritative version for assistive technology. */
 .turn-progress span {
   flex: 1;
   height: 4px;
   border-radius: 2px;
   background: var(--surface-2);
+  transition: height var(--dur-fast) var(--ease-out);
 }
 
 .turn-progress span.done {
+  height: 4px;
   background: var(--success);
 }
 
 .turn-progress span.active {
+  height: 8px;
   background: var(--accent);
 }
 

@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { PracticeView } from './components/PracticeView'
-import { RecordView } from './components/RecordView'
-import { LibraryView } from './components/LibraryView'
 import { ProgressView } from './components/ProgressView'
 import { ScenarioView } from './components/ScenarioView'
-import { StudyView } from './components/StudyView'
+
+// Author-only surfaces, split out of the learner's bundle. A participant never
+// opens Record, Library or Study, so there is no reason for them to download
+// the reference recorder, the JSON import/export path or the pilot export.
+const RecordView = lazy(() => import('./components/RecordView').then((m) => ({ default: m.RecordView })))
+const LibraryView = lazy(() => import('./components/LibraryView').then((m) => ({ default: m.LibraryView })))
+const StudyView = lazy(() => import('./components/StudyView').then((m) => ({ default: m.StudyView })))
 import { persistMode, readMode } from './app/mode'
 import type { AppMode } from './app/mode'
 import './components/views.css'
@@ -130,10 +134,14 @@ function App() {
       <main>
         {tab === 'practice' && <PracticeView />}
         {tab === 'scenario' && <ScenarioView />}
-        {tab === 'record' && <RecordView />}
-        {tab === 'library' && <LibraryView />}
         {tab === 'progress' && <ProgressView />}
-        {tab === 'study' && <StudyView />}
+        {(tab === 'record' || tab === 'library' || tab === 'study') && (
+          <Suspense fallback={<p className="empty-state">Loading…</p>}>
+            {tab === 'record' && <RecordView />}
+            {tab === 'library' && <LibraryView />}
+            {tab === 'study' && <StudyView />}
+          </Suspense>
+        )}
       </main>
 
       <footer className="app-footer">

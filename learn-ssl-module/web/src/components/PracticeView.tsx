@@ -93,6 +93,7 @@ export function PracticeView() {
   const countdownRef = useRef(0)
   const didPreselectRef = useRef(false)
   const retryRef = useRef<HTMLButtonElement>(null)
+  const completeRef = useRef<HTMLHeadingElement>(null)
   // Absolute capture time of the newest frame, kept before the buffer rewrites
   // timestamps to be take-relative. It is where the feedback-latency clock
   // starts — see metrics/latency.ts.
@@ -241,6 +242,27 @@ export function PracticeView() {
 
   const sessionDone = session !== null && isComplete(session)
 
+  /**
+   * What a screen reader hears as the take progresses. None of this had any
+   * non-visual representation: the countdown was a number painted over video,
+   * the recording state a coloured badge, and the score an SVG.
+   *
+   * Deliberately derived from the phase rather than the frame clock, so it
+   * changes a handful of times per attempt instead of thirty times a second —
+   * a live region that updates per frame is unusable.
+   */
+  const liveMessage = useMemo(() => {
+    if (phase === 'countdown') return `Get ready. Recording starts in ${COUNTDOWN_S} seconds.`
+    if (phase === 'recording') return 'Recording. Sign now.'
+    if (phase === 'result' && result) {
+      const band =
+        result.score >= 85 ? 'Great match' : result.score >= 60 ? 'Getting there' : 'Keep practising'
+      const hint = result.hints[0] ? ` ${result.hints[0]}` : ''
+      return `${selectedRef.current?.gloss ?? 'Sign'} scored ${result.score} out of 100. ${band}.${hint}`
+    }
+    return ''
+  }, [phase, result])
+
   // The result panel replaces the picker wholesale, which leaves keyboard focus
   // on a button that no longer exists — a screen-reader user is stranded at the
   // document root. Put focus on the action they are most likely to want next.
@@ -249,6 +271,12 @@ export function PracticeView() {
   useEffect(() => {
     if (phase === 'result') retryRef.current?.focus({ preventScroll: true })
   }, [phase])
+
+  // The completion card replaces the picker in the same way, so focus needs the
+  // same treatment — otherwise finishing a session drops you at the page top.
+  useEffect(() => {
+    if (sessionDone && phase === 'idle') completeRef.current?.focus({ preventScroll: true })
+  }, [sessionDone, phase])
 
   function beginCountdown() {
     // Frames must be in hand before the take starts — there is nothing to score
@@ -432,6 +460,12 @@ export function PracticeView() {
       </section>
 
       <aside className="record-panel" data-reveal={revealArmed ? 'on' : undefined}>
+        {/* Polite, so it never interrupts something the learner is already
+            being told; the score is not urgent enough to warrant assertive. */}
+        <p className="sr-only" role="status">
+          {liveMessage}
+        </p>
+
         {phase === 'result' && result ? (
           <>
             <h2>{selected?.gloss}</h2>
@@ -562,7 +596,9 @@ export function PracticeView() {
 
             {sessionDone && session ? (
               <div className="session-complete">
-                <h2>Session complete</h2>
+                <h2 ref={completeRef} tabIndex={-1}>
+                  Session complete
+                </h2>
                 <p className="hint-text">
                   You practised {session.glosses.length} signs. Mastery is a recency-weighted
                   estimate from your scores, so it moves with your latest attempts.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSignCapture } from '../vision/useSignCapture'
 import type { CapturedTake } from '../vision/useSignCapture'
 import type { RecordingMeta, SignRecording } from '../vision/types'
@@ -107,6 +107,13 @@ export function ScenarioView() {
   // layout stacks, so a phone shows the sign and the signer together.
   const stacked = useMediaQuery(STACKED_LAYOUT)
 
+  // A stage change swaps the whole panel, which drops keyboard focus to the
+  // document root. Move it to the new view's heading instead.
+  const stageHeadingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    stageHeadingRef.current?.focus({ preventScroll: true })
+  }, [stage])
+
   const handleCaptured = useCallback(
     (take: CapturedTake) => {
       if (!turn || !reference) return
@@ -161,6 +168,21 @@ export function ScenarioView() {
   )
 
   const capture = useSignCapture(handleCaptured)
+
+  // Spoken counterpart to the capture badge and the score ring, neither of
+  // which exists for a screen reader. See PracticeView for the same pattern.
+  const liveMessage = useMemo(() => {
+    if (capture.phase === 'countdown') return 'Get ready. Recording starts in 3 seconds.'
+    if (capture.phase === 'recording') return 'Recording. Sign now.'
+    if (current) {
+      const wrong =
+        current.bestMatchGloss !== turn?.gloss
+          ? ` That looked closer to ${current.bestMatchGloss}.`
+          : ''
+      return `Scored ${current.rubric.total} out of 100.${wrong}`
+    }
+    return ''
+  }, [capture.phase, current, turn])
   const stopTracking = capture.tracking.stop
 
   // The camera stage only exists while playing, so leaving a turn would strand
@@ -210,7 +232,9 @@ export function ScenarioView() {
     return (
       <section className="library-card">
         <div className="library-head">
-          <h2>{scenario.title}</h2>
+          <h2 ref={stageHeadingRef} tabIndex={-1}>
+            {scenario.title}
+          </h2>
           <span className="library-count">{scenario.subtitle}</span>
         </div>
 
@@ -299,7 +323,9 @@ export function ScenarioView() {
     return (
       <section className="library-card">
         <div className="library-head">
-          <h2>Scenario complete</h2>
+          <h2 ref={stageHeadingRef} tabIndex={-1}>
+            Scenario complete
+          </h2>
           <span className="library-count">{scenario.title}</span>
         </div>
 
@@ -455,14 +481,21 @@ export function ScenarioView() {
       </section>
 
       <aside className="record-panel" data-reveal={revealArmed ? 'on' : undefined}>
-        <div className="turn-progress">
+        {/* Decorative: "Turn N of M" below states the same thing in text. */}
+        <div className="turn-progress" aria-hidden="true">
           {playable.map((t, i) => (
             <span key={t.id} className={i < index ? 'done' : i === index ? 'active' : ''} />
           ))}
         </div>
 
+        <p className="sr-only" role="status">
+          {liveMessage}
+        </p>
+
         <p className="partner-line">{turn.partnerLine}</p>
-        <h2>Sign: {glossLabel(turn.gloss)}</h2>
+        <h2 ref={stageHeadingRef} tabIndex={-1}>
+          Sign: {glossLabel(turn.gloss)}
+        </h2>
         <p className="hint-text">{turn.prompt}</p>
 
         {current ? (

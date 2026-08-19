@@ -42,27 +42,28 @@ export function CameraStage({
         <canvas ref={canvasRef} />
       </div>
 
+      {pip && <div className="stage-pip">{pip}</div>}
+
       {pip && (
-        <div className="stage-pip">
-          {pip}
-          {/* A visible control, not a hidden gesture on the panel itself —
-              a tap target that only sighted mouse users could discover would
-              strand keyboard and screen-reader users. */}
-          <button
-            type="button"
-            className="stage-pip-swap"
-            onClick={() => setSwapped((s) => !s)}
-            aria-pressed={swapped}
-            aria-label={
-              swapped ? 'Show my camera full size' : 'Show the reference sign full size'
-            }
-            title={swapped ? 'Show my camera full size' : 'Show the reference full size'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M4 8h11l-3-3M20 16H9l3 3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+        // Anchored to the stage, not to the picture-in-picture: it stays in the
+        // same corner whichever view is large, so switching is one predictable
+        // tap rather than a target that moves when you use it.
+        //
+        // A visible control, not a hidden gesture on the panel — a tap target
+        // only sighted mouse users could discover would strand keyboard and
+        // screen-reader users.
+        <button
+          type="button"
+          className="stage-swap"
+          onClick={() => setSwapped((s) => !s)}
+          aria-pressed={swapped}
+          aria-label={swapped ? 'Show my camera full size' : 'Show the reference sign full size'}
+          title={swapped ? 'Show my camera full size' : 'Show the reference full size'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M4 8h11l-3-3M20 16H9l3 3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       )}
 
       {children}
