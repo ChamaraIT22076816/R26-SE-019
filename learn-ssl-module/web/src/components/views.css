@@ -552,6 +552,59 @@
   align-items: center;
 }
 
+.result-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* ---- coach strip ----------------------------------------------------------
+   The last correction, held on screen through the countdown and the take.
+   Without it, "Try again" unmounted the score, the hints and the finger chips
+   at precisely the moment the learner needed them — the product claims specific
+   corrective feedback, and the retry path was deleting it.
+
+   Not sticky: the panel sits directly under the camera at every width, so this
+   is already on screen, and a second sticky element would fight the sticky
+   camera above it. */
+.coach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+}
+
+.coach-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.coach-score {
+  font: 600 var(--fs-sm) var(--mono);
+  color: var(--text-dim);
+}
+
+.coach-fix {
+  font: 600 var(--fs-sm) var(--sans);
+  color: var(--caution);
+  text-transform: capitalize;
+}
+
+.coach-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
 .score-badge {
   display: flex;
   flex-direction: column;

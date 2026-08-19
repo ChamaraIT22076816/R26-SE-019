@@ -24,6 +24,21 @@ const COUNTDOWN_S = 3
 type Phase = 'idle' | 'countdown' | 'recording' | 'result'
 
 /**
+ * The correction from the last scored attempt, kept alive across a retry.
+ *
+ * Corrective feedback only teaches anything if it is available *during* the
+ * corrected performance. The result panel unmounts the moment a retry starts,
+ * so without this the score, the hints and the finger chips vanish at exactly
+ * the moment the learner is trying to act on them.
+ */
+interface Coaching {
+  gloss: string
+  score: number
+  hint: string | null
+  worstFingers: ReturnType<typeof topFingers>
+}
+
+/**
  * Graded practice: choose a sign, watch the reference, record an attempt, and
  * get a DTW match score with corrective hints and a side-by-side replay.
  */
@@ -39,6 +54,8 @@ export function PracticeView() {
   const [count, setCount] = useState(COUNTDOWN_S)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [result, setResult] = useState<ScoreResult | null>(null)
+  // Deliberately NOT cleared by beginCountdown — only a newer score replaces it.
+  const [lastResult, setLastResult] = useState<Coaching | null>(null)
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
@@ -61,6 +78,7 @@ export function PracticeView() {
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
   const didPreselectRef = useRef(false)
+  const retryRef = useRef<HTMLButtonElement>(null)
   // Absolute capture time of the newest frame, kept before the buffer rewrites
   // timestamps to be take-relative. It is where the feedback-latency clock
   // starts — see metrics/latency.ts.
@@ -109,6 +127,8 @@ export function PracticeView() {
   useEffect(() => {
     setReference(null)
     setRefFailed(false)
+    // A correction belongs to the sign it was given for.
+    setLastResult(null)
     if (!selected) return
     let cancelled = false
     void (async () => {
@@ -150,6 +170,15 @@ export function PracticeView() {
   }, [tracking.status])
 
   useEffect(() => () => window.clearInterval(countdownRef.current), [])
+
+  // The result panel replaces the picker wholesale, which leaves keyboard focus
+  // on a button that no longer exists — a screen-reader user is stranded at the
+  // document root. Put focus on the action they are most likely to want next.
+  // preventScroll because on a phone the panel is below a sticky camera and
+  // yanking it into view would undo that.
+  useEffect(() => {
+    if (phase === 'result') retryRef.current?.focus({ preventScroll: true })
+  }, [phase])
 
   function beginCountdown() {
     // Frames must be in hand before the take starts — there is nothing to score
@@ -209,6 +238,13 @@ export function PracticeView() {
     const scoreEndAt = performance.now()
     setAttempt(att)
     setResult(scored)
+    // Survives the next retry, so the learner signs while reading the fix.
+    setLastResult({
+      gloss: reference.gloss,
+      score: scored.score,
+      hint: scored.hints[0] ?? null,
+      worstFingers: topFingers(scored),
+    })
     setRevealArmed(false)
     setPhase('result')
 
@@ -329,11 +365,24 @@ export function PracticeView() {
             <h2>{selected?.gloss}</h2>
             <div className="result-top">
               <ScoreBadge score={result.score} />
-              <ul className="hint-list">
-                {result.hints.map((h, i) => (
-                  <li key={i}>{h}</li>
-                ))}
-              </ul>
+              <div className="result-detail">
+                <ul className="hint-list">
+                  {result.hints.map((h, i) => (
+                    <li key={i}>{h}</li>
+                  ))}
+                </ul>
+                {/* Beside the score rather than below two skeleton players:
+                    retrying is the whole loop, and it was previously the last
+                    control on a long panel. */}
+                <button
+                  ref={retryRef}
+                  className="btn"
+                  onClick={beginCountdown}
+                  disabled={tracking.status !== 'running'}
+                >
+                  Try again
+                </button>
+              </div>
             </div>
 
             {result.mirrored && (
@@ -387,15 +436,13 @@ export function PracticeView() {
               </div>
             </div>
 
-            <div className="row-buttons panel-actions">
-              <button className="btn" onClick={beginCountdown} disabled={tracking.status !== 'running'}>
-                Try again
-              </button>
+            <div className="row-buttons">
               <button
                 className="btn btn-ghost"
                 onClick={() => {
                   setResult(null)
                   setAttempt(null)
+                  setLastResult(null)
                   setRevealArmed(false)
                   setPhase('idle')
                 }}
@@ -406,6 +453,23 @@ export function PracticeView() {
           </>
         ) : (
           <>
+            {/* Carries the last correction through the countdown and the take,
+                so the learner is reading the fix while performing it. */}
+            {lastResult && (
+              <div className="coach-strip">
+                <span className="coach-head">
+                  <span className="rec-gloss">{glossLabel(lastResult.gloss)}</span>
+                  <span className="coach-score">last {lastResult.score}</span>
+                </span>
+                {lastResult.worstFingers.length > 0 && (
+                  <span className="coach-fix">
+                    fix {lastResult.worstFingers.map((f) => FINGER_LABEL[f]).join(', ')}
+                  </span>
+                )}
+                {lastResult.hint && <p className="coach-hint">{lastResult.hint}</p>}
+              </div>
+            )}
+
             <h2>Practice a sign</h2>
             {references.length === 0 ? (
               <p className="hint-text">
