@@ -1,12 +1,100 @@
 # NOTE: this file must stay UTF-8. It was previously saved as UTF-16, which git
 # cannot parse - every rule below was silently inactive.
 
+# ------------------------------------------------------------------------------
+# Python & Bytecode
+# ------------------------------------------------------------------------------
 __pycache__/
-*.pyc
-*.pyo
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
+# ------------------------------------------------------------------------------
+# Virtual Environments
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ------------------------------------------------------------------------------
+# MediaPipe models
 # Keep stray copies of the 7.8 MB MediaPipe model out of the repo...
+# ------------------------------------------------------------------------------
 hand_landmarker.task
 # ...except the one the web app fetches at runtime, which must ship with a clone.
 !learn-ssl-module/web/public/models/hand_landmarker.task
+
+# ------------------------------------------------------------------------------
+# Logs & TensorBoard
+# ------------------------------------------------------------------------------
+*.log
+logs/
+*.tfevents.*
+events.out.tfevents.*
+
+# ------------------------------------------------------------------------------
+# Datasets, Caches & Generated Media
+# ------------------------------------------------------------------------------
+*.npy
+*.npz
+*.parquet
+*.feather
+data/
+dataset/
+datasets/
+tts_cache/
+sinhala_sign_language_recognition/webapp/tts_cache/*
+!sinhala_sign_language_recognition/webapp/tts_cache/.gitkeep
+.cache/
+
+# ------------------------------------------------------------------------------
+# Checkpoints & Model weights
+# ------------------------------------------------------------------------------
+checkpoints/
+*.ckpt
+
+# ------------------------------------------------------------------------------
+# Jupyter Notebooks & Testing
+# ------------------------------------------------------------------------------
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ------------------------------------------------------------------------------
+# IDEs, Developer Tools & OS Files
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+.qodo/
+.cursor/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------------------------
+# Secrets & Environments
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+secrets.json
+
+# ------------------------------------------------------------------------------
+# Build & Distribution
+# ------------------------------------------------------------------------------
+build/
+dist/
+*.egg-info/
+*.egg
