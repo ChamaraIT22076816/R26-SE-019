@@ -61,6 +61,7 @@ export function ProgressView() {
   const [attemptCount, setAttemptCount] = useState(0)
   const [avgRecent, setAvgRecent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -88,6 +89,13 @@ export function ProgressView() {
 
   const practised = summaries.filter((s) => s.attempts > 0).length
   const mastered = summaries.filter((s) => s.level === 'mastered').length
+
+  // Only signs the learner has actually attempted, unless they ask for the rest.
+  // The full vocabulary is 358 rows, almost all of them "no attempts yet · 0%",
+  // which buries the handful of rows that say anything about their progress.
+  const attempted = summaries.filter((s) => s.attempts > 0)
+  const untouched = summaries.length - attempted.length
+  const shown = showAll ? summaries : attempted
 
   return (
     <section className="library-card">
@@ -133,7 +141,7 @@ export function ProgressView() {
             </p>
           ) : (
             <ul className="mastery-list">
-              {summaries.map((s) => (
+              {shown.map((s) => (
                 <li className="mastery-row" key={s.gloss}>
                   <span className="rec-gloss">{s.gloss}</span>
                   <span className={`level-chip ${s.level}`}>{LEVEL_LABEL[s.level]}</span>
@@ -150,6 +158,14 @@ export function ProgressView() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {attemptCount > 0 && untouched > 0 && (
+            <button className="link-button" onClick={() => setShowAll((v) => !v)}>
+              {showAll
+                ? `Show only the ${attempted.length} I've practised`
+                : `Show all ${summaries.length} signs (${untouched} not started)`}
+            </button>
           )}
         </>
       )}

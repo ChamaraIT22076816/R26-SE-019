@@ -212,15 +212,15 @@
    on the frame, where it belongs. Nothing here hides information the learner
    needs mid-take — the reference, the prompt and the stop control all stay at
    full strength. */
-.picker-filters,
-.gloss-chips-scroll {
+.sign-header,
+.gloss-chips {
   transition: opacity var(--dur-base) var(--ease-out);
 }
 
-.record-layout[data-phase='countdown'] .picker-filters,
-.record-layout[data-phase='recording'] .picker-filters,
-.record-layout[data-phase='countdown'] .gloss-chips-scroll,
-.record-layout[data-phase='recording'] .gloss-chips-scroll {
+.record-layout[data-phase='countdown'] .sign-header,
+.record-layout[data-phase='recording'] .sign-header,
+.record-layout[data-phase='countdown'] .gloss-chips,
+.record-layout[data-phase='recording'] .gloss-chips {
   opacity: 0.4;
   pointer-events: none;
 }
@@ -310,14 +310,119 @@
   color: var(--text-dim);
 }
 
-/* ---- sign picker (search + category filter) ---- */
+/* ---- the chosen sign, and the way back to the picker ---- */
 
-.picker-filters {
+.sign-header {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
 }
 
+.sign-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 700 var(--fs-lg) var(--mono);
+  color: var(--text);
+}
+
+/* ---- sign picker ----------------------------------------------------------
+   Opens over the panel instead of living above the reference permanently. The
+   old arrangement put 358 chips in a 168px nested scroll inside the page
+   scroll, with the record button below all of it. */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.picker-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+/* One scrolling row, not six wrapping ones. */
+.category-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: var(--s-1);
+}
+
+.category-rail .chip {
+  flex: none;
+  scroll-snap-align: start;
+}
+
+.sign-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sign-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3) var(--s-3);
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.sign-row:hover {
+  background: var(--surface);
+}
+
+.sign-row.active {
+  border-color: var(--accent);
+}
+
+.sign-row-name {
+  flex: 1;
+  min-width: 0;
+  font: 700 var(--fs-md) var(--mono);
+}
+
+.sign-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+
+@media (pointer: coarse) {
+  .sign-row {
+    min-height: 48px;
+    align-items: center;
+  }
+}
+
+/* Shared by the practice picker and the library filter. */
 .picker-search {
   font: var(--fs-md) var(--sans);
   color: var(--text);
@@ -348,18 +453,6 @@
 .category-chips .chip {
   font-size: 12px;
   padding: 4px 10px;
-}
-
-/* Cap the picker's height so a long vocabulary cannot push the reference
-   preview and the record button off screen. */
-.gloss-chips-scroll {
-  max-height: 168px;
-  overflow-y: auto;
-  align-content: flex-start;
-  padding-right: 4px;
-  /* Stop a flick inside the picker from chaining into the page scroll once it
-     hits the end — on a phone that reads as the whole screen lurching. */
-  overscroll-behavior: contain;
 }
 
 .link-button {
@@ -498,7 +591,12 @@
   gap: 10px;
 }
 
+/* 362 rows in the author's library. content-visibility lets the browser skip
+   layout and paint for rows that are off screen; the intrinsic size keeps the
+   scrollbar honest so it does not jump as rows are realised. */
 .rec-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;

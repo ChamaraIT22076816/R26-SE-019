@@ -6,7 +6,7 @@ import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
 import { categoriesIn, categoryOf } from '../data/categories'
-import { glossLabel, matchesSearch, translationOf } from '../data/translations'
+import { glossLabel, matchesSearch } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { summarizeAll } from '../learner/mastery'
@@ -32,6 +32,10 @@ import { ScoreBadge } from './ScoreBadge'
 import { STACKED_LAYOUT, useMediaQuery } from './useMediaQuery'
 
 const COUNTDOWN_S = 3
+
+/** How many results the picker renders at once. 358 buttons is a lot of DOM to
+ *  scroll past; searching is faster than scrolling once a list is this long. */
+const PICKER_LIMIT = 60
 
 type Phase = 'idle' | 'countdown' | 'recording' | 'result'
 
@@ -74,6 +78,8 @@ export function PracticeView() {
   const [logFailed, setLogFailed] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string | null>(null)
+  // The picker is a disclosure, not permanent panel furniture.
+  const [pickerOpen, setPickerOpen] = useState(false)
   // A finite set of signs with an end, so practice has a unit of work. Survives
   // a reload; the attempt log stays the source of truth for progress.
   const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
@@ -705,121 +711,165 @@ export function PracticeView() {
 
             {!sessionDone && (
               <>
-                <h2>Practice a sign</h2>
-            {references.length === 0 ? (
-              <p className="hint-text">
-                No reference signs yet. Record some in the <strong>Record</strong> tab first —
-                start with ME, YOU, NAME.
-              </p>
-            ) : (
-              <>
-                {suggested && (
-                  <p className="hint-text">
-                    Suggested next:{' '}
-                    <button
-                      className="link-button"
-                      onClick={() => {
-                        const next = references.find((r) => r.gloss === suggested)
-                        if (next) setSelected(next)
-                      }}
-                      disabled={inputsLocked}
-                      title="Jump to the suggested sign"
-                    >
-                      {suggested} ★
-                    </button>
-                  </p>
-                )}
-
-                <div className="picker-filters">
-                  <input
-                    type="search"
-                    className="picker-search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={`Search ${references.length} signs…`}
-                    disabled={inputsLocked}
-                    aria-label="Search signs"
-                  />
-                  {categories.length > 1 && (
-                    <div className="category-chips">
-                      <button
-                        className={category === null ? 'chip active' : 'chip'}
-                        onClick={() => setCategory(null)}
-                        disabled={inputsLocked}
-                      >
-                        All {references.length}
+                {references.length === 0 ? (
+                  <>
+                    <h2>Practice a sign</h2>
+                    <p className="hint-text">
+                      No reference signs yet. Record some in the <strong>Record</strong> tab first —
+                      start with ME, YOU, NAME.
+                    </p>
+                  </>
+                ) : pickerOpen ? (
+                  /* The picker takes the panel while it is open, rather than
+                     living permanently above the reference and the record
+                     button. Before, 358 chips sat in a 168px nested scroll
+                     inside the page scroll, and the primary action was below
+                     all of it. */
+                  <div className="picker">
+                    <div className="picker-head">
+                      <h2>Choose a sign</h2>
+                      <button className="btn btn-ghost" onClick={() => setPickerOpen(false)}>
+                        Cancel
                       </button>
-                      {categories.map((name) => (
-                        <button
-                          key={name}
-                          className={category === name ? 'chip active' : 'chip'}
-                          onClick={() => setCategory(name)}
-                          disabled={inputsLocked}
-                        >
-                          {name} {references.filter((r) => categoryOf(r) === name).length}
-                        </button>
-                      ))}
                     </div>
-                  )}
-                </div>
 
-                {visible.length === 0 ? (
-                  <p className="hint-text">No signs match “{query}”.</p>
-                ) : (
-                  <div className="gloss-chips gloss-chips-scroll">
-                    {visible.map((r) => (
-                      <button
-                        key={r.id}
-                        className={selected?.id === r.id ? 'chip active' : 'chip'}
-                        onClick={() => setSelected(r)}
-                        disabled={inputsLocked}
-                        title={translationOf(r.gloss)}
-                      >
-                        {r.gloss === suggested ? `${r.gloss} ★` : r.gloss}
-                      </button>
-                    ))}
+                    <input
+                      type="search"
+                      className="picker-search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder={`Search ${references.length} signs…`}
+                      aria-label="Search signs"
+                      autoFocus
+                    />
+
+                    {categories.length > 1 && (
+                      /* One scrolling row rather than eighteen wrapping chips
+                         taking six lines of the panel. */
+                      <div className="category-rail">
+                        <button
+                          className={category === null ? 'chip active' : 'chip'}
+                          onClick={() => setCategory(null)}
+                        >
+                          All {references.length}
+                        </button>
+                        {categories.map((name) => (
+                          <button
+                            key={name}
+                            className={category === name ? 'chip active' : 'chip'}
+                            onClick={() => setCategory(name)}
+                          >
+                            {name} {references.filter((r) => categoryOf(r) === name).length}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {visible.length === 0 ? (
+                      <p className="hint-text">No signs match “{query}”.</p>
+                    ) : (
+                      <>
+                        <ul className="sign-list">
+                          {visible.slice(0, PICKER_LIMIT).map((r) => (
+                            <li key={r.id}>
+                              <button
+                                className={selected?.id === r.id ? 'sign-row active' : 'sign-row'}
+                                onClick={() => {
+                                  setSelected(r)
+                                  setPickerOpen(false)
+                                }}
+                              >
+                                {/* The meaning, not just the dataset label — a
+                                    learner cannot act on a bare gloss. */}
+                                <span className="sign-row-name">{glossLabel(r.gloss)}</span>
+                                <span className="sign-row-meta">
+                                  {r.gloss === suggested && <em className="badge">suggested</em>}
+                                  {categoryOf(r)}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="hint-text">
+                          {visible.length > PICKER_LIMIT
+                            ? `Showing ${PICKER_LIMIT} of ${visible.length} — search to narrow it down.`
+                            : `${visible.length} sign${visible.length === 1 ? '' : 's'}.`}
+                        </p>
+                      </>
+                    )}
                   </div>
-                )}
+                ) : (
+                  <>
+                    <h2>Practice a sign</h2>
 
-                {selected && (
-                  <div className="reference-preview">
-                    <p className="compare-label">Sign this: {glossLabel(selected.gloss)}</p>
-                    {selected.provisional && (
+                    <div className="sign-header">
+                      <p className="sign-name">
+                        {selected ? glossLabel(selected.gloss) : 'No sign chosen yet'}
+                        {selected && selected.gloss === suggested && ' ★'}
+                      </p>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => setPickerOpen(true)}
+                        disabled={inputsLocked}
+                      >
+                        {selected ? 'Change sign' : 'Choose a sign'}
+                      </button>
+                    </div>
+
+                    {selected?.provisional && (
                       <p className="provisional-note">
                         Provisional reference — recorded by the team to unblock development, not
                         verified SSL.
                       </p>
                     )}
-                    {reference ? (
-                      // Stacked, the player itself is in the camera stage — the
-                      // gloss and the provisional note above stay here either way.
-                      !stacked && (
-                        <SkeletonPlayer
-                          frames={reference.frames}
-                          videoWidth={reference.videoWidth}
-                          videoHeight={reference.videoHeight}
-                        />
-                      )
-                    ) : refFailed ? (
-                      <p className="camera-error">
-                        Could not load this reference recording. Pick another sign, or check your
-                        connection and select it again.
-                      </p>
-                    ) : (
-                      <p className="hint-text">Loading reference…</p>
-                    )}
-                  </div>
-                )}
 
-                <p className="hint-text">
-                  Watch the reference, then record yourself signing it. You'll get a match score
-                  and tips on what to fix.
-                </p>
+                    {selected && suggested && selected.gloss !== suggested && (
+                      <p className="hint-text">
+                        Suggested next:{' '}
+                        <button
+                          className="link-button"
+                          onClick={() => {
+                            const next = references.find((r) => r.gloss === suggested)
+                            if (next) setSelected(next)
+                          }}
+                          disabled={inputsLocked}
+                        >
+                          {glossLabel(suggested)} ★
+                        </button>
+                      </p>
+                    )}
+
+                    {selected &&
+                      (reference ? (
+                        // Stacked, the player itself is in the camera stage.
+                        !stacked && (
+                          <SkeletonPlayer
+                            frames={reference.frames}
+                            videoWidth={reference.videoWidth}
+                            videoHeight={reference.videoHeight}
+                          />
+                        )
+                      ) : refFailed ? (
+                        <p className="camera-error">
+                          Could not load this reference recording. Pick another sign, or check your
+                          connection and select it again.
+                        </p>
+                      ) : (
+                        <p className="hint-text">Loading reference…</p>
+                      ))}
+
+                    <p className="hint-text">
+                      Watch the reference, then record yourself signing it. You'll get a match
+                      score and tips on what to fix.
+                    </p>
+                  </>
+                )}
 
                 {/* Last in the panel so it can stick to the bottom of the
                     viewport on a phone, within thumb reach, instead of landing
-                    hundreds of pixels below the fold. */}
-                <div className="panel-actions">
+                    hundreds of pixels below the fold. Hidden while the picker
+                    is open, which owns the panel for as long as it is up. */}
+                <div className="panel-actions" hidden={pickerOpen}>
                   {phase === 'countdown' ? (
                     <button className="btn btn-ghost" onClick={cancelCountdown}>
                       Cancel
@@ -849,8 +899,6 @@ export function PracticeView() {
                     </button>
                   )}
                 </div>
-              </>
-            )}
               </>
             )}
           </>

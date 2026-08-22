@@ -21,6 +21,7 @@ export function LibraryView() {
   // so browsing the library downloads nothing.
   const [openRec, setOpenRec] = useState<SignRecording | null>(null)
   const [openFailed, setOpenFailed] = useState(false)
+  const [filter, setFilter] = useState('')
   const openIdRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -154,10 +155,18 @@ export function LibraryView() {
     await refreshLocal()
   }
 
+  const needle = filter.trim().toLowerCase()
   const rows: Row[] = [
     ...local.map((rec) => ({ meta: toMeta(rec), bundled: false })),
     ...bundled.map((meta) => ({ meta, bundled: true })),
-  ].sort(
+  ]
+    .filter(
+      ({ meta }) =>
+        needle === '' ||
+        meta.gloss.toLowerCase().includes(needle) ||
+        meta.signer.toLowerCase().includes(needle),
+    )
+    .sort(
     (a, b) =>
       a.meta.gloss.localeCompare(b.meta.gloss) ||
       b.meta.createdAt.localeCompare(a.meta.createdAt),
@@ -168,7 +177,9 @@ export function LibraryView() {
       <div className="library-head">
         <h2>Reference library</h2>
         <span className="library-count">
-          {local.length} local · {bundled.length} bundled
+          {needle
+            ? `${rows.length} match${rows.length === 1 ? '' : 'es'}`
+            : `${local.length} local · ${bundled.length} bundled`}
         </span>
         <button
           className="btn btn-ghost"
@@ -185,6 +196,14 @@ export function LibraryView() {
         <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>
           Import JSON
         </button>
+        <input
+          type="search"
+          className="picker-search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter by gloss or signer…"
+          aria-label="Filter recordings"
+        />
         <input
           ref={fileInputRef}
           type="file"
