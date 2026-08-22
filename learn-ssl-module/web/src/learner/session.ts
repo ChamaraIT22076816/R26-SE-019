@@ -30,6 +30,12 @@ import { isSymbolLabel } from '../data/categories'
  *  - Nothing is time-gated, and there is no streak to lose.
  */
 export interface PracticeSession {
+  /**
+   * Stamped onto every attempt made during this session, so the export can
+   * segment by sitting. The proposal's learning-gain target is phrased "after
+   * 10 sessions", which is uncountable without it.
+   */
+  id: string
   glosses: string[]
   /** Glosses with at least one scored attempt this session. */
   done: string[]
@@ -123,7 +129,7 @@ export function startSession(
   for (const s of summaries) {
     if (glosses.includes(s.gloss)) startMastery[s.gloss] = s.mastery
   }
-  return { glosses, done: [], startedAt: now.toISOString(), startMastery }
+  return { id: crypto.randomUUID(), glosses, done: [], startedAt: now.toISOString(), startMastery }
 }
 
 /** The sign being worked on: the first one without a scored attempt yet. */
@@ -184,6 +190,7 @@ function isSession(value: unknown): value is PracticeSession {
   const s = value as PracticeSession
   return (
     !!s &&
+    typeof s.id === 'string' &&
     Array.isArray(s.glosses) &&
     Array.isArray(s.done) &&
     typeof s.startedAt === 'string' &&

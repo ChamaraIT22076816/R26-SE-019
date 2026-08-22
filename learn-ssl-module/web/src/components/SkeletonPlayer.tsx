@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { drawHands } from '../vision/drawing'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { drawHands, fitFor } from '../vision/drawing'
 import type { HandFrame } from '../vision/types'
 
 interface SkeletonPlayerProps {
@@ -8,6 +8,18 @@ interface SkeletonPlayerProps {
   videoHeight: number
   /** Mirror like the live self-view (default) so learners can imitate directly. */
   mirrored?: boolean
+  /**
+   * Centre and zoom the whole clip to fill the frame, discarding where the
+   * signer happened to stand relative to their camera.
+   *
+   * On by default, because that framing is not part of the sign and the scorer
+   * already ignores it: score.ts normalises both attempt and reference before
+   * comparing. Drawing them raw showed a learner position and size differences
+   * that had no bearing on their score, while giving no help with the ones that
+   * did. Motion within the clip is preserved — the fit is computed once for the
+   * whole sequence, not per frame.
+   */
+  fitToFrame?: boolean
 }
 
 /** Replays a recorded landmark sequence on a canvas — no video involved. */
@@ -16,6 +28,7 @@ export function SkeletonPlayer({
   videoWidth,
   videoHeight,
   mirrored = true,
+  fitToFrame = true,
 }: SkeletonPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef(0)
@@ -28,6 +41,7 @@ export function SkeletonPlayer({
   const [playing, setPlaying] = useState(true)
   const [timeMs, setTimeMs] = useState(0)
   const durationMs = Math.max(frames[frames.length - 1]?.timestampMs ?? 0, 1)
+  const fit = useMemo(() => (fitToFrame ? fitFor(frames) : undefined), [frames, fitToFrame])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -50,7 +64,7 @@ export function SkeletonPlayer({
       lastDrawn = idx
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       const frame = frames[idx]
-      if (frame) drawHands(ctx, frame.hands)
+      if (frame) drawHands(ctx, frame.hands, fit)
     }
     renderAtRef.current = renderAt
 
@@ -74,7 +88,7 @@ export function SkeletonPlayer({
     }
     rafRef.current = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [playing, frames, durationMs])
+  }, [playing, frames, durationMs, fit])
 
   function togglePlay() {
     if (playing) offsetRef.current = lastTRef.current

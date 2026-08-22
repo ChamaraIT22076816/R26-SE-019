@@ -28,6 +28,44 @@ function latencyFor(a: AttemptLogEntry, totalMs: number): LatencySample {
   }
 }
 
+describe('session segmentation', () => {
+  // The proposal's learning-gain target is phrased "after 10 sessions", so the
+  // export has to be able to count them and split scores by sitting.
+  const SESSIONED: AttemptLogEntry[] = [
+    { ...attempt('KANAWA', 30, '2026-08-06T10:00:00.000Z'), sessionId: 's1' },
+    { ...attempt('BONAWA', 35, '2026-08-06T10:01:00.000Z'), sessionId: 's1' },
+    { ...attempt('KANAWA', 70, '2026-08-07T10:00:00.000Z'), sessionId: 's2' },
+    // Free practice: no session, and must not inflate the count.
+    attempt('KANAWA', 66, '2026-08-07T11:00:00.000Z'),
+  ]
+
+  it('counts distinct sessions, ignoring free practice', () => {
+    expect(buildExport('P01', SESSIONED).totals.sessions).toBe(2)
+  })
+
+  it('reports zero sessions when every attempt was free practice', () => {
+    expect(buildExport('P01', ATTEMPTS).totals.sessions).toBe(0)
+  })
+
+  it('carries the session id per row, blank where there was none', () => {
+    const rows = toCsv(buildExport('P01', SESSIONED)).trim().split('\n').slice(1)
+    const sessionCol = rows.map((r) => r.split(',')[6])
+    expect(sessionCol).toEqual(['s1', 's1', 's2', ''])
+  })
+
+  it('keeps scores splittable by session for a gain measure', () => {
+    const data = buildExport('P01', SESSIONED)
+    const bySession = new Map<string, number[]>()
+    for (const a of data.attempts) {
+      if (!a.sessionId) continue
+      bySession.set(a.sessionId, [...(bySession.get(a.sessionId) ?? []), a.score])
+    }
+    const mean = (xs: number[]) => xs.reduce((t, x) => t + x, 0) / xs.length
+    expect(mean(bySession.get('s1')!)).toBeCloseTo(32.5, 5)
+    expect(mean(bySession.get('s2')!)).toBe(70)
+  })
+})
+
 describe('buildExport', () => {
   it('summarises a session', () => {
     const out = buildExport('P01', ATTEMPTS)
@@ -85,7 +123,7 @@ describe('toCsv', () => {
     const lines = toCsv(buildExport('P01', ATTEMPTS)).trim().split('\n')
     expect(lines).toHaveLength(4)
     expect(lines[0]).toBe(
-      'participant_code,attempt_index,gloss,score,worst_fingers,reference_id,created_at,' +
+      'participant_code,attempt_index,gloss,score,worst_fingers,reference_id,session_id,created_at,' +
         'latency_total_ms,latency_tracking_ms,latency_scoring_ms,latency_render_ms',
     )
     expect(lines[1]).toContain('P01,1,KANAWA,40')

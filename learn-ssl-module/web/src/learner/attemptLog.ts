@@ -16,6 +16,13 @@ export interface AttemptLogEntry {
   score: number
   /** Fingers most deviant in this attempt, worst first (may be empty). */
   worstFingers: Finger[]
+  /**
+   * The practice session this attempt belonged to, if any. Absent for free
+   * practice and for scenario turns — both are still practice, they just are
+   * not a numbered session. Segmenting by this is what makes "learning gain
+   * after N sessions" a countable claim rather than one inferred from clock gaps.
+   */
+  sessionId?: string
   createdAt: string
 }
 

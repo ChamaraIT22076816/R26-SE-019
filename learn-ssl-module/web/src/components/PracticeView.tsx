@@ -228,6 +228,8 @@ export function PracticeView() {
     // "Practise these again" keeps the same set; a fresh session re-ranks.
     const next = glosses
       ? {
+          // Same signs, but a new sitting — so a new session id.
+          id: crypto.randomUUID(),
           glosses,
           done: [],
           startedAt: new Date().toISOString(),
@@ -396,6 +398,9 @@ export function PracticeView() {
       referenceId: reference.id,
       score: scored.score,
       worstFingers: topFingers(scored),
+      // Read before markAttempted runs, so an attempt that completes a session
+      // is still attributed to it.
+      sessionId: session?.id,
       createdAt: att.createdAt,
     }
     setLogFailed(false)

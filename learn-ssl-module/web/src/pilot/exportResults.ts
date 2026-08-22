@@ -20,6 +20,12 @@ export interface PilotExport {
   totals: {
     attempts: number
     distinctSigns: number
+    /**
+     * Distinct practice sessions. The proposal's learning-gain target is
+     * "after 10 sessions", so this is the denominator that claim needs.
+     * Free practice and scenario turns carry no session id and are excluded.
+     */
+    sessions: number
     meanScore: number | null
     firstAttemptAt: string | null
     lastAttemptAt: string | null
@@ -71,6 +77,7 @@ export function buildExport(
     totals: {
       attempts: ordered.length,
       distinctSigns: glosses.length,
+      sessions: new Set(ordered.map((a) => a.sessionId).filter(Boolean)).size,
       meanScore:
         ordered.length > 0
           ? Math.round(ordered.reduce((t, a) => t + a.score, 0) / ordered.length)
@@ -107,6 +114,7 @@ export function toCsv(data: PilotExport): string {
     'score',
     'worst_fingers',
     'reference_id',
+    'session_id',
     'created_at',
     'latency_total_ms',
     'latency_tracking_ms',
@@ -123,6 +131,8 @@ export function toCsv(data: PilotExport): string {
       a.score,
       a.worstFingers.join(' '),
       a.referenceId,
+      // Blank for free practice and scenario turns — see AttemptLogEntry.
+      a.sessionId ?? null,
       a.createdAt,
       l?.totalMs ?? null,
       l?.trackingMs ?? null,

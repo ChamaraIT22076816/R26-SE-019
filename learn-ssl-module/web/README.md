@@ -79,20 +79,32 @@ are a one-off per participant.
 ### Running a pilot session
 
 Attempts stay in the participant's own browser — nothing is uploaded, and no
-video is ever captured to disk, which is what keeps the ethics story simple. To
-collect data, have each participant open **Progress**, enter the participant
-code you assign them (a code, never their name), and hit **Export results**:
+video is ever captured to disk, which is what keeps the ethics story simple.
 
-- **CSV** — one row per attempt, for a spreadsheet or stats tool, including the
-  measured feedback latency for that attempt.
-- **JSON** — the same data plus per-sign summaries including `firstScore` and
-  `lastScore`, which is what a learning-gain measure is computed from, and the
-  latency summary for that participant's machine.
+**The export is the facilitator's job, not the participant's.** It lives in
+author mode, which a learner never sees: open `?mode=author`, go to **Study**,
+enter the participant code you assigned (a code, never their name), and hit
+**Export results**.
 
-That single export therefore covers three of the four proposal targets:
-learning gain (`firstScore`/`lastScore`), feedback latency (measured), and the
-attempt data behind accuracy. SUS is the one that still needs a questionnaire
-outside the app.
+- **CSV** — one row per attempt, for a spreadsheet or stats tool, with the
+  measured feedback latency for that attempt and the session it belonged to.
+- **JSON** — the same rows plus per-sign summaries (`firstScore`, `lastScore`),
+  session and attempt totals, and the latency summary for that machine.
+
+Columns that carry a target:
+
+| Column | Used for |
+|---|---|
+| `session_id` | Grouping attempts into sittings. Blank = free practice or a scenario turn, which are practice but not a numbered session. |
+| `score`, `created_at` | Learning gain, per sign or per session |
+| `latency_total_ms` | The ≤300 ms target. **Blank means not measured — never read it as zero.** |
+
+`totals.sessions` in the JSON counts distinct sessions, which is the
+denominator the "≥20% learning gain after 10 sessions" claim needs.
+
+So one export covers three of the four proposal targets: learning gain, feedback
+latency, and the attempt data behind accuracy. **SUS needs a questionnaire
+outside the app** — nothing in here collects it.
 
 They send you the file. Each participant needs their own browser profile or
 device — two people sharing one browser share one IndexedDB and their data will
