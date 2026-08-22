@@ -33,6 +33,18 @@
   transform: scaleX(-1);
 }
 
+/* Detection paused (see useHandTracking.pause): the last skeleton is left on
+   the canvas rather than cleared, dimmed so it reads as held rather than
+   broken. The self-view underneath keeps moving, which is the cue that the
+   camera is still alive. */
+.stage-live > canvas {
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+.stage-live > canvas.tracking-held {
+  opacity: 0.35;
+}
+
 .camera-placeholder {
   position: absolute;
   inset: 0;

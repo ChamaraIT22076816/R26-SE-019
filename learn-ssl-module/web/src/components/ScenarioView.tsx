@@ -192,6 +192,13 @@ export function ScenarioView() {
     if (stage !== 'playing') stopTracking()
   }, [stage, stopTracking])
 
+  // Same as Practice: a turn's score is on screen, nothing is consuming frames.
+  const { pause: pauseTracking, resume: resumeTracking } = capture.tracking
+  useEffect(() => {
+    if (current) pauseTracking()
+    else resumeTracking()
+  }, [current, pauseTracking, resumeTracking])
+
   async function startScenario() {
     setIndex(0)
     setOutcomes([])
@@ -443,6 +450,7 @@ export function ScenarioView() {
           error={capture.tracking.error}
           onStart={() => void capture.tracking.start()}
           idleHint="Start the camera to take part in the conversation."
+          inferring={capture.tracking.inferring}
           pip={
             stacked && !current ? (
               <SkeletonPlayer

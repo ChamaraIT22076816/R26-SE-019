@@ -232,6 +232,16 @@ and pause offscreen players with an `IntersectionObserver`.
 **This is the change that pays for every animation in Phase 3.** It hands back
 15–25 ms of main thread per frame at exactly the moment the reveal runs.
 
+**Done — late, and after Phase 3 rather than before it.** This was skipped when
+Phase 0 was built and only caught during a completeness audit, so Phases 3 and 4
+shipped without the frame budget they were designed to spend. `pause()`/
+`resume()` now bracket the Practice result, the Scenario turn result and the
+Record review screen; the stream stays live so resuming costs nothing, and the
+overlay holds its last skeleton at 35% rather than clearing. The
+`IntersectionObserver` half of the original proposal (pausing offscreen
+`SkeletonPlayer` loops) was **not** built — frame dedupe in Phase 3B covers most
+of it, and at most two players are ever mounted.
+
 ### Phase 1 — The design system (8 h)
 
 **1.1 — Three-tier tokens (3 h).** `views.css` leaks 14 raw hex literals past the

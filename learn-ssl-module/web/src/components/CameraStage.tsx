@@ -16,6 +16,11 @@ interface CameraStageProps {
    * time, and stacked panels put one of them off screen.
    */
   pip?: ReactNode
+  /**
+   * False while landmark detection is paused with the camera still live — the
+   * overlay holds its last skeleton and dims instead of going blank.
+   */
+  inferring?: boolean
   /** Extra overlays rendered above the video (countdown, REC badge, …). */
   children?: ReactNode
 }
@@ -29,6 +34,7 @@ export function CameraStage({
   onStart,
   idleHint,
   pip,
+  inferring = true,
   children,
 }: CameraStageProps) {
   // Which layer is full-bleed. Purely presentational, so it lives here rather
@@ -39,7 +45,10 @@ export function CameraStage({
     <div className={swapped ? 'camera-stage camera-stage--swapped' : 'camera-stage'}>
       <div className="stage-live">
         <video ref={videoRef} playsInline muted />
-        <canvas ref={canvasRef} />
+        <canvas
+          ref={canvasRef}
+          className={status === 'running' && !inferring ? 'tracking-held' : undefined}
+        />
       </div>
 
       {pip && <div className="stage-pip">{pip}</div>}

@@ -71,6 +71,13 @@ export function RecordView() {
     [],
   )
 
+  // Reviewing a take consumes no frames — see useHandTracking.pause.
+  const { pause: pauseTracking, resume: resumeTracking } = tracking
+  useEffect(() => {
+    if (phase === 'review') pauseTracking()
+    else resumeTracking()
+  }, [phase, pauseTracking, resumeTracking])
+
   function beginCountdown() {
     // Signer is required: a reference whose performer is unknown cannot be
     // traced back or replaced later, and provenance is the whole point of
@@ -158,6 +165,7 @@ export function RecordView() {
           error={tracking.error}
           onStart={() => void tracking.start()}
           idleHint="Start the camera to record reference signs for the library."
+          inferring={tracking.inferring}
         >
           {phase === 'countdown' && (
             <div className="countdown-overlay">

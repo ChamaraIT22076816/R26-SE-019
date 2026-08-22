@@ -199,6 +199,16 @@ export function PracticeView() {
 
   useEffect(() => () => window.clearInterval(countdownRef.current), [])
 
+  // Nothing consumes frames while a result is on screen, and inference is the
+  // most expensive thing on the page. Handing that budget back is what lets the
+  // score reveal animate smoothly on a low-end device. The camera stays live,
+  // so resuming is instant.
+  const { pause: pauseTracking, resume: resumeTracking } = tracking
+  useEffect(() => {
+    if (phase === 'result') pauseTracking()
+    else resumeTracking()
+  }, [phase, pauseTracking, resumeTracking])
+
   useEffect(() => {
     if (session) saveSession(session)
     else clearSession()
@@ -425,6 +435,7 @@ export function PracticeView() {
           error={tracking.error}
           onStart={() => void tracking.start()}
           idleHint="Start the camera, choose a sign, and record your attempt."
+          inferring={tracking.inferring}
           pip={
             stacked && reference && phase !== 'result' ? (
               <SkeletonPlayer

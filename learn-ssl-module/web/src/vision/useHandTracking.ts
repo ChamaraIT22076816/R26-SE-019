@@ -55,6 +55,8 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
   const [error, setError] = useState('')
   const [stats, setStats] = useState<TrackingStats | null>(null)
   const [hands, setHands] = useState<TrackedHand[]>([])
+  /** Whether landmark detection is currently running. See pause(). */
+  const [inferring, setInferring] = useState(false)
 
   const processFrame = useCallback(async () => {
     if (!activeRef.current) return
@@ -139,6 +141,7 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
       emaRef.current = { fps: 0, inferenceMs: 0, lastFrameAt: 0, lastUiPush: 0 }
       setStatus('running')
       activeRef.current = true
+      setInferring(true)
       rafRef.current = requestAnimationFrame(() => void processFrame())
     } catch (e) {
       activeRef.current = false
@@ -150,8 +153,44 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
     }
   }, [processFrame])
 
+  /**
+   * Stop detecting, keep the camera.
+   *
+   * Inference is the expensive thing on this page — 10–25 ms of main thread per
+   * frame on low-end hardware — and there are stretches where nothing consumes
+   * it: while the learner reads a score, or reviews a take they just recorded.
+   * Running it there costs frame budget at exactly the moment something else
+   * wants to animate smoothly.
+   *
+   * The MediaStream and `video.srcObject` are deliberately left alone, so the
+   * self-view keeps playing and resume() costs nothing — no getUserMedia
+   * round-trip, no model reload. The overlay is left painted rather than
+   * cleared, dimmed by CSS, so the last skeleton reads as frozen rather than
+   * broken.
+   */
+  const pause = useCallback(() => {
+    if (!activeRef.current) return
+    activeRef.current = false
+    cancelAnimationFrame(rafRef.current)
+    setInferring(false)
+  }, [])
+
+  /** Resume detection. A no-op unless a stream is live, so callers can fire it
+   *  on any state change without guarding. */
+  const resume = useCallback(() => {
+    if (activeRef.current || !streamRef.current) return
+    // The video has advanced while we were away, and the smoothed stats would
+    // otherwise average across the gap.
+    lastVideoTimeRef.current = -1
+    emaRef.current = { fps: 0, inferenceMs: 0, lastFrameAt: 0, lastUiPush: 0 }
+    activeRef.current = true
+    setInferring(true)
+    rafRef.current = requestAnimationFrame(() => void processFrame())
+  }, [processFrame])
+
   const stop = useCallback(() => {
     activeRef.current = false
+    setInferring(false)
     cancelAnimationFrame(rafRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
@@ -174,5 +213,5 @@ export function useHandTracking(onFrame?: (frame: HandFrame) => void) {
     }
   }, [])
 
-  return { videoRef, canvasRef, status, error, stats, hands, start, stop }
+  return { videoRef, canvasRef, status, error, stats, hands, inferring, start, stop, pause, resume }
 }
