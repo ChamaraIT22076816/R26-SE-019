@@ -3260,6 +3260,8 @@
   </style>
   <!-- සවන AI assistant (additive; namespaced under .svn-ai*) -->
   <link rel="stylesheet" href="/assistant.css" />
+  <!-- SoundGuard mobile companion (additive; namespaced under .sg-*) -->
+  <link rel="stylesheet" href="/soundguard.css" />
 </head>
 <body>
   <!-- background layers -->
@@ -3292,11 +3294,17 @@
     <nav class="header-nav" aria-label="Page sections">
       <a href="#overview">Overview</a>
       <a href="#features">Features</a>
+      <a href="#soundguard">SoundGuard</a>
       <a href="#how">How it works</a>
       <a href="#feedback">Feedback</a>
     </nav>
 
     <div class="header-actions">
+      <button class="sg-header-btn" type="button" data-action="soundguard-qr" title="Connect SoundGuard Mobile App (Expo QR)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        <span class="sg-pulse-dot"></span>
+        <span class="sg-btn-text">SoundGuard QR</span>
+      </button>
       <span class="version-badge">v1.0 &middot; Local</span>
       <div class="status-pill" id="connectionStatus">
         <span class="dot" id="connectionDot"></span>
@@ -3408,6 +3416,55 @@
           <div class="feature-divider"></div>
         </div>
         <p>With a high accuracy rate, our system ensures that sign language communication is not only faster, but also more accurate.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOUNDGUARD COMPONENT SHOWCASE -->
+  <section class="landing-section soundguard-section" id="soundguard">
+    <div class="sg-showcase-card">
+      <span class="sg-card-glow" aria-hidden="true"></span>
+      <div class="sg-header-block">
+        <div class="sg-header-text">
+          <span class="sg-eyebrow">Companion Mobile Ecosystem</span>
+          <h2>SoundGuard: <span class="sg-accent-text">Sound Awareness &amp; Emergency SOS</span></h2>
+          <p>An intelligent on-device mobile companion for Android and iOS designed to keep Deaf and hard-of-hearing individuals safe by detecting critical ambient sounds in real time and transmitting instant SOS emergency alerts.</p>
+        </div>
+        <div class="sg-hero-action">
+          <button class="sg-btn-primary" type="button" data-action="soundguard-qr">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Generate QR to Connect
+          </button>
+          <span class="sg-badge-status">
+            <span class="sg-pulse-dot"></span> Expo Go &middot; Android &amp; iOS
+          </span>
+        </div>
+      </div>
+
+      <div class="sg-feature-grid">
+        <div class="sg-feature-pill">
+          <div class="sg-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </div>
+          <h3>Environmental Sound Detection</h3>
+          <p>Real-time CNN classifier detects emergency sirens, car horns, fire alarms, and doorbells at 95.4% accuracy with high-contrast visual and haptic alerts.</p>
+        </div>
+
+        <div class="sg-feature-pill">
+          <div class="sg-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <h3>Instant SOS &amp; Location Sharing</h3>
+          <p>One-touch emergency beacon broadcasts precise GPS location coordinates via automated SMS to trusted emergency contacts in your Safety Circle.</p>
+        </div>
+
+        <div class="sg-feature-pill">
+          <div class="sg-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Live Speech-to-Text Captions</h3>
+          <p>Instant speech transcription converts conversations into clear, readable captions so hearing and non-hearing individuals can communicate seamlessly.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -3774,5 +3831,7 @@
 
   <!-- සවන AI assistant — self-injecting widget, loads after the main app -->
   <script src="/assistant.js" defer></script>
+  <!-- SoundGuard mobile companion module -->
+  <script src="/soundguard.js" defer></script>
 </body>
 </html>

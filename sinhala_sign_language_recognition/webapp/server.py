@@ -69,6 +69,17 @@ except Exception as _assistant_error:  # pragma: no cover - never block startup
     print(f"AI assistant unavailable ({_assistant_error}); core app unaffected")
 # ---------------------------------------------------------------------------
 
+# --- SoundGuard Mobile integration -----------------------------------------
+# Additive only: mounts /api/soundguard/* for mobile Expo/QR connection info.
+try:
+    from soundguard import router as soundguard_router  # noqa: E402
+
+    app.include_router(soundguard_router)
+    print("SoundGuard integration mounted at /api/soundguard")
+except Exception as _soundguard_error:  # pragma: no cover - never block startup
+    print(f"SoundGuard integration unavailable ({_soundguard_error}); core app unaffected")
+# ---------------------------------------------------------------------------
+
 
 def _warm_tts_cache():
     """Pre-generate any missing label audio in the background so /api/speak
