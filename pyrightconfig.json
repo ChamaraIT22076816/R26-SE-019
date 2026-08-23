@@ -1,0 +1,9 @@
+{
+  "venvPath": "sinhala_sign_language_recognition",
+  "venv": ".venv",
+  "extraPaths": [
+    "sinhala_sign_language_recognition",
+    "sinhala_sign_language_recognition/src",
+    "sinhala_sign_language_recognition/webapp"
+  ]
+}

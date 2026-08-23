@@ -3,6 +3,8 @@ import json
 import os
 import re
 import sys
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import cv2
@@ -17,9 +19,15 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-from data_preprocessing.frame_extractor import FrameExtractor  # noqa: E402
-from recognition.web_stream_recognizer import StreamRecognizer  # noqa: E402
+try:
+    from data_preprocessing.frame_extractor import FrameExtractor  # noqa: E402
+    from recognition.web_stream_recognizer import StreamRecognizer  # noqa: E402
+except ImportError:
+    from src.data_preprocessing.frame_extractor import FrameExtractor  # noqa: E402
+    from src.recognition.web_stream_recognizer import StreamRecognizer  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TTS_CACHE_DIR = Path(__file__).resolve().parent / "tts_cache"
@@ -51,7 +59,41 @@ else:
     sinhala_labels = {}
 print(f"Loaded {len(sinhala_labels)} Sinhala label translations")
 
-app = FastAPI(title="Sinhala Sign Language Recognition")
+
+def _safe_cache_name(text):
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_").lower()
+    return slug[:120] or "audio"
+
+
+def _warm_tts_cache():
+    """Pre-generate any missing label audio in the background so /api/speak
+    never has to hit gTTS live mid-session -- a live gTTS call (network
+    round-trip) was making spoken audio lag noticeably behind real-time
+    detections, especially for labels never spoken before in that session.
+    """
+    import time
+    from gtts import gTTS
+
+    for label, entry in sinhala_labels.items():
+        speak_text = entry.get("speakText") or label
+        speak_lang = entry.get("speakLang") or config['speech']['language']
+        cache_path = TTS_CACHE_DIR / f"{_safe_cache_name(label)}_{speak_lang}.mp3"
+        if cache_path.exists():
+            continue
+        try:
+            gTTS(text=speak_text, lang=speak_lang).save(str(cache_path))
+        except Exception as e:
+            print(f"TTS warm-up failed for {label!r}: {e}")
+        time.sleep(0.15)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_warm_tts_cache, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Sinhala Sign Language Recognition", lifespan=lifespan)
 
 # --- සවන AI assistant -------------------------------------------------------
 # Additive only: mounts the assistant's own /api/assistant/* routes. It shares
@@ -81,34 +123,6 @@ except Exception as _soundguard_error:  # pragma: no cover - never block startup
 # ---------------------------------------------------------------------------
 
 
-def _warm_tts_cache():
-    """Pre-generate any missing label audio in the background so /api/speak
-    never has to hit gTTS live mid-session -- a live gTTS call (network
-    round-trip) was making spoken audio lag noticeably behind real-time
-    detections, especially for labels never spoken before in that session.
-    """
-    import time
-    from gtts import gTTS
-
-    for label, entry in sinhala_labels.items():
-        speak_text = entry.get("speakText") or label
-        speak_lang = entry.get("speakLang") or config['speech']['language']
-        cache_path = TTS_CACHE_DIR / f"{_safe_cache_name(label)}_{speak_lang}.mp3"
-        if cache_path.exists():
-            continue
-        try:
-            gTTS(text=speak_text, lang=speak_lang).save(str(cache_path))
-        except Exception as e:
-            print(f"TTS warm-up failed for {label!r}: {e}")
-        time.sleep(0.15)
-
-
-@app.on_event("startup")
-def _on_startup():
-    import threading
-    threading.Thread(target=_warm_tts_cache, daemon=True).start()
-
-
 def _decode_data_url(data_url):
     _, b64data = data_url.split(",", 1)
     img_bytes = base64.b64decode(b64data)
@@ -123,11 +137,6 @@ def _landmarks_to_points(landmark_list):
         [round(float(lm.x), 4), round(float(lm.y), 4), round(float(lm.z), 4)]
         for lm in landmark_list.landmark
     ]
-
-
-def _safe_cache_name(text):
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_").lower()
-    return slug[:120] or "audio"
 
 
 @app.get("/")
