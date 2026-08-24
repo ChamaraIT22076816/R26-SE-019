@@ -1,0 +1,255 @@
+/* ============================================================================
+   SSL LEARN MODULE COMPONENT INTEGRATION — STYLES
+   ----------------------------------------------------------------------------
+   Interactive Sign Language Learning & Practice Module (https://learn-ssl-module.vercel.app/).
+   Namespaced under .lssl-* to guarantee 100% style isolation from the core app,
+   the සවන AI assistant (.svn-ai*), SoundGuard (.sg-*), and SignSpeak (.ss-*).
+
+   Accent: emerald → teal → cyan gradient, representing learning, correctness
+   feedback and growth, while harmonizing with the dark luxury palette.
+   ============================================================================ */
+
+/* ------------------------------------------------------------------
+   1. SHOWCASE SECTION (Landing Page)
+   ------------------------------------------------------------------ */
+.learnssl-section {
+  position: relative;
+  max-width: 1320px;
+  margin: 4.5rem auto 3rem;
+  padding: 0 clamp(20px, 5vw, 4rem);
+}
+
+.lssl-showcase-card {
+  position: relative;
+  border-radius: var(--radius-xl, 28px);
+  padding: clamp(2.2rem, 5vw, 3.8rem);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01) 40%),
+    linear-gradient(135deg, rgba(10, 32, 40, 0.85), rgba(6, 18, 30, 0.95));
+  border: 1px solid rgba(51, 224, 162, 0.22);
+  box-shadow: 0 24px 60px rgba(2, 6, 16, 0.65), 0 0 0 1px rgba(51, 224, 162, 0.15);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.lssl-showcase-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(51, 224, 162, 0.7) 30%, rgba(220, 187, 144, 0.7) 50%, rgba(56, 189, 248, 0.7) 70%, transparent);
+}
+
+.lssl-card-glow {
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(51, 224, 162, 0.16), rgba(56, 189, 248, 0.08) 50%, transparent 70%);
+  filter: blur(55px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.lssl-header-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.lssl-header-text {
+  max-width: 700px;
+}
+
+.lssl-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #33e0a2;
+  margin-bottom: 0.9rem;
+}
+
+.lssl-eyebrow::before {
+  content: "";
+  width: 24px;
+  height: 2px;
+  background: #33e0a2;
+}
+
+.lssl-header-text h2 {
+  font-family: var(--display, "Playfair Display", serif);
+  font-weight: 600;
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: var(--text, #f3f6fc);
+  margin: 0 0 1rem;
+}
+
+.lssl-header-text h2 .lssl-accent-text {
+  background: linear-gradient(135deg, #33e0a2, #38bdf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lssl-header-text p {
+  color: var(--text-dim, #a3b8d4);
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.lssl-hero-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.lssl-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #33e0a2, #0284c7);
+  color: #03141f;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--dur-2, 0.3s) var(--ease, ease);
+  box-shadow: 0 10px 30px rgba(51, 224, 162, 0.35);
+}
+
+.lssl-btn-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 40px rgba(51, 224, 162, 0.48);
+  background: linear-gradient(135deg, #4ef2b8, #0ea5e9);
+  color: #03141f;
+}
+
+.lssl-btn-primary svg {
+  flex-shrink: 0;
+  transition: transform var(--dur-2, 0.3s) var(--ease, ease);
+}
+
+.lssl-btn-primary:hover svg {
+  transform: translate(2px, -2px);
+}
+
+.lssl-badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-faint, #6d84a3);
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lssl-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #33e0a2;
+  box-shadow: 0 0 8px #33e0a2;
+  animation: lsslPulse 1.8s infinite;
+}
+
+@keyframes lsslPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+/* ------------------------------------------------------------------
+   2. FEATURE GRID INSIDE SHOWCASE CARD
+   ------------------------------------------------------------------ */
+.lssl-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 960px) {
+  .lssl-feature-grid {
+    grid-template-columns: 1fr;
+  }
+  .lssl-hero-action {
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
+.lssl-feature-pill {
+  padding: 1.6rem;
+  border-radius: var(--radius-lg, 20px);
+  background: rgba(6, 20, 32, 0.65);
+  border: 1px solid rgba(51, 224, 162, 0.15);
+  transition: transform var(--dur-2, 0.3s) var(--ease, ease), border-color var(--dur-2, 0.3s) var(--ease, ease), background var(--dur-2, 0.3s) var(--ease, ease);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lssl-feature-pill:hover {
+  transform: translateY(-3px);
+  border-color: rgba(51, 224, 162, 0.45);
+  background: rgba(10, 30, 48, 0.8);
+}
+
+.lssl-feat-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(51, 224, 162, 0.2), rgba(56, 189, 248, 0.2));
+  border: 1px solid rgba(51, 224, 162, 0.35);
+  display: grid;
+  place-items: center;
+  color: #33e0a2;
+}
+
+.lssl-feature-pill h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text, #f3f6fc);
+  letter-spacing: -0.01em;
+}
+
+.lssl-feature-pill p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-dim, #a3b8d4);
+}
+
+/* ------------------------------------------------------------------
+   3. MOTION PREFERENCES
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .lssl-pulse-dot { animation: none !important; }
+  .lssl-showcase-card, .lssl-btn-primary, .lssl-feature-pill {
+    transition: none !important;
+  }
+}

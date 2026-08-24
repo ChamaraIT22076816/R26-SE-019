@@ -3267,6 +3267,8 @@
   <link rel="stylesheet" href="/soundguard.css" />
   <!-- SignSpeak audio→sign companion (additive; namespaced under .ss-*) -->
   <link rel="stylesheet" href="/signspeak.css" />
+  <!-- SSL Learn interactive practice companion (additive; namespaced under .lssl-*) -->
+  <link rel="stylesheet" href="/learnssl.css" />
 </head>
 <body>
   <!-- background layers -->
@@ -3299,6 +3301,7 @@
     <nav class="header-nav" aria-label="Page sections">
       <a href="#overview">Overview</a>
       <a href="#features">Features</a>
+      <a href="#learnssl">SSL Learn</a>
       <a href="#soundguard">SoundGuard</a>
       <a href="#signspeak">SignSpeak</a>
       <a href="#how">How it works</a>
@@ -3331,8 +3334,12 @@
       <span class="hero-eyebrow">AI-Powered &middot; On-Device &middot; Real-Time</span>
       <h1>Increase your Cognitive Brain Power with <span class="gradient-text">සවන</span>.</h1>
       <p>It has been proven in studies that learning sign language keeps you sharp as you age and increases your thinking power. Learning sign language also helps you communicate with over <strong>72 million</strong> speakers worldwide. So test out our tool, learn and practice sign language, and have fun.</p>
-      <div class="hero-actions">
+      <div class="hero-actions" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
         <a href="#tool" class="btn btn-primary">Get Started</a>
+        <a href="https://learn-ssl-module.vercel.app/" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="display: inline-flex; align-items: center; gap: 8px;">
+          <span>Practice Module</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
       </div>
     </div>
     <div class="hero-visual" aria-hidden="true">
@@ -3368,8 +3375,8 @@
         <div class="icon-medallion-sm">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
         </div>
-        <h3>Learn</h3>
-        <p>Start learning this interesting sign language by learning basic signs for alphabets and common words from our Supported Signs panel.</p>
+        <h3>Learn &amp; Practice</h3>
+        <p>Start learning sign language with real-time pose comparison, interactive feedback, and guided drills in our <a href="https://learn-ssl-module.vercel.app/" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-weight: 700; text-decoration: none;">SSL Learn Module &rarr;</a></p>
       </div>
       <div class="card step">
         <div class="icon-medallion-sm">
@@ -3422,6 +3429,55 @@
           <div class="feature-divider"></div>
         </div>
         <p>With a high accuracy rate, our system ensures that sign language communication is not only faster, but also more accurate.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SSL LEARN COMPONENT SHOWCASE -->
+  <section class="landing-section learnssl-section" id="learnssl">
+    <div class="lssl-showcase-card">
+      <span class="lssl-card-glow" aria-hidden="true"></span>
+      <div class="lssl-header-block">
+        <div class="lssl-header-text">
+          <span class="lssl-eyebrow">Interactive Learning &amp; Practice Ecosystem</span>
+          <h2>SSL Learn: <span class="lssl-accent-text">Interactive Practice &amp; Real-Time Feedback</span></h2>
+          <p>Master Sri Lankan Sign Language with interactive camera-based lessons. Compare your live hand pose against reference signs with instant color-coded visual feedback (green/yellow/red), receive detailed per-finger corrective hints, and track your streaks and accuracy progression.</p>
+        </div>
+        <div class="lssl-hero-action">
+          <a class="lssl-btn-primary" href="https://learn-ssl-module.vercel.app/" target="_blank" rel="noopener noreferrer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Launch SSL Learn
+          </a>
+          <span class="lssl-badge-status">
+            <span class="lssl-pulse-dot"></span> Live Practice App &middot; Opens in new tab
+          </span>
+        </div>
+      </div>
+
+      <div class="lssl-feature-grid">
+        <div class="lssl-feature-pill">
+          <div class="lssl-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h3>Real-Time Pose Comparison</h3>
+          <p>Normalized 21-point MediaPipe hand landmark extraction calculates Euclidean distance against verified reference signs with immediate precision scoring.</p>
+        </div>
+
+        <div class="lssl-feature-pill">
+          <div class="lssl-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          </div>
+          <h3>Per-Finger Corrective Hints</h3>
+          <p>Color-coded skeletal overlay and real-time guidance pinpoint exactly which knuckles or fingers need adjustment for flawless sign execution.</p>
+        </div>
+
+        <div class="lssl-feature-pill">
+          <div class="lssl-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          </div>
+          <h3>Streak &amp; Mastery Tracking</h3>
+          <p>Progress bars, streak counters for consecutive correct frames, and session metrics build long-term muscle memory and signing fluency.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -3740,6 +3796,8 @@
         <h4>Product</h4>
         <ul>
           <li><a href="#tool">Translator <span class="arrow">&rarr;</span></a></li>
+          <li><a href="https://learn-ssl-module.vercel.app/" target="_blank" rel="noopener noreferrer">SSL Learn Module <span class="arrow">&rarr;</span></a></li>
+          <li><a href="https://sign-detector-tawny.vercel.app/" target="_blank" rel="noopener noreferrer">SignSpeak <span class="arrow">&rarr;</span></a></li>
           <li><a href="#">Pricing <span class="arrow">&rarr;</span></a></li>
           <li><a href="#">Roadmap <span class="arrow">&rarr;</span></a></li>
         </ul>
@@ -3747,6 +3805,7 @@
       <div class="footer-col">
         <h4>Resources</h4>
         <ul>
+          <li><a href="https://learn-ssl-module.vercel.app/" target="_blank" rel="noopener noreferrer">Interactive Practice <span class="arrow">&rarr;</span></a></li>
           <li><a href="#">Documentation <span class="arrow">&rarr;</span></a></li>
           <li><a href="#">API <span class="arrow">&rarr;</span></a></li>
           <li><a href="#">Support <span class="arrow">&rarr;</span></a></li>
