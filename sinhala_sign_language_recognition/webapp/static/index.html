@@ -3265,6 +3265,8 @@
   <link rel="stylesheet" href="/assistant.css" />
   <!-- SoundGuard mobile companion (additive; namespaced under .sg-*) -->
   <link rel="stylesheet" href="/soundguard.css" />
+  <!-- SignSpeak audio→sign companion (additive; namespaced under .ss-*) -->
+  <link rel="stylesheet" href="/signspeak.css" />
 </head>
 <body>
   <!-- background layers -->
@@ -3298,6 +3300,7 @@
       <a href="#overview">Overview</a>
       <a href="#features">Features</a>
       <a href="#soundguard">SoundGuard</a>
+      <a href="#signspeak">SignSpeak</a>
       <a href="#how">How it works</a>
       <a href="#feedback">Feedback</a>
     </nav>
@@ -3467,6 +3470,55 @@
           </div>
           <h3>Live Speech-to-Text Captions</h3>
           <p>Instant speech transcription converts conversations into clear, readable captions so hearing and non-hearing individuals can communicate seamlessly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIGNSPEAK COMPONENT SHOWCASE -->
+  <section class="landing-section signspeak-section" id="signspeak">
+    <div class="ss-showcase-card">
+      <span class="ss-card-glow" aria-hidden="true"></span>
+      <div class="ss-header-block">
+        <div class="ss-header-text">
+          <span class="ss-eyebrow">Companion Web Experience</span>
+          <h2>SignSpeak: <span class="ss-accent-text">Audio to Sign Language</span></h2>
+          <p>Speak, and watch your words come to life as 3D sign language animations. SignSpeak combines real-time audio-to-text transcription, emotion detection, and gloss-to-3D-model translation to turn spoken language into expressive, watchable signing.</p>
+        </div>
+        <div class="ss-hero-action">
+          <a class="ss-btn-primary" href="https://sign-detector-tawny.vercel.app/" target="_blank" rel="noopener noreferrer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Launch SignSpeak
+          </a>
+          <span class="ss-badge-status">
+            <span class="ss-pulse-dot"></span> Live Web App &middot; Opens in new tab
+          </span>
+        </div>
+      </div>
+
+      <div class="ss-feature-grid">
+        <div class="ss-feature-pill">
+          <div class="ss-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          </div>
+          <h3>Audio-to-Text</h3>
+          <p>Converts spoken words into accurate text in real time, forming the foundation for translation into sign language.</p>
+        </div>
+
+        <div class="ss-feature-pill">
+          <div class="ss-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </div>
+          <h3>Emotion Detection</h3>
+          <p>Reads the emotional tone of speech so the signing carries the right expression and intent &mdash; not just the words.</p>
+        </div>
+
+        <div class="ss-feature-pill">
+          <div class="ss-feat-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </div>
+          <h3>Real-Time Gloss-to-3D</h3>
+          <p>Maps recognized glosses to a 3D avatar that performs the signs live, turning text into fluid, expressive sign animation.</p>
         </div>
       </div>
     </div>
