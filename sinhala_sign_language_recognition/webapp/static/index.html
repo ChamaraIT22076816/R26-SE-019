@@ -3125,15 +3125,28 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: clamp(0.4rem, 1.3vw, 1.25rem);
+      gap: clamp(0.3rem, 0.85vw, 1.25rem);
+      /* The nav sits in a minmax(0, 1fr) grid column. Without min-width:0 a
+         flex row of nowrap links refuses to shrink below its content width and
+         overflows into the brand and action clusters instead of staying put.
+         With seven sections the row is ~600px, so this guard is load-bearing.
+         overflow:hidden is the last-resort net — if the row ever does exceed
+         its column it clips at the column edge rather than overlapping its
+         neighbours, which is the failure mode that looked broken. */
+      min-width: 0;
+      flex-wrap: nowrap;
+      overflow: hidden;
     }
 
     .header-nav a {
       position: relative;
       padding: 8px 2px;
-      font-size: 11px;
+      /* Fluid rather than stepped: the row shrinks continuously with the
+         viewport, so there is no breakpoint at which it is momentarily too
+         wide and paints over the brand or the action cluster. */
+      font-size: clamp(9.5px, 0.72vw, 11px);
       font-weight: 600;
-      letter-spacing: 0.14em;
+      letter-spacing: clamp(0.5px, 0.08vw, 1.55px);
       text-transform: uppercase;
       color: var(--text-faint);
       text-decoration: none;
@@ -3159,7 +3172,46 @@
     .header-nav a.is-current { color: var(--gold-bright); }
     .header-nav a.is-current::after { transform: scaleX(1); }
 
-    @media (max-width: 1180px) { .header-nav { display: none; } }
+    /* ------------------------------------------------ masthead width budget
+       .app-header is capped at max-width:1560px, so a wider monitor hands the
+       header no extra room — the budget is a fixed ~1500px at every desktop
+       size. Seven sections (Overview, Features, SSL Learn, SoundGuard,
+       SignSpeak, How it works, Feedback) need ~600px of that, the brand lockup
+       wants ~355px and the full action cluster ~555px: about 250px more than
+       exists. No arrangement of breakpoints fixes an over-subscribed budget,
+       so three pieces of furniture stand down for good while the nav is on
+       screen. Each is duplicated elsewhere, and all three return below 1081px
+       where the nav hides and the room comes back.
+
+       Presentation only — no id, handler or markup changes. app.js still
+       writes to #connectionLabel and the QR button keeps its data-action, so
+       the QR flow, settings, status and Launch Translator all behave as before. */
+    @media (min-width: 1081px) {
+      /* "v1.0 · Local" is dev chrome; it was already dropping out at 1500px. */
+      .version-badge { display: none; }
+
+      /* The English strapline is ~230px — the single widest item in the
+         header — and repeats the <title> and the footer wordmark. The logo
+         and the සවන mark still carry the brand on desktop. */
+      .brand-en { display: none; }
+
+      /* The QR button keeps its icon and live pulse dot, loses its label;
+         soundguard.css already does exactly this below 900px. */
+      .header-actions .sg-header-btn .sg-btn-text { display: none; }
+      .header-actions .sg-header-btn { padding: 8px 11px; }
+    }
+
+    /* Tighter still where the CTA regains its full label: collapse the status
+       pill to its indicator dot, as the phone breakpoint below already does. */
+    @media (min-width: 1081px) and (max-width: 1340px) {
+      .status-pill { padding: 9px; }
+      .status-pill #connectionLabel { display: none; }
+    }
+
+    /* Out of room: the nav yields. Lowered from 1180px because the rules above
+       buy back roughly 300px, so the links stay usable on tablets rather than
+       vanishing while the header still had slack. */
+    @media (max-width: 1080px) { .header-nav { display: none; } }
 
     /* ---------------------------------------------------- action cluster */
     .header-actions { gap: 12px; }
