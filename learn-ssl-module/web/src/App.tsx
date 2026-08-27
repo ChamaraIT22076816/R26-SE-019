@@ -15,8 +15,6 @@ import { persistMode, readMode } from './app/mode'
 import type { AppMode } from './app/mode'
 import { ALL_TABS, AUTHOR_TABS, ICONS, LEARNER_TABS } from './app/tabs'
 import type { Tab } from './app/tabs'
-import { ACCOUNT_URL, SIGN_IN_URL, fetchSession } from './app/session'
-import type { SuvanaUser } from './app/session'
 import './components/views.css'
 
 /**
@@ -42,9 +40,6 @@ function App() {
   const [tab, setTab] = useState<Tab>('practice')
   const [mode, setModeState] = useState<AppMode>(readMode)
   const [entered, setEntered] = useState<boolean>(readEntered)
-  // undefined while unknown, null when signed out — so the bar shows nothing
-  // rather than flashing "Sign in" at someone who is already signed in.
-  const [user, setUser] = useState<SuvanaUser | null | undefined>(undefined)
 
   const tabs = mode === 'author' ? AUTHOR_TABS : LEARNER_TABS
 
@@ -89,14 +84,6 @@ function App() {
     // Safari has no requestIdleCallback; a timeout is close enough for a prefetch.
     const id = window.setTimeout(warm, 2000)
     return () => window.clearTimeout(id)
-  }, [])
-
-  // Who is signed in, platform-wide. Never blocks anything: practice works
-  // signed out, and an unreachable Communicate deployment resolves to null.
-  useEffect(() => {
-    const ac = new AbortController()
-    void fetchSession(ac.signal).then(setUser)
-    return () => ac.abort()
   }, [])
 
   if (!entered) {
@@ -169,21 +156,11 @@ function App() {
             ))}
           </nav>
 
-          {/* One Suvana account, surfaced here but never required: progress
-              lives in this browser, so gating practice would promise a
-              portability that does not exist yet. */}
+          {/* No account affordance in this deployment: it is served standalone
+              from the team repo, with no Communicate module to hold identity.
+              Progress lives in this browser's IndexedDB either way. */}
           <div className="app-account">
             <ThemeToggle />
-            {user === undefined ? null : user ? (
-              <a className="app-account-link" href={ACCOUNT_URL} title={user.email ?? undefined}>
-                {user.name ?? user.email}
-                {user.role === 'admin' && <span className="app-account-role">admin</span>}
-              </a>
-            ) : (
-              <a className="app-account-link" href={SIGN_IN_URL}>
-                Sign in
-              </a>
-            )}
           </div>
         </div>
       </header>

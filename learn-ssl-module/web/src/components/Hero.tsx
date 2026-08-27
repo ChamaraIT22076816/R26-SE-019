@@ -99,13 +99,14 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
     <div className="aww-hero-wrapper" ref={container}>
       <header id="header" className="aww-topbar">
         <div className="nav">
-          <a href="/" className="nav-left brand">
+          {/* Not a link: this deployment is served standalone, so there is no
+              Suvana shell landing above it to go back to. */}
+          <div className="nav-left brand">
             <img src={`${import.meta.env.BASE_URL}branding/suvana-mark.png`} alt="" className="mark" />
             <span className="wordmark">SUVANA</span>
-          </a>
+          </div>
           <div className="nav-right">
             <ThemeToggle />
-            <a href="/" className="btn small">Back to Home</a>
           </div>
         </div>
       </header>
