@@ -69,12 +69,59 @@ What a participant actually downloads:
 
 | When | What |
 |---|---|
-| First paint | ~80 kB gzip JS + CSS, plus a 23 kB gzip reference index |
+| First paint | ~90 kB gzip JS + CSS, plus a **22 kB gzip reference index** (see the budget note below) |
 | Choosing a sign | that one recording's frames (tens of kB), cached after |
 | First **Start camera** | ~11 MB WASM runtime + 7.8 MB hand model, cached immutably |
 
 The heavy tracking assets are deferred until the camera is actually started, and
 are a one-off per participant.
+
+#### The reference index and its budget
+
+`UIUX-PLAN.md` §5 budgets the index, which every learner fetches on first paint,
+at **≤50 bytes gzip per reference**. It currently measures **44.5 B and passes**,
+enforced by `referenceIndex.test.ts` on every `npm test` — the only budget in
+that table that fails the suite rather than waiting for someone to open DevTools.
+
+History:
+
+| | raw | gzip | per reference |
+|---|---|---|---|
+| 362 references, before | 219 kB | ~23 kB | 63.5 B |
+| 501 references, unchanged format | 303 kB | 32.3 kB | 64.6 B |
+| 501 references, **now** | **133 kB** | **22.3 kB** | **44.5 B** |
+
+Two changes got it there. Provenance fields that are constant within a corpus
+(`attribution`, `licence`, `sourceDataset`, `note`, `signer`) moved into a
+`sources` table carried once instead of on all 501 entries; and `sourceFile`,
+`sourceLabel` and `variant` were dropped from the projection entirely, having no
+consumer anywhere in `src/`. They remain in the reference files on disk — the
+index is a projection, not an archive. `createdAt` also lost its microseconds,
+which nothing reads.
+
+**Where the remaining cost sits.** `id` alone is 12.7 kB of the 22.3 kB — over
+half. These are UUIDs, so 501 × 128 bits is roughly 8 kB of pure entropy before
+any encoding overhead: no compression scheme will touch it, and the only lever
+is carrying fewer bits.
+
+Deriving the index's ids from the filename would do that, and was rejected.
+`referenceId` is written into the attempt log from the *loaded reference file*
+and **exported in the pilot CSV**, so it is the key joining an attempt to the
+reference it was scored against. Letting the index disagree with the file would
+break that join silently, inside exported research data.
+
+That is also why the budget is expressed per reference rather than as a flat
+total. The old flat ≤20 kB was set at 362 references; when the corpus reached
+501 it failed on growth alone, at a point when the per-reference cost had
+*improved* from 63.5 to 44.5 B. A flat figure cannot separate "the index got
+fatter" from "there are more signs", and only the first is a regression. The
+50 B ceiling leaves about 11% headroom — enough that a genuinely fat new field
+trips the test, and not so much that drift goes unnoticed.
+
+> If that test ever fails, attribute the cost before touching the number:
+> gzip the index with each field removed in turn and see which one grew.
+> Raising the budget to match whatever it currently measures turns it back into
+> a description instead of a constraint.
 
 ### Running a pilot session
 
@@ -134,8 +181,16 @@ perfect 100 against itself and strictly less against any other sign.
 
 ### Team workflow: recording your own
 
-Only needed for glosses the dataset does not cover — currently the seven the
-Introductions scenario needs: **ME, YOU, NAME, WHAT, WHERE, CAN, YOUR**.
+Only needed for glosses neither corpus covers. Of the seven the Introductions
+scenario needs, **YOU, WHERE and CAN now ship** — WHERE and CAN arrived on
+26 Aug 2026 when a converter bug was fixed (it globbed `*.mp4` and so never saw
+the 41% of the Yohan corpus stored as `.mov`; see
+`../../tools/reference-converter/README.md`).
+
+That leaves **ME, NAME, WHAT and YOUR** genuinely uncovered — no such clips
+exist in either corpus under any extension, so these are the ones that need
+recording. `ME` is a special case: the corpus holds `I`, and whether that is the
+same SSL sign is a question for the School for the Deaf, not a rename to apply.
 
 For a usable reference: fill the frame from roughly the waist up, keep both
 hands inside it for the whole sign, use even front lighting and a plain
@@ -205,13 +260,41 @@ rendition, so a genuinely correct attempt scored zero.**
 > 0.134 (`30` vs `40`) — some distinct signs are closer together than two takes
 > of one sign typically are. A high score means *this target sign was performed
 > well*, not *this was the right sign*. Appropriateness (`rubric.ts`) therefore
-> compares only within a scenario's small vocabulary, never all 351 references.
+> compares only within a scenario's small vocabulary, never all 490 references.
 > `src/scoring/anchors.probe.test.ts` reports the closest confusable pairs.
 
 > **Still provisional:** every calibration take is by one fluent signer, so this
 > captures natural variation of a *correct* rendition, not a learner's wider
 > spread. Re-fit against real learner attempts graded by an SSL teacher before
 > quoting the proposal's ≥90%-accuracy figure.
+
+#### Where the calibration takes live
+
+`calibration/` (557 takes, 15 MB) is **gitignored** — it is derived data, not
+source. Both `calibration.test.ts` and `weights.fit.test.ts` read it, and both
+use `describe.skip` when it is absent, so on a machine without it they go
+**silently green rather than red**. A missing corpus therefore looks like a
+passing suite; check the count in `calibration-report.md` if a figure looks off.
+
+Archived outside git so it survives this laptop:
+
+```
+OneDrive/Documents/S L I I T/Y4S1/RP/Dataset/learn-calibration-takes.zip
+```
+
+3.4 MB zipped, 557 entries. Unzip into `apps/learn/calibration/` to restore.
+
+Regenerating it from scratch instead needs the source videos, which are in the
+same OneDrive folder (`YohanAbhishek - CC BY-NC-SA 4.0/Dataset - Original`):
+
+```bash
+python tools/reference-converter/convert_references.py --dataset "<...>/Dataset - Original" \
+  --all --all-takes-out apps/learn/calibration --only "$(cat tools/reference-converter/calibration_signs.txt)"
+```
+
+The committed `calibration-report.md` and `weight-fit-report.md` preserve the
+resulting numbers either way, so the published figures do not depend on any of
+this surviving — only the ability to re-derive them does.
 
 ### Fitted feature weights, and three rejected changes
 
@@ -264,7 +347,7 @@ five proposal-approved scenarios ship:
 
 | Scenario | Turns | Reference source |
 |---|---|---|
-| **Social Gathering (Introductions)** | 7 (ME, YOU, NAME, WHAT, WHERE, CAN, YOUR) | Team recordings — *provisional*. Aligned with Malkith's avatar glosses, so this is the integration demo. |
+| **Social Gathering (Introductions)** | 7 (ME, YOU, NAME, WHAT, WHERE, CAN, YOUR) | **3 of 7 runnable** (YOU, WHERE, CAN — all Yohan corpus, real signers). ME, NAME, WHAT and YOUR show *reference pending*. Aligned with Malkith's avatar glosses, so this is the integration demo. |
 | **Restaurant** | 5 (KANAWA, BONAWA, 500, MILADII GANNAWA, BILPATHA) | Kaggle corpus — **real signers**. Demo this when reference quality matters. |
 
 Verified end to end: with the Restaurant vocabulary loaded, a correct

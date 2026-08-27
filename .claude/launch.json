@@ -6,6 +6,39 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "learn-ssl-module/web", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "suvana-shell",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/User/Documents/Suvana/apps/shell",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "suvana-learn",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/User/Documents/Suvana/apps/learn",
+        "run",
+        "dev"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "suvana-communicate",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/User/Documents/Suvana/apps/communicate",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }
