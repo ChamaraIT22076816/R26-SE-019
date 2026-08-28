@@ -8,6 +8,18 @@
       "port": 5173
     },
     {
+      "name": "recognition-landing",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8000",
+        "-d",
+        "sinhala_sign_language_recognition/webapp/static"
+      ],
+      "port": 8000
+    },
+    {
       "name": "suvana-shell",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
