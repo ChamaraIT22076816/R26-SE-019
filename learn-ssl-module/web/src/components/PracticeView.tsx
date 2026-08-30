@@ -391,16 +391,13 @@ const earlier = forGloss.slice(0, -1)
 
   return (
     <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
-      {/* HUD (Heads-Up Display) Bottom Center - Only visible when practicing an active sign */}
-      {!isBrowsing && selected && phase !== 'result' && (
+      {/* HUD — only while the camera is live. Turning the camera on is the
+          camera pane's job (CameraStage intro), so there is one such button. */}
+      {!isBrowsing && selected && phase !== 'result' && tracking.status === 'running' && (
         <div className="aww-hud">
-          {tracking.status !== 'running' ? (
-            <button className="btn massive ghost" onClick={() => void tracking.start()}>
-              Turn on Camera to Practice
-            </button>
-          ) : phase === 'idle' ? (
+          {phase === 'idle' ? (
             <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
-              {reference ? 'Record Attempt' : 'Loading reference...'}
+              {reference ? 'Record attempt' : 'Loading reference…'}
             </button>
           ) : phase === 'countdown' ? (
             <div className="aww-hud-countdown">
@@ -493,6 +490,33 @@ const earlier = forGloss.slice(0, -1)
                  onStart={() => void tracking.start()}
                  idleHint=""
                  inferring={tracking.inferring}
+                 intro={
+                   <div className="aww-camera-intro">
+                     <p className="aww-camera-intro-lead">Practise in front of your camera.</p>
+                     <p className="aww-camera-intro-note">
+                       Hand tracking runs entirely in your browser. No video is uploaded or
+                       recorded.
+                     </p>
+                     <svg
+                       className="aww-camera-intro-guide"
+                       viewBox="0 0 120 96"
+                       fill="none"
+                       stroke="currentColor"
+                       strokeWidth="2"
+                       strokeLinecap="round"
+                       strokeLinejoin="round"
+                       aria-hidden="true"
+                     >
+                       <rect x="4" y="4" width="112" height="88" rx="10" opacity="0.35" />
+                       <circle cx="60" cy="34" r="12" />
+                       <path d="M38 74c4-13 13-20 22-20s18 7 22 20" />
+                       <path d="M26 60h10M84 60h10" opacity="0.5" />
+                     </svg>
+                     <button className="btn massive" onClick={() => void tracking.start()}>
+                       Turn on camera
+                     </button>
+                   </div>
+                 }
                />
            </div>
 

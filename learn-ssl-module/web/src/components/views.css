@@ -2653,6 +2653,42 @@
   z-index: 4;
 }
 
+/* Camera-permission onboarding — the privacy line here is the same promise the
+   Learn hero makes, delivered at the moment the learner is asked for a camera. */
+.aww-camera-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  max-width: 380px;
+  padding: 0 24px;
+  color: var(--text);
+}
+
+.aww-camera-intro-lead {
+  margin: 0;
+  color: var(--text);
+}
+
+.aww-camera-intro-note {
+  margin: 0;
+  max-width: 320px;
+  color: var(--text-dim);
+}
+
+.aww-camera-intro-guide {
+  width: 96px;
+  height: auto;
+  margin: 2px 0;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.aww-camera-intro .btn.massive {
+  margin-top: 6px;
+}
+
 .aww-replay-container {
   position: absolute;
   top: 0;
