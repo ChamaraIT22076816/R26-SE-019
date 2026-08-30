@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { RecordingMeta } from '../vision/types'
 import { categoriesIn, categoryOf } from '../data/categories'
-import { glossLabel, matchesSearch, translationOf } from '../data/translations'
+import { matchesSearch, translationOf } from '../data/translations'
 
 export interface CategorySignNavigatorProps {
   references: RecordingMeta[]
@@ -186,7 +186,7 @@ export function CategorySignNavigator({
             <div className="cs-suggested-banner" onClick={() => onSelect(suggestedRec)} role="button" tabIndex={0}>
               <div className="cs-suggested-left">
                 <span className="cs-suggested-tag">SUGGESTED</span>
-                <h3 className="cs-suggested-gloss">{glossLabel(suggestedRec.gloss)}</h3>
+                <h3 className="cs-suggested-gloss">{suggestedRec.gloss}</h3>
                 {translationOf(suggestedRec.gloss) && (
                   <span className="cs-suggested-sub">"{translationOf(suggestedRec.gloss)}"</span>
                 )}
@@ -293,7 +293,7 @@ export function CategorySignNavigator({
                       {r.source === 'team-recording' && <span className="badge cs-team-chip">Team</span>}
                     </div>
 
-                    <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
+                    <h4 className="cs-sign-gloss">{r.gloss}</h4>
                     {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                   </div>
                 )
@@ -335,7 +335,7 @@ export function CategorySignNavigator({
                     }}
                   >
                     <div className="cs-sign-main">
-                      <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
+                      <h4 className="cs-sign-gloss">{r.gloss}</h4>
                       {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                     </div>
 

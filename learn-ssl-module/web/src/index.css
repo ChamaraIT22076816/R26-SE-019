@@ -42,6 +42,7 @@
   --surface: var(--p-teal-800); /* cards */
   --surface-rgb: 18, 33, 32;
   --surface-2: var(--p-teal-700); /* inset rows, fields */
+  --surface-hover: #223836; /* interactive tile / row hover, a step up from --surface-2 */
   --stage: var(--p-void); /* camera + canvas letterbox */
 
   --text: var(--p-sage-050);
@@ -185,6 +186,7 @@
   --surface: #ffffff;
   --surface-rgb: 255, 255, 255;
   --surface-2: #f0f5f4;
+  --surface-hover: #e7efed;
 
   --text: #333333;
   --text-dim: #5a6b68;
