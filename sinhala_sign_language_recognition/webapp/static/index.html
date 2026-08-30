@@ -4009,9 +4009,34 @@
       const LEARN_DEV_ORIGIN = "http://localhost:5173/";
       const host = window.location.hostname;
       if (host !== "localhost" && host !== "127.0.0.1") return;
-      for (const link of document.querySelectorAll("[data-learn-link]")) {
-        link.href = LEARN_DEV_ORIGIN;
-      }
+
+      /* Only switch once the Learn dev server actually answers. The links open
+         in a new tab, so pointing them at a port nobody is listening on would
+         put a browser connection error on the projector; leaving them on the
+         deployed URL until the probe succeeds means a click always lands
+         somewhere real.
+
+         The probe asks for reference-index.json rather than just the origin,
+         because "something is listening on 5173" is not the same question as
+         "the Learn module is listening on 5173" -- any other Vite app started
+         on that port would pass a bare liveness check and the button would
+         open the wrong app.
+
+         Checking the status is not enough either: Vite's dev server answers
+         any unknown path with its own index.html and a 200, so a different
+         app on that port still looks like a hit. The content type is what
+         separates them -- only the Learn module actually has this file, and
+         only then is it served as JSON. Anything else fails closed and the
+         links stay on the deployed URL. */
+      fetch(LEARN_DEV_ORIGIN + "reference-index.json", { cache: "no-store" })
+        .then((res) => {
+          const type = res.headers.get("content-type") || "";
+          if (!res.ok || !type.includes("json")) return;
+          for (const link of document.querySelectorAll("[data-learn-link]")) {
+            link.href = LEARN_DEV_ORIGIN;
+          }
+        })
+        .catch(() => {});
     })();
   </script>
 

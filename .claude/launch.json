@@ -2,55 +2,26 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "learn-ssl-web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "learn-ssl-module/web", "run", "dev"],
-      "port": 5173
-    },
-    {
-      "name": "recognition-landing",
-      "runtimeExecutable": "python",
+      "name": "recognition",
+      "runtimeExecutable": "sinhala_sign_language_recognition/.venv/Scripts/python.exe",
       "runtimeArgs": [
         "-m",
-        "http.server",
-        "8000",
-        "-d",
-        "sinhala_sign_language_recognition/webapp/static"
+        "uvicorn",
+        "--app-dir",
+        "sinhala_sign_language_recognition",
+        "webapp.server:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
       ],
       "port": 8000
     },
     {
-      "name": "suvana-shell",
+      "name": "learn-ssl-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "C:/Users/User/Documents/Suvana/apps/shell",
-        "run",
-        "dev"
-      ],
+      "runtimeArgs": ["--prefix", "learn-ssl-module/web", "run", "dev"],
       "port": 5173
-    },
-    {
-      "name": "suvana-learn",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "C:/Users/User/Documents/Suvana/apps/learn",
-        "run",
-        "dev"
-      ],
-      "port": 5174
-    },
-    {
-      "name": "suvana-communicate",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "C:/Users/User/Documents/Suvana/apps/communicate",
-        "run",
-        "dev"
-      ],
-      "port": 3000
     }
   ]
 }
