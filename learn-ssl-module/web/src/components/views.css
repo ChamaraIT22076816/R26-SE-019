@@ -2709,6 +2709,39 @@
   font-size: 0.9rem;
 }
 
+/* Recording state: timer above the stop button, laid out in flow — the old
+   .rec-badge is absolutely positioned for a camera corner and landed on top
+   of the button here. */
+.aww-hud-recording {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aww-rec-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 13px var(--mono);
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.aww-rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--recording);
+  animation: blinkRec 1s infinite alternate;
+}
+
+.aww-hud-recording .btn.massive.aww-btn-stop {
+  background: var(--recording);
+  color: #fff !important;
+}
+.aww-hud-recording .btn.massive.aww-btn-stop:hover {
+  background: var(--recording-strong);
+}
+
 .aww-hud-countdown {
   display: flex;
   flex-direction: column;

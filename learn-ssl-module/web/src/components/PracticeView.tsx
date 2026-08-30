@@ -366,9 +366,12 @@ const earlier = forGloss.slice(0, -1)
             </div>
           ) : phase === 'recording' ? (
             <div className="aww-hud-recording">
-              <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
-              <button className="btn massive" style={{ background: 'var(--p-coral-500)' }} onClick={finishRecording}>
-                Stop & Score
+              <span className="aww-rec-timer">
+                <span className="aww-rec-dot" aria-hidden="true" />
+                REC {(elapsedMs / 1000).toFixed(1)}s
+              </span>
+              <button className="btn massive aww-btn-stop" onClick={finishRecording}>
+                Stop &amp; Score
               </button>
             </div>
           ) : null}
