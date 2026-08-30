@@ -116,7 +116,7 @@ describe.skipIf(!indexExists)('reference index', () => {
     expect(hero, `hero should advertise ${distinctGlosses}+ signs`).toContain(
       `${distinctGlosses}+`,
     )
-    expect(hero, 'the hero should describe SSL signs').toContain('SSL Signs')
+    expect(hero, 'the hero should name the language').toContain('Sri Lankan Sign Language')
   })
 
   it('keeps the fields the picker and the selection rule depend on', () => {
