@@ -18,6 +18,7 @@ import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
+import { band } from '../scoring/band'
 
 type Stage = 'hub' | 'intro' | 'playing' | 'summary'
 
@@ -424,7 +425,7 @@ export function ScenarioView() {
 
     return (
       <section className="aww-scenario-hub">
-        <div className="briefing-hero-card theme-restaurant" style={{ marginBottom: '32px' }}>
+        <div className={`briefing-hero-card theme-${scenario.id}`} style={{ marginBottom: '32px' }}>
           <div className="briefing-hero-overlay">
             <div className="briefing-nav-row">
               <button className="aww-back-btn" onClick={() => setStage('hub')}>
@@ -456,9 +457,9 @@ export function ScenarioView() {
                   </div>
                   <span className="mastery-pct">{o.score.rubric.total}</span>
                   <span className="mastery-meta">
-                    {o.score.bestMatchGloss !== o.turn.gloss
-                      ? `closest match: ${o.score.bestMatchGloss}`
-                      : 'correct sign'}
+                    {band(o.score.rubric.total).label}
+                    {o.score.bestMatchGloss !== o.turn.gloss &&
+                      ` · closer to ${o.score.bestMatchGloss}`}
                   </span>
                 </li>
               ))}

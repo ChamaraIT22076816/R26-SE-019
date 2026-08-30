@@ -1,3 +1,5 @@
+import { band } from '../scoring/band'
+
 interface ScoreBadgeProps {
   score: number
   /**
@@ -14,11 +16,6 @@ interface ScoreBadgeProps {
   hideDelta?: boolean
 }
 
-function band(score: number): { klass: string; label: string } {
-  if (score >= 85) return { klass: 'good', label: 'Great match' }
-  if (score >= 60) return { klass: 'ok', label: 'Getting there' }
-  return { klass: 'low', label: 'Keep practising' }
-}
 
 /**
  * Circular progress ring showing a 0–100 sign-match score.
