@@ -1813,27 +1813,6 @@
   z-index: 2; /* Needs position relative to work */
 }
 
-.aww-hero-art {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  height: 100%;
-  max-width: 800px;
-  opacity: 0.15;
-  z-index: 0;
-  pointer-events: none;
-}
-:root[data-theme='dark'] .aww-hero-art {
-  opacity: 0.05;
-}
-.aww-hero-art svg {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
 .aww-subline {
   max-width: 600px;
   font-size: clamp(1rem, 2vw, 1.25rem);
