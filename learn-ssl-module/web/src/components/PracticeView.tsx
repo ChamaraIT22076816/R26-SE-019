@@ -429,7 +429,7 @@ const earlier = forGloss.slice(0, -1)
         </div>
 
         {/* Right Pane: User Camera / Replay */}
-        <div className="aww-pane aww-pane-right">
+        <div className="aww-pane aww-pane-right" data-camera-status={tracking.status}>
            <div className="aww-pane-header">
               <p className="aww-pane-label">You</p>
            </div>

@@ -297,8 +297,17 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
           </div>
         </div>
         <div className="aww-footer-mega">
-           <h2>Ready to<br/>start?</h2>
-           <button className="btn massive" onClick={() => onEnter('practice')}>Start Now</button>
+          <h2>
+            Ready to<br />
+            <button
+              type="button"
+              className="aww-start-cta-link"
+              onClick={() => onEnter('practice')}
+              aria-label="Start practicing now"
+            >
+              start?
+            </button>
+          </h2>
         </div>
       </footer>
     </div>

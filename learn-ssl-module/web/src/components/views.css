@@ -2426,7 +2426,7 @@
 }
 
 .aww-footer-mega {
-  padding: 120px 24px;
+  padding: 120px 24px 140px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2435,13 +2435,61 @@
 
 .aww-footer-mega h2 {
   font-family: 'Noto Serif', serif;
-  font-size: clamp(4rem, 10vw, 8rem);
-  line-height: 0.9;
-  margin-bottom: 40px;
-  background: linear-gradient(to bottom, #fff, rgba(255,255,255,0.3));
+  font-size: clamp(4.5rem, 11vw, 8.5rem);
+  line-height: 1.05;
+  margin: 0;
+  color: #ffffff;
+  text-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+.aww-start-cta-link {
+  display: inline-block;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  background-image: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--p-gold-400, #daa520) 25%,
+    #48d1cc 50%,
+    var(--p-gold-400, #daa520) 75%,
+    var(--accent) 100%
+  );
+  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: suvanaGradientShift 6s linear infinite;
+  transition: transform 0.3s ease, filter 0.3s ease;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.aww-start-cta-link:hover {
+  animation-duration: 1.5s;
+  transform: scale(1.04);
+  filter: drop-shadow(0 0 28px rgba(32, 178, 170, 0.5));
+}
+
+.aww-start-cta-link:focus-visible {
+  outline: 2px dashed var(--accent);
+  outline-offset: 8px;
+  border-radius: 8px;
+}
+
+@keyframes suvanaGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
 }
 
 /* ============================================================================
@@ -2514,8 +2562,36 @@
   font-size: 13px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.85);
   margin-bottom: 8px;
+}
+
+/* Light Mode: Ensure crisp dark labels before camera is active */
+:root[data-theme='light'] .aww-pane-right:not([data-camera-status='running']) .aww-pane-header,
+:root:not([data-theme='dark']) .aww-pane-right:not([data-camera-status='running']) .aww-pane-header,
+:root[data-theme='light'] .aww-pane-left .aww-pane-header,
+:root:not([data-theme='dark']) .aww-pane-left .aww-pane-header {
+  text-shadow: none;
+}
+
+:root[data-theme='light'] .aww-pane-right:not([data-camera-status='running']) .aww-pane-label,
+:root:not([data-theme='dark']) .aww-pane-right:not([data-camera-status='running']) .aww-pane-label {
+  color: #111816;
+  text-shadow: none;
+  font-weight: 700;
+}
+
+:root[data-theme='light'] .aww-pane-left .aww-pane-label,
+:root:not([data-theme='dark']) .aww-pane-left .aww-pane-label {
+  color: var(--text-dim, #5c7069);
+  text-shadow: none;
+  font-weight: 600;
+}
+
+:root[data-theme='light'] .aww-pane-left .aww-pane-title,
+:root:not([data-theme='dark']) .aww-pane-left .aww-pane-title {
+  color: var(--text, #111816);
+  text-shadow: none;
 }
 
 .aww-pane-title {

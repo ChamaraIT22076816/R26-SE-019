@@ -361,7 +361,7 @@ export function RecordView() {
         </div>
 
         {/* Right Pane: Live Capture Stage / Review Replay */}
-        <div className="aww-pane aww-pane-right">
+        <div className="aww-pane aww-pane-right" data-camera-status={tracking.status}>
           <div className="aww-pane-header">
             <p className="aww-pane-label">{phase === 'review' ? 'Take Review' : 'Live Motion Capture'}</p>
             {tracking.stats && phase !== 'review' && (
