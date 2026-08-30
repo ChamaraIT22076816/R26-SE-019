@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import type { Tab } from '../app/tabs'
 import { ThemeToggle } from './ThemeToggle'
 import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import Lenis from 'lenis'
 
 const STEPS = [
   {
@@ -29,8 +31,35 @@ const STEPS = [
 export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
   const container = useRef<HTMLDivElement>(null)
   const marqueeRef = useRef<HTMLDivElement>(null)
-  const artRef = useRef<SVGSVGElement>(null)
   const stepRefs = useRef<(HTMLElement | null)[]>([])
+
+  // Lenis smooth-scroll — a hero effect only. It lives here, not in main.tsx,
+  // so it is torn down when the learner enters the tool: run globally it
+  // intercepts the wheel from every scroll container in the app.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const lenis = new Lenis({ lerp: 0.1, smoothWheel: true })
+    ;(window as unknown as { lenis?: Lenis }).lenis = lenis
+
+    lenis.on('scroll', ScrollTrigger.update)
+    lenis.on('scroll', ({ progress, limit }: { progress: number; limit: number }) => {
+      const bar = document.getElementById('scroll-progress')
+      if (bar && limit > 0) bar.style.transform = `scaleX(${progress})`
+    })
+
+    const raf = (time: number) => lenis.raf(time * 1000)
+    gsap.ticker.add(raf)
+    gsap.ticker.lagSmoothing(0)
+
+    return () => {
+      gsap.ticker.remove(raf)
+      lenis.destroy()
+      delete (window as unknown as { lenis?: Lenis }).lenis
+      const bar = document.getElementById('scroll-progress')
+      if (bar) bar.style.transform = 'scaleX(0)'
+    }
+  }, [])
 
   useEffect(() => {
     // This page sits in front of a camera tool that people open many times
@@ -43,7 +72,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
       if (prefersReduced) {
         // Land everything on its final state, no transition.
         gsap.set(
-          ['.aww-hero-mark', '.aww-suvana-en', '.aww-suvana-si', '.aww-subline', '.aww-hero-cta', artRef.current],
+          ['.aww-hero-mark', '.aww-suvana-en', '.aww-suvana-si', '.aww-subline', '.aww-hero-cta'],
           { opacity: 1, y: 0, scale: 1 },
         )
         stepRefs.current.forEach((step) => step && gsap.set(step, { opacity: 1, y: 0 }))
@@ -56,22 +85,8 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
       gsap.fromTo('.aww-suvana-si', { y: 100, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power4.out', delay: 0.4 })
       gsap.fromTo('.aww-subline', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out', delay: 0.6 })
       gsap.fromTo('.aww-hero-cta', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out', delay: 0.8 })
-      gsap.fromTo(artRef.current, { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 1.5, ease: 'elastic.out(1, 0.5)', delay: 1 })
 
-      // 2. SVG Breathing Animation
-      if (artRef.current) {
-        gsap.to(artRef.current.querySelectorAll('circle'), {
-          scale: 1.2,
-          transformOrigin: 'center',
-          yoyo: true,
-          repeat: -1,
-          stagger: { each: 0.1 },
-          duration: 1.5,
-          ease: 'sine.inOut'
-        })
-      }
-
-      // 3. ScrollTrigger for Steps
+      // 2. ScrollTrigger for Steps
       stepRefs.current.forEach((step) => {
         if (!step) return
         gsap.fromTo(step,
@@ -157,36 +172,6 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
           />
           <h1 className="aww-suvana-en">LEARN</h1>
           <h2 className="aww-suvana-si">Sign Language</h2>
-        </div>
-        
-        <div className="aww-hero-art" aria-hidden="true">
-          <svg ref={artRef} viewBox="0 0 220 260" fill="none" role="presentation">
-            <defs>
-              <linearGradient id="lheroGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="var(--p-teal-400)" />
-                <stop offset="100%" stopColor="var(--p-gold-400)" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M104 226 L78 156 Q76 146 88 146 L150 152 Q160 154 158 166 L140 224 Q132 234 116 234 Z"
-              fill="url(#lheroGrad)"
-              opacity="0.1"
-            />
-            <g stroke="url(#lheroGrad)" strokeWidth="2.2" strokeLinecap="round" opacity="0.6">
-              <path d="M112 236 L112 206 M112 206 L86 152 M112 206 L110 146 M112 206 L134 150 M112 206 L154 164 M112 206 L82 196" />
-              <path d="M86 152 L80 118 M80 118 L76 94 M110 146 L108 108 M108 108 L106 82 M134 150 L140 114 M140 114 L144 90 M154 164 L166 136 M166 136 L174 118" />
-              <path d="M82 196 L58 176 M58 176 L44 158" />
-            </g>
-            <g fill="url(#lheroGrad)">
-              {[
-                [112, 236], [112, 206], [86, 152], [110, 146], [134, 150], [154, 164],
-                [82, 196], [80, 118], [108, 108], [140, 114], [166, 136], [58, 176],
-                [76, 94], [106, 82], [144, 90], [174, 118], [44, 158],
-              ].map(([cx, cy], i) => (
-                <circle key={i} cx={cx} cy={cy} r={i === 0 ? 5.5 : 4} />
-              ))}
-            </g>
-          </svg>
         </div>
 
         <p className="aww-subline">

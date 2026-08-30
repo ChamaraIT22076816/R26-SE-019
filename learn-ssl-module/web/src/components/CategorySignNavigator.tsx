@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { RecordingMeta } from '../vision/types'
-import { categoriesIn, categoryOf } from '../data/categories'
-import { glossLabel, matchesSearch, translationOf } from '../data/translations'
+import { categoriesIn, categoryOf, orderSigns } from '../data/categories'
+import { matchesSearch, translationOf } from '../data/translations'
 
 export interface CategorySignNavigatorProps {
   references: RecordingMeta[]
@@ -12,6 +12,9 @@ export interface CategorySignNavigatorProps {
   onSelect: (sign: RecordingMeta) => void
   onCreateCustom?: (gloss: string) => void
   onClose?: () => void
+  /** Fired as the pointer / focus moves over a sign card, for a live preview.
+   *  Null when nothing is hovered. */
+  onPreview?: (sign: RecordingMeta | null) => void
 }
 
 export function CategorySignNavigator({
@@ -23,6 +26,7 @@ export function CategorySignNavigator({
   onSelect,
   onCreateCustom,
   onClose,
+  onPreview,
 }: CategorySignNavigatorProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [globalQuery, setGlobalQuery] = useState('')
@@ -61,8 +65,8 @@ export function CategorySignNavigator({
     if (!selectedCategory) return []
     const list = signsByCategory.get(selectedCategory) ?? []
     const q = categoryQuery.trim()
-    if (!q) return list
-    return list.filter((r) => matchesSearch(r.gloss, q))
+    const filtered = q ? list.filter((r) => matchesSearch(r.gloss, q)) : list
+    return orderSigns(selectedCategory, filtered)
   }, [selectedCategory, signsByCategory, categoryQuery])
 
   // Suggested sign record
@@ -116,7 +120,9 @@ export function CategorySignNavigator({
 
         {isModal && onClose && (
           <button type="button" className="btn btn-ghost cs-close-btn" onClick={onClose} aria-label="Close dialog">
-            ✕
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         )}
       </div>
@@ -145,7 +151,9 @@ export function CategorySignNavigator({
                 onClick={() => setCategoryQuery('')}
                 aria-label="Clear filter"
               >
-                ✕
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             )}
           </div>
@@ -171,7 +179,9 @@ export function CategorySignNavigator({
                 onClick={() => setGlobalQuery('')}
                 aria-label="Clear search"
               >
-                ✕
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             )}
           </div>
@@ -186,7 +196,7 @@ export function CategorySignNavigator({
             <div className="cs-suggested-banner" onClick={() => onSelect(suggestedRec)} role="button" tabIndex={0}>
               <div className="cs-suggested-left">
                 <span className="cs-suggested-tag">SUGGESTED</span>
-                <h3 className="cs-suggested-gloss">{glossLabel(suggestedRec.gloss)}</h3>
+                <h3 className="cs-suggested-gloss">{suggestedRec.gloss}</h3>
                 {translationOf(suggestedRec.gloss) && (
                   <span className="cs-suggested-sub">"{translationOf(suggestedRec.gloss)}"</span>
                 )}
@@ -271,7 +281,7 @@ export function CategorySignNavigator({
               )}
             </div>
           ) : (
-            <div className="cs-signs-grid">
+            <div className="cs-signs-grid" onMouseLeave={() => onPreview?.(null)}>
               {globalSearchResults.map((r) => {
                 const meaning = translationOf(r.gloss)
                 const isSelected = selectedId === r.id
@@ -281,6 +291,8 @@ export function CategorySignNavigator({
                     key={r.id}
                     className={`cs-sign-card ${isSelected ? 'selected' : ''} ${isSuggested ? 'suggested' : ''}`}
                     onClick={() => onSelect(r)}
+                    onMouseEnter={() => onPreview?.(r)}
+                    onFocus={() => onPreview?.(r)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -293,7 +305,7 @@ export function CategorySignNavigator({
                       {r.source === 'team-recording' && <span className="badge cs-team-chip">Team</span>}
                     </div>
 
-                    <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
+                    <h4 className="cs-sign-gloss">{r.gloss}</h4>
                     {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                   </div>
                 )
@@ -318,7 +330,7 @@ export function CategorySignNavigator({
               </button>
             </div>
           ) : (
-            <div className="cs-signs-grid">
+            <div className="cs-signs-grid" onMouseLeave={() => onPreview?.(null)}>
               {categorySigns.map((r) => {
                 const meaning = translationOf(r.gloss)
                 const isSelected = selectedId === r.id
@@ -328,6 +340,8 @@ export function CategorySignNavigator({
                     key={r.id}
                     className={`cs-sign-card ${isSelected ? 'selected' : ''} ${isSuggested ? 'suggested' : ''}`}
                     onClick={() => onSelect(r)}
+                    onMouseEnter={() => onPreview?.(r)}
+                    onFocus={() => onPreview?.(r)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -335,7 +349,7 @@ export function CategorySignNavigator({
                     }}
                   >
                     <div className="cs-sign-main">
-                      <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
+                      <h4 className="cs-sign-gloss">{r.gloss}</h4>
                       {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                     </div>
 
