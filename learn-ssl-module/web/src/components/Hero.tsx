@@ -6,18 +6,23 @@ import gsap from 'gsap'
 const STEPS = [
   {
     n: '01',
-    title: 'Choose a sign',
-    body: 'Pick from 490 signs, or let a session choose the ones you most need to practise.',
+    title: 'Browse & Choose Signs',
+    body: 'Explore 490+ Sri Lankan Sign Language signs organized by intuitive categories, or follow intelligent practice recommendations.',
   },
   {
     n: '02',
-    title: 'Record your attempt',
-    body: 'Hand tracking runs inside your browser. No video is uploaded, and nothing is stored on a server.',
+    title: 'On-Device Motion Capture',
+    body: 'Hand and finger tracking runs 100% inside your browser via MediaPipe Vision at 60 FPS. Zero video is uploaded or stored on any server.',
   },
   {
     n: '03',
-    title: 'See what to fix',
-    body: 'A match score against real-signer references, plus which fingers and which part of the movement drifted.',
+    title: 'Joint-Level DTW Feedback',
+    body: 'Your signing motion is dynamically compared against real-signer benchmarks, providing instant feedback down to individual fingers in <300ms.',
+  },
+  {
+    n: '04',
+    title: 'Intelligent Mastery Tracking',
+    body: 'Spaced repetition algorithms adapt to your retention and prioritize the signs that need the most practice.',
   },
 ]
 
@@ -81,7 +86,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
         xPos -= (0.02 + scrollSpeed)
         
         if (xPos <= -50) xPos += 50
-        else if (xPos > 0) xPos -= 50
+        else if (xPos > 0) xPos += 50
         
         gsap.set(marqueeRef.current, { xPercent: xPos })
       }
@@ -158,26 +163,24 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
 
         <div className="aww-hero-cta">
           <button className="btn massive" onClick={() => onEnter('practice')}>Start practising</button>
-          <button className="btn btn-ghost massive" onClick={() => onEnter('scenario')}>Try a conversation</button>
         </div>
 
-        {/* Hardcoded, and therefore drift-prone: these went stale the moment
-            the corpus grew from 351/362 to 490/501. Deriving them would mean
-            fetching the 300 KB index on the hero, before the learner has
-            asked for anything — too much to pay for two numerals. Re-check
-            them against `public/reference-index.json` whenever the corpus
-            changes; `referenceIndex.test.ts` is where a guard would go. */}
-        <ul className="lhero-stats" style={{ justifyContent: 'center' }}>
-          <li>
-            <strong>490</strong> signs
-          </li>
-          <li>
-            <strong>501</strong> reference recordings
-          </li>
-          <li>
-            <strong>Private</strong> — nothing leaves your device
-          </li>
-        </ul>
+        <div className="lhero-stats-strip">
+          <div className="lstat-pill">
+            <span className="lstat-val">490+</span>
+            <span className="lstat-lbl">SSL Signs</span>
+          </div>
+          <div className="lstat-sep" aria-hidden="true" />
+          <div className="lstat-pill">
+            <span className="lstat-val">100%</span>
+            <span className="lstat-lbl">Private &amp; On-Device</span>
+          </div>
+          <div className="lstat-sep" aria-hidden="true" />
+          <div className="lstat-pill">
+            <span className="lstat-val">&lt;300ms</span>
+            <span className="lstat-lbl">Joint Feedback</span>
+          </div>
+        </div>
       </section>
 
       <section className="aww-steps" aria-label="How it works">
@@ -193,7 +196,83 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
               <p>{s.body}</p>
             </div>
             <div className="aww-step-visual">
-               <div className={`aww-css-art art-${index + 1}`}></div>
+              {index === 0 && (
+                <div className="aww-preview-card card-vocab">
+                  <div className="card-vocab-search">
+                    <span className="search-dot" />
+                    <span className="search-text">Search 490+ signs...</span>
+                  </div>
+                  <div className="card-vocab-pills">
+                    <span className="v-pill v-pill-1">AYUBOWAN 👋</span>
+                    <span className="v-pill v-pill-2">STHUTHI 🙏</span>
+                    <span className="v-pill v-pill-3">KANAWA 🍽️</span>
+                    <span className="v-pill v-pill-4">AMMA 👥</span>
+                  </div>
+                  <div className="card-vocab-badge">20 Categories</div>
+                </div>
+              )}
+              {index === 1 && (
+                <div className="aww-preview-card card-capture">
+                  <div className="capture-hud-top">
+                    <span className="rec-dot" />
+                    <span className="fps-tag">60 FPS · ON-DEVICE</span>
+                  </div>
+                  <div className="capture-viewfinder">
+                    <div className="reticle-corner tl" />
+                    <div className="reticle-corner tr" />
+                    <div className="reticle-corner bl" />
+                    <div className="reticle-corner br" />
+                    <div className="skeleton-hand-anim">
+                      <div className="hand-node wrist" />
+                      <div className="hand-node palm" />
+                      <div className="hand-node thumb" />
+                      <div className="hand-node index-finger" />
+                      <div className="hand-node middle" />
+                      <div className="hand-node ring" />
+                      <div className="hand-node pinky" />
+                      <div className="scan-line" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {index === 2 && (
+                <div className="aww-preview-card card-scoring">
+                  <div className="score-dial-wrap">
+                    <div className="score-dial-outer">
+                      <div className="score-dial-inner">
+                        <span className="score-num">96%</span>
+                        <span className="score-lbl">MATCH</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="finger-precision-bars">
+                    <div className="f-bar-row"><span>Thumb</span><div className="f-bar"><div className="f-bar-fill fill-98" /></div></div>
+                    <div className="f-bar-row"><span>Index</span><div className="f-bar"><div className="f-bar-fill fill-95" /></div></div>
+                    <div className="f-bar-row"><span>Motion</span><div className="f-bar"><div className="f-bar-fill fill-92" /></div></div>
+                  </div>
+                </div>
+              )}
+              {index === 3 && (
+                <div className="aww-preview-card card-mastery">
+                  <div className="mastery-header">
+                    <span className="mastery-streak">🔥 5 Day Streak</span>
+                    <span className="mastery-level">Mastery: 84%</span>
+                  </div>
+                  <div className="mastery-chart">
+                    <div className="chart-bar b1" />
+                    <div className="chart-bar b2" />
+                    <div className="chart-bar b3" />
+                    <div className="chart-bar b4" />
+                    <div className="chart-bar b5" />
+                    <div className="chart-bar b6" />
+                    <div className="chart-bar b7" />
+                  </div>
+                  <div className="mastery-badge-row">
+                    <span className="m-badge gold">🏆 Fluent</span>
+                    <span className="m-badge teal">⚡ Fast</span>
+                  </div>
+                </div>
+              )}
             </div>
           </article>
         ))}

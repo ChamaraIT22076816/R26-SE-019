@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useHandTracking } from '../vision/useHandTracking'
 import { handCoverage } from '../vision/types'
 import type { HandFrame, RecordingMeta, SignRecording } from '../vision/types'
@@ -6,10 +6,10 @@ import { toMeta } from '../vision/types'
 import { listRecordings, saveRecording } from '../storage/recordingStore'
 import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
-import { categoriesIn, categoryOf } from '../data/categories'
-import { glossLabel, translationOf, matchesSearch } from '../data/translations'
+import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
+import { CategorySignNavigator } from './CategorySignNavigator'
 
 const COUNTDOWN_S = 3
 const MAX_MS = 8000
@@ -49,8 +49,6 @@ export function RecordView() {
 
   // Sign Picker State
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<string | null>(null)
 
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
@@ -72,9 +70,6 @@ export function RecordView() {
       setLocalRecs(loc)
       const all = pickReferenceList([...loc.map(toMeta), ...index])
       setReferences(all)
-      if (all.length > 0 && !selected && !isCustomMode) {
-        setSelected(all[0])
-      }
     })()
   }, [])
 
@@ -213,18 +208,28 @@ export function RecordView() {
     savedFlashRef.current = window.setTimeout(() => setJustSaved(false), 3000)
   }
 
-  // Categories & Filtering
-  const categories = useMemo(() => categoriesIn(references), [references])
-  const visible = useMemo(() => {
-    const needle = query.trim()
-    return references.filter(
-      (r) =>
-        (category === null || categoryOf(r) === category) &&
-        matchesSearch(r.gloss, needle),
-    )
-  }, [references, query, category])
-
   const coverage = review ? handCoverage(review.frames) : 0
+
+  // If no sign has been selected and not in custom mode, show Category & Sign Discovery view
+  if (!selected && !isCustomMode) {
+    return (
+      <div className="aww-practice-env aww-nav-mode">
+        <CategorySignNavigator
+          references={references}
+          mode="record"
+          onSelect={(rec) => {
+            setSelected(rec)
+            setIsCustomMode(false)
+          }}
+          onCreateCustom={(gloss) => {
+            setCustomGloss(gloss)
+            setIsCustomMode(true)
+            setSelected(null)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="aww-practice-env aww-studio-env" data-phase={phase} data-picker-open={pickerOpen}>
@@ -244,6 +249,15 @@ export function RecordView() {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 9l6 6 6-6" />
             </svg>
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => {
+              setSelected(null)
+              setIsCustomMode(false)
+            }}
+          >
+            ← Browse Categories
           </button>
           <button
             className={`btn ghost ${isCustomMode ? 'active' : ''}`}
@@ -461,87 +475,24 @@ export function RecordView() {
       <div className={`aww-picker-modal ${pickerOpen ? 'open' : ''}`}>
         <div className="aww-picker-backdrop" onClick={() => setPickerOpen(false)} />
         <div className="aww-picker-content">
-          <div className="picker-head">
-            <h2>Select Studio Reference Sign</h2>
-            <button className="btn btn-ghost" onClick={() => setPickerOpen(false)}>Close</button>
-          </div>
-
-          <input
-            type="search"
-            className="picker-search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${references.length} vocabulary signs...`}
-            autoFocus
+          <CategorySignNavigator
+            references={references}
+            selectedId={selected?.id}
+            mode="record"
+            isModal={true}
+            onSelect={(rec) => {
+              setSelected(rec)
+              setIsCustomMode(false)
+              setPickerOpen(false)
+            }}
+            onCreateCustom={(gloss) => {
+              setCustomGloss(gloss)
+              setIsCustomMode(true)
+              setSelected(null)
+              setPickerOpen(false)
+            }}
+            onClose={() => setPickerOpen(false)}
           />
-
-          {categories.length > 1 && (
-            <div className="category-rail">
-              <button
-                className={category === null ? 'chip active' : 'chip'}
-                onClick={() => setCategory(null)}
-              >
-                All {references.length}
-              </button>
-              {categories.map((name) => (
-                <button
-                  key={name}
-                  className={category === name ? 'chip active' : 'chip'}
-                  onClick={() => setCategory(name)}
-                >
-                  {name} ({references.filter((r) => categoryOf(r) === name).length})
-                </button>
-              ))}
-            </div>
-          )}
-
-          {visible.length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center' }}>
-              <p className="hint-text">No existing sign matches "{query}".</p>
-              {query.trim() && (
-                <button
-                  className="btn"
-                  style={{ marginTop: '12px' }}
-                  onClick={() => {
-                    setIsCustomMode(true)
-                    setCustomGloss(query.trim().toUpperCase())
-                    setSelected(null)
-                    setPickerOpen(false)
-                  }}
-                >
-                  + Create custom sign "{query.trim().toUpperCase()}"
-                </button>
-              )}
-            </div>
-          ) : (
-            <ul className="sign-list">
-              {visible.slice(0, 80).map((r) => (
-                <li key={r.id}>
-                  <button
-                    className={selected?.id === r.id && !isCustomMode ? 'sign-row active' : 'sign-row'}
-                    onClick={() => {
-                      setSelected(r)
-                      setIsCustomMode(false)
-                      setPickerOpen(false)
-                    }}
-                  >
-                    <span className="sign-row-name">
-                      {glossLabel(r.gloss)}
-                      {translationOf(r.gloss) && (
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginLeft: '8px', fontStyle: 'italic' }}>
-                          ({translationOf(r.gloss)})
-                        </span>
-                      )}
-                    </span>
-                    <span className="sign-row-meta">
-                      {r.source === 'team-recording' && <em className="badge">Team Take</em>}
-                      {categoryOf(r)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
     </div>

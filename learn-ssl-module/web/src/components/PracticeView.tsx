@@ -5,8 +5,8 @@ import { toMeta } from '../vision/types'
 import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
-import { categoriesIn, categoryOf } from '../data/categories'
-import { glossLabel, matchesSearch } from '../data/translations'
+import { categoryOf } from '../data/categories'
+import { glossLabel } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { summarizeAll } from '../learner/mastery'
@@ -26,6 +26,7 @@ import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
+import { CategorySignNavigator } from './CategorySignNavigator'
 
 const COUNTDOWN_S = 3
 
@@ -44,8 +45,6 @@ export function PracticeView() {
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
 
@@ -61,7 +60,6 @@ export function PracticeView() {
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
-  const didPreselectRef = useRef(false)
   const retryRef = useRef<HTMLButtonElement>(null)
   const completeRef = useRef<HTMLHeadingElement>(null)
   const lastFrameAtRef = useRef<number | null>(null)
@@ -134,12 +132,6 @@ export function PracticeView() {
     const summaries = summarizeAll(references.map((r) => r.gloss), entries)
     const next = buildSession(summaries, 1, new Date(), categoryFor)[0] ?? null
     setSuggested(next)
-    // Pre-select the suggestion once, so the learner can start straight away
-    // without stealing their choice on later re-ranks.
-    if (!didPreselectRef.current) {
-      didPreselectRef.current = true
-      setSelected((cur) => cur ?? references.find((r) => r.gloss === next) ?? null)
-    }
   }, [references, entries, categoryFor])
 
   // Abandon a take if the camera stops mid-recording.
@@ -347,19 +339,22 @@ export function PracticeView() {
     return { delta: result.score - previous, best: result.score > bestBefore }
   }, [entries, result, selected])
 
-  // The picker holds every reference (80+ once more of the dataset is
-  // converted), so it is searchable and grouped rather than one flat list.
-  const categories = useMemo(() => categoriesIn(references), [references])
-  const visible = useMemo(() => {
-    const needle = query.trim()
-    return references.filter(
-      (r) =>
-        (category === null || categoryOf(r) === category) &&
-        // Matches the gloss or its English meaning, so a learner can find
-        // KANAWA by typing "eat".
-        matchesSearch(r.gloss, needle),
+  // If no sign has been selected yet, present the Category & Sign Discovery Navigator
+  if (!selected) {
+    return (
+      <div className="aww-practice-env aww-nav-mode">
+        <CategorySignNavigator
+          references={references}
+          suggested={suggested}
+          mode="practice"
+          onSelect={(rec) => {
+            setSelected(rec)
+          }}
+        />
+        <p className="sr-only" role="status">{liveMessage}</p>
+      </div>
     )
-  }, [references, query, category])
+  }
 
   return (
     <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
@@ -395,15 +390,20 @@ export function PracticeView() {
         {/* Left Pane: Target Reference */}
         <div className="aww-pane aww-pane-left">
            <div className="aww-pane-header">
-              <p className="aww-pane-label">Reference</p>
-              <h2 className="aww-pane-title">
-                {selected ? glossLabel(selected.gloss) : 'Choose a sign'}
-                {selected && selected.gloss === suggested && (
-                  <span className="practice-star" title="Suggested next"> ★</span>
-                )}
-              </h2>
+              <div>
+                <p className="aww-pane-label">Reference</p>
+                <h2 className="aww-pane-title">
+                  {selected ? glossLabel(selected.gloss) : 'Choose a sign'}
+                  {selected && selected.gloss === suggested && (
+                    <span className="practice-star" title="Suggested next"> ★</span>
+                  )}
+                </h2>
+              </div>
               {phase !== 'result' && (
-                <button className="btn ghost" onClick={() => setPickerOpen(true)}>Change sign</button>
+                <div className="aww-pane-header-actions" style={{ display: 'flex', gap: '8px' }}>
+                  <button className="btn ghost" onClick={() => setSelected(null)}>← Browse signs</button>
+                  <button className="btn ghost" onClick={() => setPickerOpen(true)}>Change sign</button>
+                </div>
               )}
            </div>
            
@@ -468,11 +468,10 @@ export function PracticeView() {
                         )}
                         {noAttemptHands && (
                             <p className="camera-error">No hands were tracked — check your framing.</p>
-
                         )}
                         <div className="aww-result-actions" style={{ marginTop: '24px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
                             <button className="btn massive" onClick={beginCountdown}>Try again</button>
-                            <button className="btn ghost massive" onClick={() => { leaveResult(); setPickerOpen(true); }}>Next sign</button>
+                            <button className="btn ghost massive" onClick={() => { leaveResult(); setSelected(null); }}>Choose another sign</button>
                         </div>
                     </div>
                 </div>
@@ -485,63 +484,18 @@ export function PracticeView() {
       <div className={`aww-picker-modal ${pickerOpen ? 'open' : ''}`}>
         <div className="aww-picker-backdrop" onClick={() => setPickerOpen(false)} />
         <div className="aww-picker-content">
-          <div className="picker-head">
-            <h2>Choose a sign</h2>
-            <button className="btn btn-ghost" onClick={() => setPickerOpen(false)}>Close</button>
-          </div>
-          
-          <input
-            type="search"
-            className="picker-search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${references.length} signs...`}
-            autoFocus
+          <CategorySignNavigator
+            references={references}
+            suggested={suggested}
+            selectedId={selected?.id}
+            mode="practice"
+            isModal={true}
+            onSelect={(rec) => {
+              setSelected(rec)
+              setPickerOpen(false)
+            }}
+            onClose={() => setPickerOpen(false)}
           />
-
-          {categories.length > 1 && (
-            <div className="category-rail">
-              <button
-                className={category === null ? 'chip active' : 'chip'}
-                onClick={() => setCategory(null)}
-              >
-                All {references.length}
-              </button>
-              {categories.map((name) => (
-                <button
-                  key={name}
-                  className={category === name ? 'chip active' : 'chip'}
-                  onClick={() => setCategory(name)}
-                >
-                  {name} {references.filter((r) => categoryOf(r) === name).length}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {visible.length === 0 ? (
-            <p className="hint-text">No signs match "{query}".</p>
-          ) : (
-            <ul className="sign-list">
-              {visible.slice(0, 60).map((r) => (
-                <li key={r.id}>
-                  <button
-                    className={selected?.id === r.id ? 'sign-row active' : 'sign-row'}
-                    onClick={() => {
-                      setSelected(r)
-                      setPickerOpen(false)
-                    }}
-                  >
-                    <span className="sign-row-name">{glossLabel(r.gloss)}</span>
-                    <span className="sign-row-meta">
-                      {r.gloss === suggested && <em className="badge">suggested</em>}
-                      {categoryOf(r)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
       
