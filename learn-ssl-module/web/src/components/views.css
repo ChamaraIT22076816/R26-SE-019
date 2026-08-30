@@ -3943,6 +3943,75 @@
   text-transform: uppercase;
 }
 
+/* The vocabulary — the point of the briefing: what you'll sign and whether
+   it's ready. Shown up front; the full script is behind the disclosure. */
+.briefing-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.briefing-vocab-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.briefing-vocab-chip em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.briefing-vocab-chip.pending {
+  opacity: 0.5;
+}
+
+.briefing-script {
+  margin-top: 20px;
+}
+
+.briefing-script summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.briefing-script summary::-webkit-details-marker {
+  display: none;
+}
+.briefing-script summary::before {
+  content: '▸';
+  color: var(--accent);
+}
+.briefing-script[open] summary::before {
+  content: '▾';
+}
+.briefing-script summary:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.briefing-script[open] .briefing-flow-list {
+  margin-top: 16px;
+}
+
 .briefing-flow-list {
   list-style: none;
   padding: 0;

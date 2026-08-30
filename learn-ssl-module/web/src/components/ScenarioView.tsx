@@ -313,42 +313,62 @@ export function ScenarioView() {
         <div className="briefing-main-grid">
           <div className="briefing-script-container">
             <div className="briefing-section-header">
-              <h2>Conversation Sequence</h2>
-              <span className="section-meta">{playable.length} of {scenario.turns.length} Signs Available</span>
+              <h2>The signs you'll practise</h2>
+              <span className="section-meta">{playable.length} of {scenario.turns.length} ready</span>
             </div>
 
             {loading ? (
               <p className="empty-state">Loading signs and references...</p>
             ) : (
-              <ol className="briefing-flow-list">
-                {scenario.turns.map((t, i) => {
-                  const hasRef = references.has(t.gloss)
-                  return (
-                    <li key={t.id} className={`briefing-flow-item ${hasRef ? 'ready' : 'pending'}`}>
-                      <div className="flow-num-col">
-                        <span className="flow-step">Turn {i + 1}</span>
-                        <span className={`flow-badge ${hasRef ? 'badge-ready' : 'badge-pending'}`}>
-                          {hasRef ? 'Ready' : 'Pending'}
-                        </span>
-                      </div>
+              <>
+                <div className="briefing-vocab">
+                  {[...new Set(scenario.turns.map((t) => t.gloss))].map((g) => {
+                    const meaning = translationOf(g)
+                    return (
+                      <span
+                        key={g}
+                        className={`briefing-vocab-chip ${references.has(g) ? '' : 'pending'}`}
+                      >
+                        {g}
+                        {meaning && <em>{meaning}</em>}
+                      </span>
+                    )
+                  })}
+                </div>
 
-                      <div className="flow-content-col">
-                        <p className="flow-partner-line">"{t.partnerLine}"</p>
-                        <div className="flow-sign-row">
-                          <span className="flow-sign-tag">Sign to produce:</span>
-                          <strong className="flow-sign-gloss" title={translationOf(t.gloss)}>
-                            {glossLabel(t.gloss)}
-                          </strong>
-                          {translationOf(t.gloss) && (
-                            <span className="flow-sign-trans">({translationOf(t.gloss)})</span>
-                          )}
-                        </div>
-                        <p className="flow-prompt-text">{t.prompt}</p>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ol>
+                {/* The script is a spoiler for a "one sign at a time" roleplay —
+                    reveal it only on request. */}
+                <details className="briefing-script">
+                  <summary>Preview the full script ({scenario.turns.length} turns)</summary>
+                  <ol className="briefing-flow-list">
+                    {scenario.turns.map((t, i) => {
+                      const hasRef = references.has(t.gloss)
+                      return (
+                        <li key={t.id} className={`briefing-flow-item ${hasRef ? 'ready' : 'pending'}`}>
+                          <div className="flow-num-col">
+                            <span className="flow-step">Turn {i + 1}</span>
+                            <span className={`flow-badge ${hasRef ? 'badge-ready' : 'badge-pending'}`}>
+                              {hasRef ? 'Ready' : 'Pending'}
+                            </span>
+                          </div>
+
+                          <div className="flow-content-col">
+                            <p className="flow-partner-line">"{t.partnerLine}"</p>
+                            <div className="flow-sign-row">
+                              <span className="flow-sign-tag">Sign to produce:</span>
+                              <strong className="flow-sign-gloss">{t.gloss}</strong>
+                              {translationOf(t.gloss) && (
+                                <span className="flow-sign-trans">({translationOf(t.gloss)})</span>
+                              )}
+                            </div>
+                            <p className="flow-prompt-text">{t.prompt}</p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                </details>
+              </>
             )}
           </div>
 
