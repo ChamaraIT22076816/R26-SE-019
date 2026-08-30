@@ -22,4 +22,4 @@ cd sinhala_sign_language_recognition
 ===============================================================================
 .venv\Scripts\python.exe -m uvicorn webapp.server:app --host 127.0.0.1 --port 8000
 .venv\Scripts\python.exe main.py --mode recognize
-.venv\Scripts\python.exe -m pytest tests -v
+.venv\Scripts\python.exe -m pytest tests -v (Unit Testing)
