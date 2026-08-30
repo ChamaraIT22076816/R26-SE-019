@@ -2943,7 +2943,30 @@
   overflow-y: auto;
 }
 
-.aww-practice-env .player-controls { display: none !important; }
+/* The replay in the right pane doesn't need scrub controls; the reference in
+   the left pane very much does — a learner has to be able to pause, scrub and
+   slow the sign they are copying. */
+.aww-practice-env .aww-replay-container .player-controls { display: none !important; }
+
+.aww-practice-env .aww-pane-left .skeleton-player { position: relative; }
+
+.aww-practice-env .aww-pane-left .player-controls {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+  z-index: 20;
+  padding: 10px 16px;
+  background: rgba(var(--surface-rgb), 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+}
+
+.aww-practice-env .aww-pane-left .player-controls .btn {
+  flex-shrink: 0;
+}
 
 .aww-result-center .score-badge svg {
   background: var(--surface);

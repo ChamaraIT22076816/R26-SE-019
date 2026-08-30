@@ -463,6 +463,9 @@ const earlier = forGloss.slice(0, -1)
                     frames={reference.frames}
                     videoWidth={reference.videoWidth}
                     videoHeight={reference.videoHeight}
+                    /* One bright neutral colour: the reference is a diagram to
+                       copy, not a left/right-hand readout. --p-sage-050. */
+                    colorOverride="#e6eeec"
                   />
                 ) : refFailed ? (
                   <p className="camera-error">Could not load reference.</p>
