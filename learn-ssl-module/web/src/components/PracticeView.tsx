@@ -332,29 +332,19 @@ export function PracticeView() {
   const progress = useMemo(() => {
     if (!result || !selected) return { delta: null as number | null, best: false }
     const forGloss = entries.filter((e) => e.gloss === selected.gloss)
-    const earlier = forGloss.slice(0, -1)
+const earlier = forGloss.slice(0, -1)
     if (earlier.length === 0) return { delta: null as number | null, best: false }
     const previous = earlier[earlier.length - 1].score
     const bestBefore = Math.max(...earlier.map((e) => e.score))
     return { delta: result.score - previous, best: result.score > bestBefore }
   }, [entries, result, selected])
 
-  // If no sign has been selected yet, present the Category & Sign Discovery Navigator
-  if (!selected) {
-    return (
-      <div className="aww-practice-env aww-nav-mode">
-        <CategorySignNavigator
-          references={references}
-          suggested={suggested}
-          mode="practice"
-          onSelect={(rec) => {
-            setSelected(rec)
-          }}
-        />
-        <p className="sr-only" role="status">{liveMessage}</p>
-      </div>
-    )
-  }
+  const [isBrowsing, setIsBrowsing] = useState(true)
+
+  // If selected changes from outside or suggested, sync
+  useEffect(() => {
+    if (selected) setIsBrowsing(false)
+  }, [selected])
 
   return (
     <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
@@ -365,6 +355,32 @@ export function PracticeView() {
               <div className="aww-hud-idle">
                   <button className="btn massive ghost" onClick={() => void tracking.start()}>Turn on Camera</button>
                   <p>Tracking runs entirely in your browser.</p>
+              </div>
+          ) : isBrowsing || !selected ? (
+              <div className="aww-hud-idle">
+                  <p className="aww-hud-hint" style={{ margin: 0, color: 'var(--text-dim)' }}>
+                    {suggested ? (
+                      <>
+                        <span>Select a sign on the left or </span>
+                        <button
+                          type="button"
+                          className="btn ghost small"
+                          style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: '6px' }}
+                          onClick={() => {
+                            const rec = references.find((r) => r.gloss === suggested)
+                            if (rec) {
+                              setSelected(rec)
+                              setIsBrowsing(false)
+                            }
+                          }}
+                        >
+                          Practice Suggested: {glossLabel(suggested)}
+                        </button>
+                      </>
+                    ) : (
+                      'Select a sign from the category menu on the left to start'
+                    )}
+                  </p>
               </div>
           ) : phase === 'idle' ? (
               <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
@@ -387,41 +403,54 @@ export function PracticeView() {
       {/* The Split Screen */}
       <div className="aww-split-screen">
         
-        {/* Left Pane: Target Reference */}
+        {/* Left Pane: Target Reference or In-Pane Category & Sign Browser */}
         <div className="aww-pane aww-pane-left">
-           <div className="aww-pane-header">
-              <div>
-                <p className="aww-pane-label">Reference</p>
-                <h2 className="aww-pane-title">
-                  {selected ? glossLabel(selected.gloss) : 'Choose a sign'}
-                  {selected && selected.gloss === suggested && (
-                    <span className="practice-star" title="Suggested next"> ★</span>
-                  )}
-                </h2>
-              </div>
-              {phase !== 'result' && (
-                <div className="aww-pane-header-actions" style={{ display: 'flex', gap: '8px' }}>
-                  <button className="btn ghost" onClick={() => setSelected(null)}>← Browse signs</button>
-                  <button className="btn ghost" onClick={() => setPickerOpen(true)}>Change sign</button>
+          {isBrowsing || !selected ? (
+            <CategorySignNavigator
+              references={references}
+              suggested={suggested}
+              selectedId={selected?.id}
+              mode="practice"
+              onSelect={(rec) => {
+                setSelected(rec)
+                setIsBrowsing(false)
+              }}
+            />
+          ) : (
+            <>
+              <div className="aww-pane-header">
+                <div>
+                  <p className="aww-pane-label">Reference</p>
+                  <h2 className="aww-pane-title">
+                    {glossLabel(selected.gloss)}
+                    {selected.gloss === suggested && (
+                      <span className="practice-star" title="Suggested next"> ★</span>
+                    )}
+                  </h2>
                 </div>
-              )}
-           </div>
-           
-           <div className="aww-pane-content">
-             {selected && reference ? (
-                <SkeletonPlayer
-                  frames={reference.frames}
-                  videoWidth={reference.videoWidth}
-                  videoHeight={reference.videoHeight}
-                />
-             ) : selected && refFailed ? (
-                <p className="camera-error">Could not load reference.</p>
-             ) : !selected ? (
-                <p className="hint-text">Pick a sign to practice.</p>
-             ) : (
-                <p className="hint-text">Loading...</p>
-             )}
-           </div>
+                {phase !== 'result' && (
+                  <div className="aww-pane-header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn ghost" onClick={() => setIsBrowsing(true)}>← Categories</button>
+                    <button className="btn ghost" onClick={() => setPickerOpen(true)}>Search</button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="aww-pane-content">
+                {reference ? (
+                  <SkeletonPlayer
+                    frames={reference.frames}
+                    videoWidth={reference.videoWidth}
+                    videoHeight={reference.videoHeight}
+                  />
+                ) : refFailed ? (
+                  <p className="camera-error">Could not load reference.</p>
+                ) : (
+                  <p className="hint-text">Loading...</p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right Pane: User Camera / Replay */}
@@ -430,7 +459,7 @@ export function PracticeView() {
               <p className="aww-pane-label">You</p>
            </div>
            
-           {/* Live Camera (Hidden during replay) */}
+           {/* Live Camera (Always mounted, hidden during replay overlay) */}
            <div className={`aww-camera-container ${phase === 'result' ? 'hidden' : ''}`}>
                <CameraStage
                  videoRef={tracking.videoRef}
@@ -451,7 +480,7 @@ export function PracticeView() {
            )}
         </div>
 
-        {/* The Central Score Overlay (Only visible in 'result' phase) */}
+        {/* Dynamic Center Scoring View */}
         {phase === 'result' && result && (
             <div className="aww-result-overlay" data-reveal={revealArmed ? 'on' : undefined}>
                 <div className="aww-result-center">
@@ -471,7 +500,7 @@ export function PracticeView() {
                         )}
                         <div className="aww-result-actions" style={{ marginTop: '24px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
                             <button className="btn massive" onClick={beginCountdown}>Try again</button>
-                            <button className="btn ghost massive" onClick={() => { leaveResult(); setSelected(null); }}>Choose another sign</button>
+                            <button className="btn ghost massive" onClick={() => { leaveResult(); setIsBrowsing(true); }}>Choose another sign</button>
                         </div>
                     </div>
                 </div>

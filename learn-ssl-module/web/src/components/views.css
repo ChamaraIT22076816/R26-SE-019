@@ -4136,26 +4136,34 @@
   padding: 0;
 }
 
+.cs-nav-pane {
+  width: 100%;
+  height: 100%;
+  padding: 24px 28px 80px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
 /* Header */
 .cs-nav-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   gap: 16px;
 }
 
 .cs-nav-title-group .cs-nav-title {
   font-family: var(--serif, 'Noto Serif', serif);
-  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-size: 1.6rem;
   color: var(--text);
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .cs-nav-subtitle {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   color: var(--text-dim);
   margin: 0;
 }
@@ -4171,20 +4179,20 @@
 .cs-nav-breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .cs-back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 6px 14px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -4198,31 +4206,31 @@
 
 .cs-crumb-sep {
   color: var(--text-dim);
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .cs-crumb-current {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 1.2rem;
+  gap: 6px;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .cs-crumb-icon {
-  font-size: 1.3rem;
+  font-size: 1.2rem;
 }
 
 .cs-crumb-count {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-dim);
   font-weight: 400;
 }
 
 /* Search Row */
 .cs-search-row {
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .cs-search-input-wrap {
@@ -4234,22 +4242,22 @@
 
 .cs-search-icon {
   position: absolute;
-  left: 18px;
+  left: 16px;
   color: var(--text-dim);
   pointer-events: none;
 }
 
 .cs-search-input {
   width: 100%;
-  padding: 16px 48px 16px 48px;
-  font-size: 1.05rem;
-  border-radius: 14px;
+  padding: 12px 42px 12px 42px;
+  font-size: 0.95rem;
+  border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-2);
   color: var(--text);
   outline: none;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
 
 .cs-search-input:focus {
@@ -4260,13 +4268,13 @@
 
 .cs-search-clear {
   position: absolute;
-  right: 14px;
+  right: 12px;
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 1rem;
+  font-size: 0.95rem;
   cursor: pointer;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 50%;
 }
 .cs-search-clear:hover {
@@ -4279,43 +4287,43 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 20px 28px;
-  margin-bottom: 32px;
-  border-radius: 20px;
+  gap: 16px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  border-radius: 16px;
   background: linear-gradient(135deg, rgba(218, 165, 32, 0.12), rgba(32, 178, 170, 0.12));
   border: 1px solid rgba(218, 165, 32, 0.35);
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
 }
 
 .cs-suggested-banner:hover {
   transform: translateY(-2px);
   border-color: var(--accent);
-  box-shadow: 0 12px 32px rgba(218, 165, 32, 0.12);
+  box-shadow: 0 8px 24px rgba(218, 165, 32, 0.12);
 }
 
 .cs-suggested-tag {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: var(--p-gold-400, #daa520);
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .cs-suggested-gloss {
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text);
   margin: 0;
 }
 
 .cs-suggested-sub {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-dim);
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-style: italic;
 }
 
@@ -4328,10 +4336,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 18px 24px;
-  margin-bottom: 28px;
-  border-radius: 16px;
+  gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border-radius: 14px;
   background: var(--surface-2);
   border: 1px dashed var(--border-interactive);
 }
@@ -4339,52 +4347,51 @@
 .cs-custom-info {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .cs-custom-icon {
-  font-size: 1.6rem;
+  font-size: 1.4rem;
 }
 
 .cs-custom-info h4 {
   margin: 0 0 2px;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   color: var(--text);
 }
 
 .cs-custom-info p {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
 }
 
 /* Categories Grid */
 .cs-categories-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
 }
 
 .cs-category-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 170px;
-  padding: 22px;
+  min-height: 120px;
+  padding: 16px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
   position: relative;
-  overflow: hidden;
 }
 
 .cs-category-card:hover {
   background: var(--surface-hover);
   border-color: var(--accent);
-  transform: translateY(-4px);
-  box-shadow: 0 16px 36px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.06);
 }
 
 .cs-category-card:focus-visible {
@@ -4395,17 +4402,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .cs-cat-icon {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
 }
 
 .cs-cat-badge {
   font-family: var(--mono);
-  font-size: 0.75rem;
-  padding: 4px 10px;
+  font-size: 0.72rem;
+  padding: 2px 8px;
   border-radius: 999px;
   background: rgba(32, 178, 170, 0.12);
   color: var(--accent);
@@ -4413,62 +4420,50 @@
 }
 
 .cs-cat-name {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text);
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   line-height: 1.25;
 }
 
 .cs-cat-samples {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 4px;
 }
 
 .cs-sample-pill {
-  font-size: 0.72rem;
-  padding: 3px 8px;
-  border-radius: 6px;
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 5px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-dim);
 }
 
 .cs-sample-more {
-  font-size: 0.72rem;
-  padding: 3px 6px;
+  font-size: 0.68rem;
+  padding: 2px 4px;
   color: var(--text-dim);
   font-weight: 600;
-}
-
-.cs-cat-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--accent);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
 }
 
 /* Signs Grid */
 .cs-signs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
 }
 
 .cs-sign-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 18px;
+  padding: 14px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -4477,7 +4472,7 @@
   background: var(--surface-hover);
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.06);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
 }
 
 .cs-sign-card.selected {
@@ -4493,12 +4488,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .cs-sign-cat-tag {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4506,58 +4501,48 @@
 }
 
 .cs-suggested-chip {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   background: rgba(218, 165, 32, 0.15);
   color: var(--p-gold-400, #daa520);
 }
 
 .cs-team-chip {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   background: rgba(32, 178, 170, 0.15);
   color: var(--accent);
 }
 
 .cs-sign-gloss {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text);
-  margin: 0 0 4px;
-  line-height: 1.3;
+  margin: 0 0 2px;
+  line-height: 1.25;
 }
 
 .cs-sign-meaning {
-  font-size: 0.88rem;
-  color: var(--text-dim);
-  margin: 0 0 14px;
-  font-style: italic;
-}
-
-.cs-sign-arrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--accent);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 10px;
+  color: var(--text-dim);
+  margin: 0;
+  font-style: italic;
 }
 
 .cs-results-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  font-size: 0.95rem;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
   color: var(--text-dim);
 }
 
 .cs-empty-state {
   text-align: center;
-  padding: 48px 24px;
+  padding: 36px 20px;
   background: var(--surface-2);
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px dashed var(--border-subtle);
   color: var(--text-dim);
+  font-size: 0.9rem;
 }
 

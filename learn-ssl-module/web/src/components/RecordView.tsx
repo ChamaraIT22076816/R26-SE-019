@@ -208,28 +208,16 @@ export function RecordView() {
     savedFlashRef.current = window.setTimeout(() => setJustSaved(false), 3000)
   }
 
-  const coverage = review ? handCoverage(review.frames) : 0
+  const [isBrowsing, setIsBrowsing] = useState(false)
 
-  // If no sign has been selected and not in custom mode, show Category & Sign Discovery view
-  if (!selected && !isCustomMode) {
-    return (
-      <div className="aww-practice-env aww-nav-mode">
-        <CategorySignNavigator
-          references={references}
-          mode="record"
-          onSelect={(rec) => {
-            setSelected(rec)
-            setIsCustomMode(false)
-          }}
-          onCreateCustom={(gloss) => {
-            setCustomGloss(gloss)
-            setIsCustomMode(true)
-            setSelected(null)
-          }}
-        />
-      </div>
-    )
-  }
+  // Sync isBrowsing if selected changes
+  useEffect(() => {
+    if (selected || isCustomMode) {
+      setIsBrowsing(false)
+    }
+  }, [selected, isCustomMode])
+
+  const coverage = review ? handCoverage(review.frames) : 0
 
   return (
     <div className="aww-practice-env aww-studio-env" data-phase={phase} data-picker-open={pickerOpen}>
@@ -251,19 +239,19 @@ export function RecordView() {
             </svg>
           </button>
           <button
-            className="btn ghost"
+            className={`btn ghost ${isBrowsing ? 'active' : ''}`}
             onClick={() => {
-              setSelected(null)
-              setIsCustomMode(false)
+              setIsBrowsing(true)
             }}
           >
-            ← Browse Categories
+            {isBrowsing ? 'Categories Menu' : '← Browse Categories'}
           </button>
           <button
-            className={`btn ghost ${isCustomMode ? 'active' : ''}`}
+            className={`btn ghost ${isCustomMode && !isBrowsing ? 'active' : ''}`}
             onClick={() => {
               setIsCustomMode(true)
               setSelected(null)
+              setIsBrowsing(false)
             }}
           >
             + Custom Sign
@@ -288,60 +276,88 @@ export function RecordView() {
 
       {/* The 50/50 Dual Studio View */}
       <div className="aww-split-screen">
-        {/* Left Pane: Target Reference Benchmark */}
+        {/* Left Pane: Target Reference Benchmark or In-Pane Category & Sign Browser */}
         <div className="aww-pane aww-pane-left">
-          <div className="aww-pane-header">
-            <p className="aww-pane-label">Benchmark Reference</p>
-            <h2 className="aww-pane-title">
-              {isCustomMode ? (
-                <span style={{ fontStyle: 'italic' }}>New Vocabulary</span>
-              ) : selected ? (
-                glossLabel(selected.gloss)
-              ) : (
-                'Choose a sign'
-              )}
-            </h2>
-            {selected && (
-              <div className="studio-ref-meta">
-                <span className="studio-ref-pill">
-                  {selected.source === 'team-recording' ? 'Team Provisional' : 'Dataset Reference'}
-                </span>
-                <span className="studio-ref-pill">{(selected.durationMs / 1000).toFixed(1)}s</span>
+          {isBrowsing || (!selected && !isCustomMode) ? (
+            <CategorySignNavigator
+              references={references}
+              mode="record"
+              selectedId={selected?.id}
+              onSelect={(rec) => {
+                setSelected(rec)
+                setIsCustomMode(false)
+                setIsBrowsing(false)
+              }}
+              onCreateCustom={(gloss) => {
+                setCustomGloss(gloss)
+                setIsCustomMode(true)
+                setSelected(null)
+                setIsBrowsing(false)
+              }}
+            />
+          ) : (
+            <>
+              <div className="aww-pane-header">
+                <div>
+                  <p className="aww-pane-label">Benchmark Reference</p>
+                  <h2 className="aww-pane-title">
+                    {isCustomMode ? (
+                      <span style={{ fontStyle: 'italic' }}>New Vocabulary</span>
+                    ) : selected ? (
+                      glossLabel(selected.gloss)
+                    ) : (
+                      'Choose a sign'
+                    )}
+                  </h2>
+                  {selected && (
+                    <div className="studio-ref-meta">
+                      <span className="studio-ref-pill">
+                        {selected.source === 'team-recording' ? 'Team Provisional' : 'Dataset Reference'}
+                      </span>
+                      <span className="studio-ref-pill">{(selected.durationMs / 1000).toFixed(1)}s</span>
+                    </div>
+                  )}
+                </div>
+                {phase !== 'recording' && phase !== 'countdown' && (
+                  <button className="btn ghost" onClick={() => setIsBrowsing(true)}>
+                    ← Categories
+                  </button>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="aww-pane-content">
-            {isCustomMode ? (
-              <div className="studio-custom-prompt">
-                <p className="studio-prompt-title">Creating a New Reference</p>
-                <p className="studio-prompt-desc">
-                  Enter a unique gloss name below. Once recorded and saved, this sign will immediately become part of your local reference library.
-                </p>
-                <input
-                  type="text"
-                  className="studio-custom-input"
-                  value={customGloss}
-                  onChange={(e) => setCustomGloss(e.target.value.toUpperCase())}
-                  placeholder="e.g. MORNING, WATER, TEACHER"
-                  autoFocus
-                  disabled={phase === 'countdown' || phase === 'recording'}
-                />
+              <div className="aww-pane-content">
+                {isCustomMode ? (
+                  <div className="studio-custom-prompt">
+                    <p className="studio-prompt-title">Creating a New Reference</p>
+                    <p className="studio-prompt-desc">
+                      Enter a unique gloss name below. Once recorded and saved, this sign will immediately become part of your local reference library.
+                    </p>
+                    <input
+                      type="text"
+                      className="studio-custom-input"
+                      value={customGloss}
+                      onChange={(e) => setCustomGloss(e.target.value.toUpperCase())}
+                      placeholder="e.g. MORNING, WATER, TEACHER"
+                      autoFocus
+                      disabled={phase === 'countdown' || phase === 'recording'}
+                    />
+                  </div>
+                ) : selected && reference ? (
+                  <SkeletonPlayer
+                    frames={reference.frames}
+                    videoWidth={reference.videoWidth}
+                    videoHeight={reference.videoHeight}
+                  />
+                ) : selected && refFailed ? (
+                  <p className="camera-error">Could not load benchmark reference.</p>
+                ) : !selected ? (
+                  <p className="hint-text">Choose a sign to benchmark against.</p>
+                ) : (
+                  <p className="hint-text">Loading benchmark frames...</p>
+                )}
               </div>
-            ) : selected && reference ? (
-              <SkeletonPlayer
-                frames={reference.frames}
-                videoWidth={reference.videoWidth}
-                videoHeight={reference.videoHeight}
-              />
-            ) : selected && refFailed ? (
-              <p className="camera-error">Could not load benchmark reference.</p>
-            ) : !selected ? (
-              <p className="hint-text">Choose a sign to benchmark against.</p>
-            ) : (
-              <p className="hint-text">Loading benchmark frames...</p>
-            )}
-          </div>
+            </>
+          )}
         </div>
 
         {/* Right Pane: Live Capture Stage / Review Replay */}
