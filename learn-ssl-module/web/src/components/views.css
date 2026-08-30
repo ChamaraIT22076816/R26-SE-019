@@ -3668,71 +3668,68 @@
 
 .aww-scenario-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 32px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  align-items: start;
 }
 
 .aww-scenario-card {
   font-family: inherit;
   position: relative;
-  border: none;
-  border-radius: 28px;
-  height: 420px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--scenario-accent, var(--accent));
+  border-radius: 20px;
   overflow: hidden;
   cursor: pointer;
   text-align: left;
   padding: 0;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+  background: var(--surface);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .aww-scenario-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 28px 56px rgba(0, 0, 0, 0.24);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
 .aww-scenario-card.disabled {
-  opacity: 0.65;
   cursor: not-allowed;
+  opacity: 0.55;
   transform: none !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: none !important;
 }
 
-/* Vibrant Scenario Environment Themes */
-.theme-restaurant {
-  background: linear-gradient(135deg, #871a1a 0%, #1a2a6c 50%, #b21f1f 100%);
-}
-
+/* One quiet, palette-derived tint per scenario — not the Vegas gradients. */
 .theme-introductions {
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #6b11ff 100%);
+  --scenario-accent: var(--p-teal-400);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.10), transparent 62%), var(--surface);
 }
-
+.theme-restaurant {
+  --scenario-accent: var(--p-gold-400);
+  background: linear-gradient(135deg, rgba(218, 165, 32, 0.10), transparent 62%), var(--surface);
+}
 .theme-hospital {
-  background: linear-gradient(135deg, #0ba360 0%, #3cba92 50%, #134e5e 100%);
+  --scenario-accent: var(--p-lime-400);
+  background: linear-gradient(135deg, rgba(163, 230, 53, 0.08), transparent 62%), var(--surface);
 }
-
 .theme-bus {
-  background: linear-gradient(135deg, #f12711 0%, #f5af19 100%);
-}
-
-.aww-scenario-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top right, rgba(255,255,255,0.25), transparent 50%),
-              radial-gradient(circle at bottom left, rgba(0,0,0,0.4), transparent 50%);
-  mix-blend-mode: overlay;
+  --scenario-accent: #d98a2b;
+  background: linear-gradient(135deg, rgba(217, 138, 43, 0.09), transparent 62%), var(--surface);
 }
 
 .card-glass-layer {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 32px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.75) 100%);
-  color: #fff;
+  gap: 12px;
+  min-height: 168px;
+  padding: 24px;
+  color: var(--text);
+}
+
+.aww-scenario-card.disabled .card-glass-layer {
+  min-height: 96px;
+  gap: 8px;
 }
 
 .card-top {
@@ -3742,54 +3739,55 @@
 }
 
 .card-status {
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 6px 14px;
+  background: var(--surface-2);
+  padding: 5px 12px;
   border-radius: 100px;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+.card-bottom {
+  margin-top: auto;
 }
 
 .card-bottom h3 {
   font-family: var(--serif);
   font-size: 2.2rem;
   font-weight: 400;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   line-height: 1.15;
-  color: #fff;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  color: var(--text);
 }
 
 .card-bottom p {
   font-size: 1.05rem;
-  color: rgba(255,255,255,0.85);
+  color: var(--text-dim);
   margin: 0;
   line-height: 1.45;
 }
 
 .play-circle {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.2);
-  backdrop-filter: blur(12px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 20px;
-  color: #fff;
-  transition: all 0.3s ease;
+  margin-top: 16px;
+  color: var(--text);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .aww-scenario-card:hover .play-circle {
   background: var(--accent);
-  color: var(--p-ink);
-  transform: scale(1.1);
+  color: var(--on-accent);
+  transform: scale(1.08);
 }
 
 /* ============================================================================
