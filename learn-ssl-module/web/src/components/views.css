@@ -2493,7 +2493,7 @@
 
 .aww-practice-env {
   position: fixed;
-  top: 61px;
+  top: var(--app-bar-h);
   left: 0;
   right: 0;
   bottom: 0;
@@ -2502,6 +2502,35 @@
   display: flex;
   flex-direction: column;
   z-index: 10;
+}
+
+/* Stacked layout on a phone: two flex:1 panes side by side become two ~185px
+   columns otherwise. */
+@media (max-width: 760px) {
+  .aww-practice-env {
+    overflow-y: auto;
+  }
+  .aww-split-screen {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+  .aww-split-screen .aww-pane {
+    flex: none;
+    min-height: 62vh;
+  }
+  .aww-pane-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .aww-hud {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    width: auto;
+  }
 }
 
 /* In Author Mode, .mode-banner-wrap adds ~64px above header, so top offset is ~125px */
@@ -2534,6 +2563,11 @@
 
 .aww-pane-right {
   background: var(--surface);
+}
+
+/* Browsing: give the sign list a little more room than the preview. */
+.aww-browse .aww-split-screen .aww-pane-left {
+  flex: 1.3;
 }
 
 .aww-pane-header {
@@ -2604,6 +2638,16 @@
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+/* Sign preview in the right pane while browsing — sits over the hidden camera
+   stage rather than in flow next to it, so the two don't stack to 200%. */
+.aww-preview-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .aww-camera-container.hidden {

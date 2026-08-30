@@ -47,6 +47,13 @@ export function PracticeView() {
   const [suggested, setSuggested] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
+  const [isBrowsing, setIsBrowsing] = useState(true)
+
+  // While browsing, the right pane previews a sign instead of sitting empty:
+  // whatever the learner is pointing at, falling back to the selected or
+  // suggested sign.
+  const [hoverRec, setHoverRec] = useState<RecordingMeta | null>(null)
+  const [previewFrames, setPreviewFrames] = useState<SignRecording | null>(null)
 
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (p: Phase) => {
@@ -134,6 +141,38 @@ export function PracticeView() {
     setSuggested(next)
   }, [references, entries, categoryFor])
 
+  const suggestedRec = useMemo(
+    () => references.find((r) => r.gloss === suggested) ?? null,
+    [references, suggested],
+  )
+  // What the browsing preview shows: hovered sign, else the one already
+  // selected, else today's suggestion.
+  const previewRec = hoverRec ?? selected ?? suggestedRec
+
+  // Load frames for the preview. loadReferenceFrames is module-cached, so
+  // re-hovering a sign is instant; only the first look at one fetches.
+  useEffect(() => {
+    if (!previewRec) {
+      setPreviewFrames(null)
+      return
+    }
+    // Reuse the already-loaded reference when the preview is the selected sign.
+    if (selected && previewRec.id === selected.id && reference) {
+      setPreviewFrames(reference)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const full = previewRec.file
+        ? await loadReferenceFrames(previewRec.file)
+        : (localRecs.find((r) => r.id === previewRec.id) ?? null)
+      if (!cancelled) setPreviewFrames(full)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [previewRec, selected, reference, localRecs])
+
   // Abandon a take if the camera stops mid-recording.
   useEffect(() => {
     if (
@@ -153,9 +192,11 @@ export function PracticeView() {
   // so resuming is instant.
   const { pause: pauseTracking, resume: resumeTracking } = tracking
   useEffect(() => {
-    if (phase === 'result') pauseTracking()
+    // Also paused while browsing: the camera pane is hidden behind the sign
+    // preview then, so there is nothing to infer for.
+    if (phase === 'result' || isBrowsing || !selected) pauseTracking()
     else resumeTracking()
-  }, [phase, pauseTracking, resumeTracking])
+  }, [phase, isBrowsing, selected, pauseTracking, resumeTracking])
 
   useEffect(() => {
     if (session) saveSession(session)
@@ -356,12 +397,14 @@ const earlier = forGloss.slice(0, -1)
     return { delta: result.score - previous, best: result.score > bestBefore }
   }, [entries, result, selected])
 
-  const [isBrowsing, setIsBrowsing] = useState(true)
-
   // If selected changes from outside or suggested, sync
   useEffect(() => {
     if (selected) setIsBrowsing(false)
   }, [selected])
+
+  // Browsing: no sign committed yet. The split still shows, but the right pane
+  // previews a sign instead of holding an empty camera stage.
+  const browsing = isBrowsing || !selected
 
   // Shared by both result states. "Try again" runs the countdown, which needs a
   // live camera — if it dropped, offer to turn it back on rather than a button
@@ -390,10 +433,14 @@ const earlier = forGloss.slice(0, -1)
   )
 
   return (
-    <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
+    <div
+      className={`aww-practice-env${browsing ? ' aww-browse' : ''}`}
+      data-phase={phase}
+      data-picker-open={pickerOpen}
+    >
       {/* HUD — only while the camera is live. Turning the camera on is the
           camera pane's job (CameraStage intro), so there is one such button. */}
-      {!isBrowsing && selected && phase !== 'result' && tracking.status === 'running' && (
+      {!browsing && phase !== 'result' && tracking.status === 'running' && (
         <div className="aww-hud">
           {phase === 'idle' ? (
             <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
@@ -423,7 +470,7 @@ const earlier = forGloss.slice(0, -1)
         
         {/* Left Pane: Target Reference or In-Pane Category & Sign Browser */}
         <div className="aww-pane aww-pane-left">
-          {isBrowsing || !selected ? (
+          {browsing ? (
             <CategorySignNavigator
               references={references}
               suggested={suggested}
@@ -432,7 +479,9 @@ const earlier = forGloss.slice(0, -1)
               onSelect={(rec) => {
                 setSelected(rec)
                 setIsBrowsing(false)
+                setHoverRec(null)
               }}
+              onPreview={setHoverRec}
             />
           ) : (
             <>
@@ -474,14 +523,38 @@ const earlier = forGloss.slice(0, -1)
           )}
         </div>
 
-        {/* Right Pane: User Camera / Replay */}
+        {/* Right Pane: sign preview while browsing, otherwise the camera / replay */}
         <div className="aww-pane aww-pane-right" data-camera-status={tracking.status}>
            <div className="aww-pane-header">
-              <p className="aww-pane-label">You</p>
+              <div>
+                <p className="aww-pane-label">{browsing ? 'Preview' : 'You'}</p>
+                {browsing && previewRec && (
+                  <h2 className="aww-pane-title">{previewRec.gloss}</h2>
+                )}
+              </div>
            </div>
-           
-           {/* Live Camera (Always mounted, hidden during replay overlay) */}
-           <div className={`aww-camera-container ${phase === 'result' ? 'hidden' : ''}`}>
+
+           {browsing && (
+             <div className="aww-preview-container">
+               {previewFrames ? (
+                 <SkeletonPlayer
+                   key={previewRec?.id}
+                   frames={previewFrames.frames}
+                   videoWidth={previewFrames.videoWidth}
+                   videoHeight={previewFrames.videoHeight}
+                   colorOverride="#e6eeec"
+                 />
+               ) : (
+                 <p className="hint-text">Point at a sign to preview it.</p>
+               )}
+             </div>
+           )}
+
+           {/* Live Camera — always mounted (the hook owns the video element);
+               hidden while browsing and during the result replay. */}
+           <div
+             className={`aww-camera-container ${browsing || phase === 'result' ? 'hidden' : ''}`}
+           >
                <CameraStage
                  videoRef={tracking.videoRef}
                  canvasRef={tracking.canvasRef}

@@ -12,6 +12,9 @@ export interface CategorySignNavigatorProps {
   onSelect: (sign: RecordingMeta) => void
   onCreateCustom?: (gloss: string) => void
   onClose?: () => void
+  /** Fired as the pointer / focus moves over a sign card, for a live preview.
+   *  Null when nothing is hovered. */
+  onPreview?: (sign: RecordingMeta | null) => void
 }
 
 export function CategorySignNavigator({
@@ -23,6 +26,7 @@ export function CategorySignNavigator({
   onSelect,
   onCreateCustom,
   onClose,
+  onPreview,
 }: CategorySignNavigatorProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [globalQuery, setGlobalQuery] = useState('')
@@ -271,7 +275,7 @@ export function CategorySignNavigator({
               )}
             </div>
           ) : (
-            <div className="cs-signs-grid">
+            <div className="cs-signs-grid" onMouseLeave={() => onPreview?.(null)}>
               {globalSearchResults.map((r) => {
                 const meaning = translationOf(r.gloss)
                 const isSelected = selectedId === r.id
@@ -281,6 +285,8 @@ export function CategorySignNavigator({
                     key={r.id}
                     className={`cs-sign-card ${isSelected ? 'selected' : ''} ${isSuggested ? 'suggested' : ''}`}
                     onClick={() => onSelect(r)}
+                    onMouseEnter={() => onPreview?.(r)}
+                    onFocus={() => onPreview?.(r)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -318,7 +324,7 @@ export function CategorySignNavigator({
               </button>
             </div>
           ) : (
-            <div className="cs-signs-grid">
+            <div className="cs-signs-grid" onMouseLeave={() => onPreview?.(null)}>
               {categorySigns.map((r) => {
                 const meaning = translationOf(r.gloss)
                 const isSelected = selectedId === r.id
@@ -328,6 +334,8 @@ export function CategorySignNavigator({
                     key={r.id}
                     className={`cs-sign-card ${isSelected ? 'selected' : ''} ${isSuggested ? 'suggested' : ''}`}
                     onClick={() => onSelect(r)}
+                    onMouseEnter={() => onPreview?.(r)}
+                    onFocus={() => onPreview?.(r)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
