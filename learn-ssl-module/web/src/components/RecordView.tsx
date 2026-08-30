@@ -429,12 +429,8 @@ export function RecordView() {
           ) : phase === 'recording' ? (
             <div className="aww-hud-recording">
               <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
-              <button
-                className="btn massive"
-                style={{ background: 'var(--p-coral-500)' }}
-                onClick={finishRecording}
-              >
-                Stop & Review
+              <button className="btn massive" onClick={finishRecording}>
+                Stop &amp; Review
               </button>
             </div>
           ) : null}

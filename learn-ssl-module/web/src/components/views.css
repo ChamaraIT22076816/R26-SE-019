@@ -1025,24 +1025,6 @@
   }
 }
 
-/* Transform only — full opacity throughout, so every hint is readable on the
-   measured frame and merely settles into place afterwards. */
-[data-reveal='on'] .hint-list li {
-  animation: lift-in var(--dur-base) var(--ease-out) both;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(2) {
-  animation-delay: 60ms;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(3) {
-  animation-delay: 120ms;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(n + 4) {
-  animation-delay: 180ms;
-}
-
 [data-reveal='on'] .finger-chips {
   animation: lift-in var(--dur-base) var(--ease-out) 200ms both;
 }
@@ -1128,15 +1110,6 @@
   font-size: 13px;
   color: var(--text-dim);
   margin-top: 2px;
-}
-
-.hint-list {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
 }
 
 .finger-chips {
@@ -2964,6 +2937,60 @@
   pointer-events: none;
 }
 
+/* RecordView (author-only) still uses the older floating HUD — a full rework
+   is its own critique. This keeps it usable until then. */
+.aww-hud {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 32px;
+  border-radius: 20px;
+  background: rgba(var(--surface-rgb), 0.9);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text);
+}
+
+.aww-hud-idle,
+.aww-hud-recording {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.aww-hud-idle p {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.aww-hud-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.aww-hud-countdown span {
+  font: 800 3.5rem var(--mono);
+  color: var(--p-gold-400);
+  line-height: 1;
+}
+
+.aww-hud-recording .btn.massive {
+  background: var(--recording);
+  color: #fff;
+}
+
 
 /* ============================================================================
    CENTRAL SCORE OVERLAY
@@ -2996,28 +3023,7 @@
   opacity: 1;
 }
 
-.aww-result-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  text-align: center;
-  pointer-events: auto;
-}
-
-/* Override the standard ScoreBadge scale if needed */
-.aww-result-center .score-badge {
-  transform: scale(1.5);
-  margin-bottom: 24px;
-}
-
 .aww-result-feedback {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 32px 40px;
-  min-width: 400px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.15);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -3034,9 +3040,8 @@
   padding-top: 20px;
 }
 
-/* Practice result: ring + feedback + actions in ONE card, so the card can
-   never clip the ring (it used to float over the ring's lower third).
-   ScenarioView keeps the older .aww-result-center / .aww-result-feedback. */
+/* Practice + Scenario result: ring + feedback + actions in ONE card, so the
+   card can never clip the ring (it used to float over the ring's lower third). */
 .aww-result-panel {
   display: flex;
   flex-direction: column;
@@ -3168,12 +3173,6 @@
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-}
-
-
-.aww-result-center .score-badge svg {
-  background: var(--surface);
-  border-radius: 50%;
 }
 
 /* ============================================================================
