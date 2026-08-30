@@ -19,7 +19,7 @@ and that is where the marks are.
 |---|---|
 | Web app, capture, recorder, library | Done |
 | DTW scoring + per-finger corrective feedback | Done, constants fitted to data |
-| Reference data — 362 files, 351 signs, 2 corpora | Done |
+| Reference data — 501 recordings, 490 signs, 2 corpora | Done |
 | Learner model v1 + progress dashboard | Done (BKT deferred by plan) |
 | Scenarios — Restaurant 5/5 refs, Introductions 1/7 | Done for PP2 scope |
 | Latency instrumentation | Done — **needs ~20 scored attempts to produce figures** |
@@ -35,7 +35,7 @@ and that is where the marks are.
 | Target | Status |
 |---|---|
 | ≤300 ms feedback latency | Instrumented end to end; the Study tab reports median/p95/% within target. **Needs ~20 attempts** before p95 stops reading *provisional*. Closest to done — about an hour of kvn's own signing. |
-| ≥90% accuracy vs expert | **Not measured, and no code addresses it.** The 74.3% separation figure is a different claim — do not conflate them. Weakest target. |
+| ≥90% accuracy vs expert | **Not measured, and no code addresses it.** The 74.6% separation figure is a different claim — do not conflate them, and never quote it without its 65.4% majority-class baseline. Weakest target. |
 | ≥20% learning gain | Needs the pilot. Attempts now carry a `sessionId`, so "after N sessions" is countable rather than inferred from clock gaps. |
 | SUS ≥70 | Needs the pilot **and a questionnaire that does not yet exist**. |
 

@@ -157,17 +157,23 @@ do not depend on the corpus surviving — only the ability to re-derive them doe
 Found while assembling this pack. Fix these before submission — a panel that
 spots one will discount the rest.
 
-| Document | Says | Actually |
-|---|---|---|
-| `CLAUDE.md`, `HANDOFF-pp2-endgame.md` | "362 files, 351 signs" | **501 recordings, 490 glosses** |
-| `learn-ssl-module/web/README.md` | separation 73.8%, median 0.474 | **74.6%**, median **0.459** (README predates the last regeneration) |
-| `HANDOFF-pp2-endgame.md` | "74.3% separation" | **74.6%** |
-| `HANDOFF-pp2-endgame.md` | Introductions **1/7** | `DEMO.md` says **3/7** — confirm which |
-| `HANDOFF-pp2-endgame.md` | `.git` is ~130 MB | `CLAUDE.md` says ~199 MB — immaterial, but pick one |
-| `README.md` (PP1) | mentions `sign_learning_demo.py` | only `feedback_demo.py` is committed |
+| Document | Said | Actually | Status |
+|---|---|---|---|
+| `HANDOFF-pp2-endgame.md` | "362 files, 351 signs" | **501 recordings, 490 glosses** | **fixed 31 Aug** |
+| `HANDOFF-pp2-endgame.md` | "74.3% separation" | **74.6%**, and never without its baseline | **fixed 31 Aug** |
+| `web/README.md` | separation 73.8%, median 0.474, p10 0.220, p90 0.788 | **74.6%**, median **0.459**, p10 **0.222**, p90 **0.767** | **fixed 31 Aug** |
+| `web/README.md` | cross-sign floor 0.134 | **0.135** | **fixed 31 Aug** |
+| `HANDOFF-pp2-endgame.md` | Introductions **1/7** | `DEMO.md` says **3/7** | **open — confirm which** |
+| `HANDOFF-pp2-endgame.md` | `.git` is ~130 MB | `CLAUDE.md` says ~199 MB | open, immaterial |
+| `README.md` (PP1) | mentions `sign_learning_demo.py` | only `feedback_demo.py` is committed | open, cosmetic |
 
-The generated reports are correct in every case; the prose is what drifted. That
-is itself an argument for generated reports, and a fair thing to say if asked.
+Checked and **clean**: `CLAUDE.md` states no reference count, so nothing there
+drifted. `web/README.md`'s "362 references" lines are the index-size budget
+*history* and correctly show 362 → 501 — not stale.
+
+The generated reports were correct in every case; the prose is what drifted.
+That is itself an argument for generated reports, and a fair thing to say if
+asked.
 
 ### One generated report *is* stale: `latency-report.md`
 
@@ -181,21 +187,32 @@ date-stamping change.
 algorithm, which depends on sequence lengths rather than on how many references
 exist. Only the sample description is out of date.
 
-**Recommended: refresh it.** A dated, corpus-accurate report is materially
-better in front of a panel than one that misdescribes its own sample. Close
-other applications first — the file regenerates only under an explicit flag
-precisely because tail timing is sensitive to CPU load:
+**Do not refresh it before PP2.** Three reasons:
+
+1. **The committed p95 is the conservative one.** An incidental re-run gave
+   3.8 ms against the committed 12.6 ms. For an "under 300 ms" claim, quoting
+   the slower measurement is the safer position, not the weaker one.
+2. **Refreshing cascades.** The figure appears in `latency-report.md`,
+   `EVALUATION.md` §8, `EVIDENCE.md`, the dossier and the slides. Updating five
+   places under time pressure is a better way to create an inconsistency than to
+   remove one.
+3. **The measurement policy cannot be honoured on a busy evening.** The report
+   regenerates only under an explicit flag precisely because tail timing moves
+   ~2× with CPU contention.
+
+**If a panel notices the sample description**, the answer is one sentence and it
+is a good one:
+
+> "That report was measured when the library held 362 references; it now holds
+> 501. The figure is unaffected — DTW cost depends on the two sequence lengths,
+> not on how many references exist — so we left the conservative measurement
+> rather than restating a research figure the week of a presentation."
+
+**After PP2**, refresh it on an idle machine and update the dependents together:
 
 ```bash
 cd learn-ssl-module/web; $env:BENCH_WRITE=1; npx vitest run scoring.bench
 ```
-
-**Expect the p95 to fall** (an incidental re-run tonight gave 3.8 ms against the
-committed 12.6 ms). The median is stable at ~1.8 ms. If you refresh it, update
-the figure in `EVALUATION.md` §8 to match, and re-check `README.md`. If you do
-not refresh it, quote the committed figures and say the library has grown since
-— either is defensible; quoting a p95 from one run and a sample description from
-another is not.
 
 ---
 

@@ -216,8 +216,10 @@ orders of magnitude inside budget.
 > the library held **362** references rather than today's 501, so its sample
 > description is slightly stale. An incidental re-run on 31 Aug 2026 over the
 > current 501-reference library gave median **1.7 ms** / p95 **3.8 ms** — the
-> same median, a lower tail, because tail timing tracks CPU contention. See
-> [EVIDENCE.md](EVIDENCE.md) §6 for the one command that refreshes it.
+> same median, a lower tail, because tail timing tracks CPU contention. The
+> committed figure is deliberately kept as the conservative one; DTW cost
+> depends on the two sequence lengths, not on how many references the library
+> holds. See [EVIDENCE.md](EVIDENCE.md) §6.
 
 ### What this figure is not
 

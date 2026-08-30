@@ -78,10 +78,12 @@ the repeatability demonstration, and it is worth doing live.
 
 ## Outstanding before submission
 
-- **Fix the stale figures in older docs** — `CLAUDE.md` and
-  `HANDOFF-pp2-endgame.md` still say "362 files, 351 signs" (actually **501 /
-  490**); `learn-ssl-module/web/README.md` still says 73.8% separation (actually
-  **74.6%**). Full list in [EVIDENCE.md](EVIDENCE.md) §6.
+- ~~**Stale figures in older docs**~~ — **done 31 Aug.** `HANDOFF-pp2-endgame.md`
+  and `learn-ssl-module/web/README.md` now carry the current counts and the
+  74.6% / 65.4%-baseline pairing. Changelog in [EVIDENCE.md](EVIDENCE.md) §6.
+- **Do not refresh `latency-report.md` before PP2** — the committed p95 is the
+  conservative one and refreshing cascades into five documents. Reasoning and
+  the one-sentence answer if a panel notices: [EVIDENCE.md](EVIDENCE.md) §6.
 - **Screenshots** — the Learn module mid-attempt, the score + hints, the
   Progress tab, a scenario summary. These need a real webcam and cannot be
   captured from an embedded browser.
