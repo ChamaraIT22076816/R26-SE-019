@@ -4223,19 +4223,15 @@
 }
 
 .dialogue-hint-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.8rem;
   background: rgba(255,255,255,0.08);
   color: var(--caution);
-  padding: 3px 10px;
+  padding: 3px 12px;
   border-radius: 100px;
   margin-top: 2px;
-}
-
-/* Hide controls on Scenario reference skeleton player */
-.aww-scenario-env .skeleton-scrubber,
-.aww-scenario-env .skeleton-controls button {
-  display: none !important;
 }
 
 /* ============================================================================

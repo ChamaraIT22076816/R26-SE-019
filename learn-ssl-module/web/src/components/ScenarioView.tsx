@@ -13,6 +13,7 @@ import { scoreTurn } from '../scenario/rubric'
 import type { TurnScore } from '../scenario/rubric'
 import type { Scenario, ScenarioTurn } from '../scenario/types'
 import { SCENARIOS } from '../data/scenarios'
+import { Circle, Lightbulb, Square, X } from 'lucide-react'
 import { glossLabel, translationOf } from '../data/translations'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
@@ -511,7 +512,10 @@ export function ScenarioView() {
             Sign: <strong>{glossLabel(turn.gloss)}</strong> &mdash; {turn.prompt}
           </p>
           {turn.hint && (
-            <span className="dialogue-hint-pill">💡 {turn.hint}</span>
+            <span className="dialogue-hint-pill">
+              <Lightbulb size={13} aria-hidden="true" />
+              {turn.hint}
+            </span>
           )}
         </div>
       )}
@@ -530,12 +534,13 @@ export function ScenarioView() {
               frames={reference.frames}
               videoWidth={reference.videoWidth}
               videoHeight={reference.videoHeight}
+              colorOverride="#e6eeec"
             />
           </div>
         </div>
 
         {/* Right Pane: User Camera / Replay */}
-        <div className="aww-pane aww-pane-right">
+        <div className="aww-pane aww-pane-right" data-camera-status={capture.tracking.status}>
           <div className="aww-pane-header">
             <p className="aww-pane-label">You</p>
           </div>
@@ -548,10 +553,55 @@ export function ScenarioView() {
               status={capture.tracking.status}
               error={capture.tracking.error}
               onStart={() => void capture.tracking.start()}
-              idleHint="Start camera to join the conversation"
+              idleHint=""
               inferring={capture.tracking.inferring}
+              intro={
+                <div className="aww-camera-intro">
+                  <p className="aww-camera-intro-lead">Join the conversation.</p>
+                  <p className="aww-camera-intro-note">
+                    Hand tracking runs entirely in your browser. No video is uploaded or
+                    recorded.
+                  </p>
+                  <button className="btn massive" onClick={() => void capture.tracking.start()}>
+                    Turn on camera
+                  </button>
+                </div>
+              }
             />
           </div>
+
+          {/* Camera controls, anchored to this pane. One action at a time. */}
+          {!current && capture.tracking.status === 'running' && (
+            <>
+              {capture.phase === 'countdown' && (
+                <div className="aww-cam-countdown" aria-hidden="true">{capture.count}</div>
+              )}
+              {capture.phase === 'recording' && (
+                <div className="aww-cam-rec">
+                  <span className="aww-rec-dot" aria-hidden="true" />
+                  REC {(capture.elapsedMs / 1000).toFixed(1)}s
+                </div>
+              )}
+              <div className="aww-cam-action">
+                {capture.phase === 'countdown' ? (
+                  <button className="aww-cam-btn aww-cam-btn-ghost" onClick={capture.cancel}>
+                    <X size={16} aria-hidden="true" />
+                    Cancel
+                  </button>
+                ) : capture.phase === 'recording' ? (
+                  <button className="aww-cam-btn aww-cam-btn-stop" onClick={capture.finish}>
+                    <Square size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    Stop &amp; Score
+                  </button>
+                ) : (
+                  <button className="aww-cam-btn" onClick={() => capture.begin(captureMs)}>
+                    <Circle size={15} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    Record attempt
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Replay Overlay on Scored Turn */}
           {current && currentAttempt && (
@@ -565,43 +615,6 @@ export function ScenarioView() {
           )}
         </div>
       </div>
-
-      {/* Bottom HUD (Heads-Up Display) */}
-      {!current && (
-        <div className="aww-hud">
-          {capture.tracking.status !== 'running' ? (
-            <div className="aww-hud-idle">
-              <button className="btn massive ghost" onClick={() => void capture.tracking.start()}>
-                Turn on Camera
-              </button>
-              <p>Tracking runs entirely in your browser.</p>
-            </div>
-          ) : capture.phase === 'countdown' ? (
-            <div className="aww-hud-countdown">
-              <span>{capture.count}</span>
-              <button className="btn ghost massive" onClick={capture.cancel}>Cancel</button>
-            </div>
-          ) : capture.phase === 'recording' ? (
-            <div className="aww-hud-recording">
-              <div className="rec-badge">● REC {(capture.elapsedMs / 1000).toFixed(1)} s</div>
-              <button
-                className="btn massive"
-                style={{ background: 'var(--p-coral-500)' }}
-                onClick={capture.finish}
-              >
-                Stop & Score
-              </button>
-            </div>
-          ) : (
-            <button
-              className="btn massive"
-              onClick={() => capture.begin(captureMs)}
-            >
-              Sign It
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Central Score & Grading Overlay */}
       {current && (
