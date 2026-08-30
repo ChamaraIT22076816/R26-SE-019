@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { RecordingMeta } from '../vision/types'
-import { categoriesIn, categoryOf } from '../data/categories'
+import { categoriesIn, categoryOf, orderSigns } from '../data/categories'
 import { matchesSearch, translationOf } from '../data/translations'
 
 export interface CategorySignNavigatorProps {
@@ -65,8 +65,8 @@ export function CategorySignNavigator({
     if (!selectedCategory) return []
     const list = signsByCategory.get(selectedCategory) ?? []
     const q = categoryQuery.trim()
-    if (!q) return list
-    return list.filter((r) => matchesSearch(r.gloss, q))
+    const filtered = q ? list.filter((r) => matchesSearch(r.gloss, q)) : list
+    return orderSigns(selectedCategory, filtered)
   }, [selectedCategory, signsByCategory, categoryQuery])
 
   // Suggested sign record

@@ -140,13 +140,11 @@ export function PracticeView() {
     setSuggested(next)
   }, [references, entries, categoryFor])
 
-  const suggestedRec = useMemo(
-    () => references.find((r) => r.gloss === suggested) ?? null,
-    [references, suggested],
-  )
-  // What the browsing preview shows: hovered sign, else the one already
-  // selected, else today's suggestion.
-  const previewRec = hoverRec ?? selected ?? suggestedRec
+  // What the browsing preview shows: the sign under the pointer, else the one
+  // already selected. Deliberately NOT the suggestion — landing in Practice
+  // straight from the hero should be a calm blank pane, not an animation the
+  // learner didn't ask for. The skeleton appears when they hover a sign.
+  const previewRec = hoverRec ?? selected
 
   // Load frames for the preview. loadReferenceFrames is module-cached, so
   // re-hovering a sign is instant; only the first look at one fetches.
@@ -539,7 +537,7 @@ const earlier = forGloss.slice(0, -1)
                    colorOverride="#e6eeec"
                  />
                ) : (
-                 <p className="hint-text">Point at a sign to preview it.</p>
+                 <p className="hint-text">Hover a sign to preview it here.</p>
                )}
              </div>
            )}
