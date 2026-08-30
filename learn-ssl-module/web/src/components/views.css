@@ -4372,17 +4372,6 @@
    CATEGORY & SIGN DISCOVERY NAVIGATOR (2-Step Interactive Flow)
    ========================================================================== */
 
-.aww-practice-env.aww-nav-mode {
-  position: relative;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: auto;
-  min-height: calc(100vh - 61px);
-  overflow-y: auto;
-  background: var(--surface);
-}
-
 .cs-nav-container {
   display: flex;
   flex-direction: column;
@@ -4438,8 +4427,10 @@
 }
 
 .cs-close-btn {
-  font-size: 1.1rem;
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
   border-radius: 999px;
   color: var(--text-dim);
 }
@@ -4551,12 +4542,14 @@
 .cs-search-clear {
   position: absolute;
   right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 0.85rem;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 5px;
   border-radius: 50%;
 }
 .cs-search-clear:hover {

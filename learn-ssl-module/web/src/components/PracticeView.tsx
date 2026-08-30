@@ -45,7 +45,6 @@ export function PracticeView() {
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
   const [isBrowsing, setIsBrowsing] = useState(true)
 
@@ -433,11 +432,7 @@ const earlier = forGloss.slice(0, -1)
   )
 
   return (
-    <div
-      className={`aww-practice-env${browsing ? ' aww-browse' : ''}`}
-      data-phase={phase}
-      data-picker-open={pickerOpen}
-    >
+    <div className={`aww-practice-env${browsing ? ' aww-browse' : ''}`} data-phase={phase}>
       {/* HUD — only while the camera is live. Turning the camera on is the
           camera pane's job (CameraStage intro), so there is one such button. */}
       {!browsing && phase !== 'result' && tracking.status === 'running' && (
@@ -497,8 +492,7 @@ const earlier = forGloss.slice(0, -1)
                 </div>
                 {phase !== 'result' && (
                   <div className="aww-pane-header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn ghost" onClick={() => setIsBrowsing(true)}>← Categories</button>
-                    <button className="btn ghost" onClick={() => setPickerOpen(true)}>Search</button>
+                    <button className="btn ghost" onClick={() => setIsBrowsing(true)}>← Choose a sign</button>
                   </div>
                 )}
               </div>
@@ -646,26 +640,8 @@ const earlier = forGloss.slice(0, -1)
 
       </div>
 
-      {/* Command Palette Modal for choosing a sign */}
-      <div className={`aww-picker-modal ${pickerOpen ? 'open' : ''}`}>
-        <div className="aww-picker-backdrop" onClick={() => setPickerOpen(false)} />
-        <div className="aww-picker-content">
-          <CategorySignNavigator
-            references={references}
-            suggested={suggested}
-            selectedId={selected?.id}
-            mode="practice"
-            isModal={true}
-            onSelect={(rec) => {
-              setSelected(rec)
-              setPickerOpen(false)
-            }}
-            onClose={() => setPickerOpen(false)}
-          />
-        </div>
-      </div>
-      
-      {/* Session Logic / Hidden items */}
+      {/* Live region for assistive tech — the countdown, recording state and
+          score have no other non-visual representation. */}
       <p className="sr-only" role="status">{liveMessage}</p>
     </div>
   )

@@ -120,7 +120,9 @@ export function CategorySignNavigator({
 
         {isModal && onClose && (
           <button type="button" className="btn btn-ghost cs-close-btn" onClick={onClose} aria-label="Close dialog">
-            ✕
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         )}
       </div>
@@ -149,7 +151,9 @@ export function CategorySignNavigator({
                 onClick={() => setCategoryQuery('')}
                 aria-label="Clear filter"
               >
-                ✕
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             )}
           </div>
@@ -175,7 +179,9 @@ export function CategorySignNavigator({
                 onClick={() => setGlobalQuery('')}
                 aria-label="Clear search"
               >
-                ✕
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             )}
           </div>
