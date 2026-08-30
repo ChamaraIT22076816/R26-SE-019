@@ -7,22 +7,22 @@ const STEPS = [
   {
     n: '01',
     title: 'Browse & Choose Signs',
-    body: 'Explore 490+ Sri Lankan Sign Language signs organized by intuitive categories, or follow intelligent practice recommendations.',
+    body: 'Explore 490+ reference sign recordings across 20 Sri Lankan Sign Language categories, or follow mastery-weighted practice recommendations.',
   },
   {
     n: '02',
     title: 'On-Device Motion Capture',
-    body: 'Hand and finger tracking runs 100% inside your browser via MediaPipe Vision at 60 FPS. Zero video is uploaded or stored on any server.',
+    body: 'Hand and finger tracking runs in real time, fully inside your browser via MediaPipe Vision. No video is ever uploaded or stored on any server.',
   },
   {
     n: '03',
     title: 'Joint-Level DTW Feedback',
-    body: 'Your signing motion is dynamically compared against real-signer benchmarks, providing instant feedback down to individual fingers in <300ms.',
+    body: 'Your signing motion is compared against real-signer benchmarks with dynamic time warping, returning feedback down to individual fingers within the 300 ms target.',
   },
   {
     n: '04',
-    title: 'Intelligent Mastery Tracking',
-    body: 'Spaced repetition algorithms adapt to your retention and prioritize the signs that need the most practice.',
+    title: 'Mastery-Weighted Practice',
+    body: 'Every attempt updates a running estimate of how well you know each sign, so practice stays weighted toward your weakest and least recently drilled signs.',
   },
 ]
 
@@ -33,7 +33,23 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
   const stepRefs = useRef<(HTMLElement | null)[]>([])
 
   useEffect(() => {
+    // This page sits in front of a camera tool that people open many times
+    // during a study — motion is decorative here, never load-bearing. Honour
+    // the OS "reduce motion" setting for the JS-driven animation too, not just
+    // the CSS keyframes (index.css handles those globally).
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
     let ctx = gsap.context(() => {
+      if (prefersReduced) {
+        // Land everything on its final state, no transition.
+        gsap.set(
+          ['.aww-hero-mark', '.aww-suvana-en', '.aww-suvana-si', '.aww-subline', '.aww-hero-cta', artRef.current],
+          { opacity: 1, y: 0, scale: 1 },
+        )
+        stepRefs.current.forEach((step) => step && gsap.set(step, { opacity: 1, y: 0 }))
+        return
+      }
+
       // 1. Entrance Animations
       gsap.fromTo('.aww-hero-mark', { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 1, ease: 'power4.out', delay: 0.1 })
       gsap.fromTo('.aww-suvana-en', { y: 100, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power4.out', delay: 0.2 })
@@ -47,11 +63,9 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
         gsap.to(artRef.current.querySelectorAll('circle'), {
           scale: 1.2,
           transformOrigin: 'center',
-          stagger: {
-            each: 0.1,
-            yoyo: true,
-            repeat: -1
-          },
+          yoyo: true,
+          repeat: -1,
+          stagger: { each: 0.1 },
           duration: 1.5,
           ease: 'sine.inOut'
         })
@@ -60,12 +74,12 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
       // 3. ScrollTrigger for Steps
       stepRefs.current.forEach((step) => {
         if (!step) return
-        gsap.fromTo(step, 
+        gsap.fromTo(step,
           { opacity: 0, y: 100 },
-          { 
-            opacity: 1, 
-            y: 0, 
-            duration: 1, 
+          {
+            opacity: 1,
+            y: 0,
+            duration: 1,
             ease: 'power3.out',
             scrollTrigger: {
               trigger: step,
@@ -77,26 +91,44 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
 
     }, container)
 
-    // 4. Marquee Velocity Hook
+    // 4. Marquee Velocity Hook. Only runs while the footer is on screen — a
+    // rAF loop scrolling an off-screen element is pure battery drain.
     let xPos = 0
-    let rafId: number
+    let rafId = 0
     const animateMarquee = () => {
       if (marqueeRef.current) {
         const scrollSpeed = Math.abs(((window as any).lenis?.velocity || 0) * 0.001)
         xPos -= (0.02 + scrollSpeed)
-        
         if (xPos <= -50) xPos += 50
-        else if (xPos > 0) xPos += 50
-        
         gsap.set(marqueeRef.current, { xPercent: xPos })
       }
       rafId = requestAnimationFrame(animateMarquee)
     }
-    rafId = requestAnimationFrame(animateMarquee)
+
+    let observer: IntersectionObserver | null = null
+    if (!prefersReduced) {
+      const footer = container.current?.querySelector('.aww-footer-editorial')
+      if (footer && 'IntersectionObserver' in window) {
+        observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting && !rafId) {
+              rafId = requestAnimationFrame(animateMarquee)
+            } else if (!entry.isIntersecting && rafId) {
+              cancelAnimationFrame(rafId)
+              rafId = 0
+            }
+          }
+        })
+        observer.observe(footer)
+      } else {
+        rafId = requestAnimationFrame(animateMarquee)
+      }
+    }
 
     return () => {
       ctx.revert()
-      cancelAnimationFrame(rafId)
+      if (rafId) cancelAnimationFrame(rafId)
+      observer?.disconnect()
     }
   }, [])
 
@@ -168,7 +200,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
         <div className="lhero-stats-strip">
           <div className="lstat-pill">
             <span className="lstat-val">490+</span>
-            <span className="lstat-lbl">SSL Signs</span>
+            <span className="lstat-lbl">Reference Signs</span>
           </div>
           <div className="lstat-sep" aria-hidden="true" />
           <div className="lstat-pill">
@@ -178,7 +210,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
           <div className="lstat-sep" aria-hidden="true" />
           <div className="lstat-pill">
             <span className="lstat-val">&lt;300ms</span>
-            <span className="lstat-lbl">Joint Feedback</span>
+            <span className="lstat-lbl">Feedback Target</span>
           </div>
         </div>
       </section>
@@ -215,21 +247,44 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
                 <div className="aww-preview-card card-capture">
                   <div className="capture-hud-top">
                     <span className="rec-dot" />
-                    <span className="fps-tag">60 FPS · ON-DEVICE</span>
+                    <span className="fps-tag">REAL-TIME · ON-DEVICE</span>
                   </div>
                   <div className="capture-viewfinder">
                     <div className="reticle-corner tl" />
                     <div className="reticle-corner tr" />
                     <div className="reticle-corner bl" />
                     <div className="reticle-corner br" />
-                    <div className="skeleton-hand-anim">
-                      <div className="hand-node wrist" />
-                      <div className="hand-node palm" />
-                      <div className="hand-node thumb" />
-                      <div className="hand-node index-finger" />
-                      <div className="hand-node middle" />
-                      <div className="hand-node ring" />
-                      <div className="hand-node pinky" />
+                    <div className="skeleton-hand-anim" aria-hidden="true">
+                      <svg className="skeleton-hand-svg" viewBox="0 0 140 140" fill="none">
+                        <g
+                          stroke="#20b2aa"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          opacity="0.75"
+                        >
+                          <path d="M70 126 L48 96 M70 126 L54 78 M70 126 L70 72 M70 126 L86 76 M70 126 L98 88" />
+                          <path d="M48 96 L33 84 L24 72 M54 78 L50 56 L46 38 M70 72 L69 48 L68 28 M86 76 L89 54 L92 36 M98 88 L104 70 L110 56" />
+                        </g>
+                        <g fill="#20b2aa">
+                          <circle cx="54" cy="78" r="3" />
+                          <circle cx="70" cy="72" r="3" />
+                          <circle cx="86" cy="76" r="3" />
+                          <circle cx="98" cy="88" r="3" />
+                          <circle cx="48" cy="96" r="3" />
+                          <circle cx="50" cy="56" r="2.4" />
+                          <circle cx="69" cy="48" r="2.4" />
+                          <circle cx="89" cy="54" r="2.4" />
+                          <circle cx="104" cy="70" r="2.4" />
+                          <circle cx="33" cy="84" r="2.4" />
+                          <circle cx="46" cy="38" r="2.4" />
+                          <circle cx="68" cy="28" r="2.4" />
+                          <circle cx="92" cy="36" r="2.4" />
+                          <circle cx="110" cy="56" r="2.4" />
+                          <circle cx="24" cy="72" r="2.4" />
+                        </g>
+                        <circle cx="70" cy="126" r="4.5" fill="#daa520" />
+                      </svg>
                       <div className="scan-line" />
                     </div>
                   </div>
@@ -240,7 +295,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
                   <div className="score-dial-wrap">
                     <div className="score-dial-outer">
                       <div className="score-dial-inner">
-                        <span className="score-num">96%</span>
+                        <span className="score-num">88%</span>
                         <span className="score-lbl">MATCH</span>
                       </div>
                     </div>

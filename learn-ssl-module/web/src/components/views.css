@@ -1681,7 +1681,7 @@
 }
 
 .aww-topbar {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
@@ -1710,13 +1710,6 @@
   height: 34px;
   width: auto;
   display: block;
-  mix-blend-mode: multiply;
-  filter: contrast(1.2);
-}
-
-:root[data-theme='dark'] .aww-topbar .mark {
-  filter: invert(1) hue-rotate(180deg) contrast(1.5); 
-  mix-blend-mode: screen;
 }
 
 .aww-topbar .wordmark {
@@ -1771,7 +1764,7 @@
   justify-content: center;
   text-align: center;
   position: relative;
-  padding-top: 100px;
+  padding: 96px 24px 40px;
 }
 
 .aww-titles {
@@ -1785,13 +1778,7 @@
 .aww-hero-mark {
   height: 100px;
   width: auto;
-  margin-bottom: 30px;
-  mix-blend-mode: multiply;
-  filter: contrast(1.2);
-}
-:root[data-theme='dark'] .aww-hero-mark {
-  filter: invert(1) hue-rotate(180deg) contrast(1.5); 
-  mix-blend-mode: screen;
+  margin-bottom: 16px;
 }
 
 .aww-suvana-en {
@@ -1849,7 +1836,7 @@
   max-width: 600px;
   font-size: clamp(1rem, 2vw, 1.25rem);
   color: var(--text-dim);
-  margin: 40px 0;
+  margin: 24px 0;
   z-index: 10;
   position: relative;
 }
@@ -1962,12 +1949,20 @@
   justify-content: center;
   align-items: center;
   width: 100%;
-  aspect-ratio: 1;
+  /* A fixed height instead of a 1:1 square: the square forced a ~600px card on
+     desktop that the content could never fill. */
+  height: 420px;
   background: var(--surface);
   border-radius: 30px;
   overflow: hidden;
   position: relative;
   border: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 768px) {
+  .aww-step-visual {
+    height: 340px;
+  }
 }
 
 /* ---- Hero Stats Strip ---- */
@@ -1982,7 +1977,7 @@
   padding: 12px 28px;
   border-radius: 999px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-  margin: 32px auto 0;
+  margin: 20px auto 0;
 }
 
 .lstat-pill {
@@ -2032,7 +2027,8 @@
   padding: 32px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 22px;
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
@@ -2071,7 +2067,6 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  margin: auto 0;
 }
 
 .v-pill {
@@ -2176,27 +2171,18 @@
   height: 140px;
 }
 
-.hand-node {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #20b2aa;
-  box-shadow: 0 0 12px #20b2aa;
-  animation: nodeGlow 2s infinite alternate ease-in-out;
+/* An actual hand skeleton — bones plus joints — rather than a scatter of
+   unconnected dots. Drawn inline in Hero.tsx; this just sizes and pulses it. */
+.skeleton-hand-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 6px rgba(32, 178, 170, 0.45));
+  animation: handGlow 2.4s infinite alternate ease-in-out;
 }
 
-.hand-node.wrist { bottom: 10px; left: 65px; background: #daa520; box-shadow: 0 0 12px #daa520; }
-.hand-node.palm { bottom: 45px; left: 65px; }
-.hand-node.thumb { bottom: 55px; left: 30px; animation-delay: 0.3s; }
-.hand-node.index-finger { top: 20px; left: 45px; animation-delay: 0.6s; }
-.hand-node.middle { top: 10px; left: 65px; animation-delay: 0.9s; }
-.hand-node.ring { top: 25px; left: 85px; animation-delay: 1.2s; }
-.hand-node.pinky { top: 45px; left: 105px; animation-delay: 1.5s; }
-
-@keyframes nodeGlow {
-  0% { transform: scale(0.9); opacity: 0.7; }
-  100% { transform: scale(1.3); opacity: 1; }
+@keyframes handGlow {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 .scan-line {
@@ -2226,26 +2212,34 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: auto 0;
 }
 
 .score-dial-outer {
+  position: relative;
   width: 130px;
   height: 130px;
   border-radius: 50%;
   border: 4px solid rgba(218, 165, 32, 0.2);
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: dialSpinPulse 4s infinite ease-in-out alternate;
   box-shadow: 0 0 30px rgba(32, 178, 170, 0.15);
 }
 
-@keyframes dialSpinPulse {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(45deg); }
+/* Only the arc spins — the score inside stays upright and readable. */
+.score-dial-outer::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 4px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  animation: dialSpin 6s infinite linear;
+}
+
+@keyframes dialSpin {
+  to { transform: rotate(360deg); }
 }
 
 .score-dial-inner {
@@ -2341,8 +2335,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
-  height: 100px;
-  margin: auto 0;
+  height: 120px;
   padding: 0 8px;
 }
 
