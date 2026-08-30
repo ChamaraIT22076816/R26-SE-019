@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import type { Tab } from '../app/tabs'
 import { ThemeToggle } from './ThemeToggle'
 import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import Lenis from 'lenis'
 
 const STEPS = [
   {
@@ -31,6 +33,34 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
   const marqueeRef = useRef<HTMLDivElement>(null)
   const artRef = useRef<SVGSVGElement>(null)
   const stepRefs = useRef<(HTMLElement | null)[]>([])
+
+  // Lenis smooth-scroll — a hero effect only. It lives here, not in main.tsx,
+  // so it is torn down when the learner enters the tool: run globally it
+  // intercepts the wheel from every scroll container in the app.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const lenis = new Lenis({ lerp: 0.1, smoothWheel: true })
+    ;(window as unknown as { lenis?: Lenis }).lenis = lenis
+
+    lenis.on('scroll', ScrollTrigger.update)
+    lenis.on('scroll', ({ progress, limit }: { progress: number; limit: number }) => {
+      const bar = document.getElementById('scroll-progress')
+      if (bar && limit > 0) bar.style.transform = `scaleX(${progress})`
+    })
+
+    const raf = (time: number) => lenis.raf(time * 1000)
+    gsap.ticker.add(raf)
+    gsap.ticker.lagSmoothing(0)
+
+    return () => {
+      gsap.ticker.remove(raf)
+      lenis.destroy()
+      delete (window as unknown as { lenis?: Lenis }).lenis
+      const bar = document.getElementById('scroll-progress')
+      if (bar) bar.style.transform = 'scaleX(0)'
+    }
+  }, [])
 
   useEffect(() => {
     // This page sits in front of a camera tool that people open many times
