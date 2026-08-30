@@ -1710,13 +1710,6 @@
   height: 34px;
   width: auto;
   display: block;
-  mix-blend-mode: multiply;
-  filter: contrast(1.2);
-}
-
-:root[data-theme='dark'] .aww-topbar .mark {
-  filter: invert(1) hue-rotate(180deg) contrast(1.5); 
-  mix-blend-mode: screen;
 }
 
 .aww-topbar .wordmark {
@@ -1786,12 +1779,6 @@
   height: 100px;
   width: auto;
   margin-bottom: 16px;
-  mix-blend-mode: multiply;
-  filter: contrast(1.2);
-}
-:root[data-theme='dark'] .aww-hero-mark {
-  filter: invert(1) hue-rotate(180deg) contrast(1.5); 
-  mix-blend-mode: screen;
 }
 
 .aww-suvana-en {
