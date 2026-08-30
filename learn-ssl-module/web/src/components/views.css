@@ -2484,18 +2484,6 @@
   overflow: hidden;
 }
 
-.aww-pane::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 150px;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
-  pointer-events: none;
-  z-index: 5;
-}
-
 .aww-pane-left {
   border-right: 1px solid var(--border-subtle);
   background: var(--surface-2);
@@ -2606,10 +2594,12 @@
 .aww-pane .skeleton-player {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Important to fill the pane! */
+  object-fit: cover;
 }
-/* Wait, SkeletonPlayer returns an SVG/Canvas. We must ensure it covers. */
-.aww-pane svg, .aww-pane canvas, .aww-pane video {
+.aww-pane .skeleton-player svg,
+.aww-pane .skeleton-player canvas,
+.aww-pane .stage-live video,
+.aww-pane .stage-live canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -4139,9 +4129,10 @@
 .cs-nav-pane {
   width: 100%;
   height: 100%;
-  padding: 24px 28px 80px;
-  overflow-y: auto;
+  padding: 16px 20px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -4149,28 +4140,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  gap: 16px;
+  margin-bottom: 12px;
+  gap: 12px;
 }
 
 .cs-nav-title-group .cs-nav-title {
   font-family: var(--serif, 'Noto Serif', serif);
-  font-size: 1.6rem;
+  font-size: 1.35rem;
   color: var(--text);
-  margin: 0 0 4px;
+  margin: 0;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .cs-nav-subtitle {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   color: var(--text-dim);
-  margin: 0;
+  margin: 2px 0 0;
 }
 
 .cs-close-btn {
-  font-size: 1.2rem;
-  padding: 8px 14px;
+  font-size: 1.1rem;
+  padding: 6px 12px;
   border-radius: 999px;
   color: var(--text-dim);
 }
@@ -4179,7 +4170,7 @@
 .cs-nav-breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -4187,50 +4178,51 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 5px 12px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+}
+
+.cs-back-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+  display: block;
 }
 
 .cs-back-btn:hover {
   background: var(--surface-hover);
   border-color: var(--accent);
-  transform: translateX(-2px);
 }
 
 .cs-crumb-sep {
   color: var(--text-dim);
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .cs-crumb-current {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text);
 }
 
-.cs-crumb-icon {
-  font-size: 1.2rem;
-}
-
 .cs-crumb-count {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
   font-weight: 400;
 }
 
 /* Search Row */
 .cs-search-row {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .cs-search-input-wrap {
@@ -4242,39 +4234,51 @@
 
 .cs-search-icon {
   position: absolute;
-  left: 16px;
+  left: 12px;
+  width: 16px !important;
+  height: 16px !important;
   color: var(--text-dim);
   pointer-events: none;
+  display: block;
 }
 
 .cs-search-input {
   width: 100%;
-  padding: 12px 42px 12px 42px;
-  font-size: 0.95rem;
-  border-radius: 12px;
+  padding: 8px 30px 8px 36px;
+  font-size: 0.88rem;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-2);
   color: var(--text);
   outline: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.cs-search-input::-webkit-search-cancel-button,
+.cs-search-input::-webkit-search-decoration,
+.cs-search-input::-webkit-search-results-button,
+.cs-search-input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 
 .cs-search-input:focus {
   border-color: var(--accent);
   background: var(--surface);
-  box-shadow: 0 0 0 3px rgba(32, 178, 170, 0.15);
+  box-shadow: 0 0 0 2px rgba(32, 178, 170, 0.15);
 }
 
 .cs-search-clear {
   position: absolute;
-  right: 12px;
+  right: 8px;
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: 50%;
 }
 .cs-search-clear:hover {
@@ -4282,49 +4286,55 @@
   background: var(--surface-hover);
 }
 
-/* Suggested Banner */
+/* Suggested Banner (Compact Single Row) */
 .cs-suggested-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 20px;
-  margin-bottom: 20px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(218, 165, 32, 0.12), rgba(32, 178, 170, 0.12));
-  border: 1px solid rgba(218, 165, 32, 0.35);
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(218, 165, 32, 0.1), rgba(32, 178, 170, 0.1));
+  border: 1px solid rgba(218, 165, 32, 0.3);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .cs-suggested-banner:hover {
-  transform: translateY(-2px);
   border-color: var(--accent);
-  box-shadow: 0 8px 24px rgba(218, 165, 32, 0.12);
+  background: linear-gradient(135deg, rgba(218, 165, 32, 0.15), rgba(32, 178, 170, 0.15));
+}
+
+.cs-suggested-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cs-suggested-tag {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: var(--p-gold-400, #daa520);
-  display: block;
-  margin-bottom: 2px;
+  background: rgba(218, 165, 32, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .cs-suggested-gloss {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text);
   margin: 0;
 }
 
 .cs-suggested-sub {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
-  margin: 2px 0 0;
-  font-style: italic;
+  margin: 0;
 }
 
 .cs-suggested-btn {
@@ -4336,143 +4346,110 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  margin-bottom: 20px;
-  border-radius: 14px;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
   background: var(--surface-2);
   border: 1px dashed var(--border-interactive);
 }
 
-.cs-custom-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.cs-custom-icon {
-  font-size: 1.4rem;
-}
-
 .cs-custom-info h4 {
-  margin: 0 0 2px;
-  font-size: 0.95rem;
+  margin: 0;
+  font-size: 0.88rem;
   color: var(--text);
 }
 
 .cs-custom-info p {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-dim);
 }
 
-/* Categories Grid */
+/* Categories Grid: 3 columns, clean compact rows to fit without scrolling */
 .cs-categories-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 2px;
 }
 
 .cs-category-card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: space-between;
-  min-height: 120px;
-  padding: 16px;
+  padding: 8px 12px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  height: 38px;
+  box-sizing: border-box;
 }
 
 .cs-category-card:hover {
   background: var(--surface-hover);
   border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.06);
 }
 
 .cs-category-card:focus-visible {
   outline: 2px solid var(--accent);
 }
 
-.cs-cat-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.cs-cat-icon {
-  font-size: 1.5rem;
+.cs-cat-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cs-cat-badge {
   font-family: var(--mono);
-  font-size: 0.72rem;
-  padding: 2px 8px;
+  font-size: 0.7rem;
+  padding: 1px 6px;
   border-radius: 999px;
   background: rgba(32, 178, 170, 0.12);
   color: var(--accent);
   font-weight: 600;
-}
-
-.cs-cat-name {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 8px;
-  line-height: 1.25;
-}
-
-.cs-cat-samples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.cs-sample-pill {
-  font-size: 0.68rem;
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-dim);
-}
-
-.cs-sample-more {
-  font-size: 0.68rem;
-  padding: 2px 4px;
-  color: var(--text-dim);
-  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 6px;
 }
 
 /* Signs Grid */
 .cs-signs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+  padding: 4px 4px 12px 2px;
 }
 
 .cs-sign-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 14px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px 10px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  min-height: 46px;
+  box-sizing: border-box;
+  position: relative;
 }
 
 .cs-sign-card:hover {
   background: var(--surface-hover);
   border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
 }
 
 .cs-sign-card.selected {
@@ -4484,65 +4461,89 @@
   border-color: rgba(218, 165, 32, 0.4);
 }
 
+.cs-sign-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
 .cs-sign-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 6px;
+  width: 100%;
+  gap: 4px;
+  margin-bottom: 2px;
 }
 
 .cs-sign-cat-tag {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 600;
 }
 
+.cs-sign-badges {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+}
+
 .cs-suggested-chip {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   background: rgba(218, 165, 32, 0.15);
   color: var(--p-gold-400, #daa520);
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 
 .cs-team-chip {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   background: rgba(32, 178, 170, 0.15);
   color: var(--accent);
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 
 .cs-sign-gloss {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text);
-  margin: 0 0 2px;
-  line-height: 1.25;
+  margin: 0;
+  line-height: 1.2;
 }
 
 .cs-sign-meaning {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  margin: 0;
-  font-style: italic;
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .cs-results-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  font-size: 0.9rem;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
   color: var(--text-dim);
 }
 
 .cs-empty-state {
   text-align: center;
-  padding: 36px 20px;
+  padding: 28px 16px;
   background: var(--surface-2);
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px dashed var(--border-subtle);
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 

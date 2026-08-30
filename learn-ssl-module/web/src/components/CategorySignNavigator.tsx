@@ -14,45 +14,6 @@ export interface CategorySignNavigatorProps {
   onClose?: () => void
 }
 
-/** Category visual icon/glyph helper */
-function categoryIcon(category: string): string {
-  switch (category.toLowerCase()) {
-    case 'greetings':
-      return '👋'
-    case 'verbs':
-      return '⚡'
-    case 'nouns':
-      return '📦'
-    case 'people':
-      return '👥'
-    case 'places':
-      return '📍'
-    case 'food & drink':
-    case 'food':
-      return '🍽️'
-    case 'colors':
-      return '🎨'
-    case 'days':
-    case 'months':
-      return '📅'
-    case 'numbers':
-    case '20-99':
-    case '100-1 million':
-      return '🔢'
-    case 'a-z':
-      return '🔤'
-    case 'vehicles':
-      return '🚗'
-    case 'adjectives':
-    case 'adverb':
-      return '✨'
-    case 'my recordings':
-      return '⭐'
-    default:
-      return '🏷️'
-  }
-}
-
 export function CategorySignNavigator({
   references,
   suggested = null,
@@ -114,9 +75,7 @@ export function CategorySignNavigator({
 
   return (
     <div className={`cs-nav-container ${isModal ? 'cs-nav-modal' : 'cs-nav-pane'}`}>
-      {/* -------------------------------------------------------------
-          Header / Topbar
-         ------------------------------------------------------------- */}
+      {/* Header / Topbar */}
       <div className="cs-nav-header">
         <div className="cs-nav-header-left">
           {selectedCategory && !isSearchingGlobal ? (
@@ -130,14 +89,13 @@ export function CategorySignNavigator({
                 }}
                 aria-label="Back to all categories"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
                 <span>Categories</span>
               </button>
               <span className="cs-crumb-sep">/</span>
               <span className="cs-crumb-current">
-                <span className="cs-crumb-icon">{categoryIcon(selectedCategory)}</span>
                 <strong>{selectedCategory}</strong>
                 <span className="cs-crumb-count">
                   ({signsByCategory.get(selectedCategory)?.length ?? 0})
@@ -163,22 +121,22 @@ export function CategorySignNavigator({
         )}
       </div>
 
-      {/* -------------------------------------------------------------
-          Search Bar
-         ------------------------------------------------------------- */}
+      {/* Search Bar */}
       <div className="cs-search-row">
         {selectedCategory && !isSearchingGlobal ? (
           <div className="cs-search-input-wrap">
-            <svg className="cs-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
+            <svg className="cs-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
-              type="search"
+              type="text"
               className="cs-search-input"
               value={categoryQuery}
               onChange={(e) => setCategoryQuery(e.target.value)}
               placeholder={`Search within ${selectedCategory}...`}
+              autoComplete="off"
+              spellCheck={false}
             />
             {categoryQuery && (
               <button
@@ -193,16 +151,18 @@ export function CategorySignNavigator({
           </div>
         ) : (
           <div className="cs-search-input-wrap">
-            <svg className="cs-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
+            <svg className="cs-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
-              type="search"
+              type="text"
               className="cs-search-input"
               value={globalQuery}
               onChange={(e) => setGlobalQuery(e.target.value)}
-              placeholder={`Search ${references.length}+ signs (e.g. eat, thank you)...`}
+              placeholder={`Search ${references.length} signs...`}
+              autoComplete="off"
+              spellCheck={false}
             />
             {globalQuery && (
               <button
@@ -218,26 +178,22 @@ export function CategorySignNavigator({
         )}
       </div>
 
-      {/* -------------------------------------------------------------
-          Step 1 (Main View): Categories Grid or Global Search Results
-         ------------------------------------------------------------- */}
+      {/* Step 1: Categories Grid or Global Search Results */}
       {!selectedCategory && !isSearchingGlobal && (
         <div className="cs-category-view">
           {/* Suggested Sign Quick-Pick Banner */}
           {suggestedRec && mode === 'practice' && (
             <div className="cs-suggested-banner" onClick={() => onSelect(suggestedRec)} role="button" tabIndex={0}>
               <div className="cs-suggested-left">
-                <span className="cs-suggested-tag">★ SUGGESTED</span>
+                <span className="cs-suggested-tag">SUGGESTED</span>
                 <h3 className="cs-suggested-gloss">{glossLabel(suggestedRec.gloss)}</h3>
                 {translationOf(suggestedRec.gloss) && (
-                  <p className="cs-suggested-sub">"{translationOf(suggestedRec.gloss)}"</p>
+                  <span className="cs-suggested-sub">"{translationOf(suggestedRec.gloss)}"</span>
                 )}
               </div>
-              <div className="cs-suggested-right">
-                <button type="button" className="btn small cs-suggested-btn">
-                  Select
-                </button>
-              </div>
+              <button type="button" className="btn small cs-suggested-btn">
+                Select
+              </button>
             </div>
           )}
 
@@ -245,11 +201,8 @@ export function CategorySignNavigator({
           {mode === 'record' && onCreateCustom && (
             <div className="cs-custom-gloss-card">
               <div className="cs-custom-info">
-                <span className="cs-custom-icon">✨</span>
-                <div>
-                  <h4>Custom Sign</h4>
-                  <p>Record a new sign not in the bundled corpus.</p>
-                </div>
+                <h4>Custom Sign</h4>
+                <p>Record a new sign not in the corpus.</p>
               </div>
               <button
                 type="button"
@@ -261,16 +214,15 @@ export function CategorySignNavigator({
                   }
                 }}
               >
-                + Custom
+                + New Sign
               </button>
             </div>
           )}
 
-          {/* Categories Grid */}
+          {/* Categories Grid (Clean compact tiles) */}
           <div className="cs-categories-grid">
             {categories.map((catName) => {
               const catSigns = signsByCategory.get(catName) ?? []
-              const sampleSigns = catSigns.slice(0, 3).map((s) => glossLabel(s.gloss))
               return (
                 <div
                   key={catName}
@@ -288,25 +240,8 @@ export function CategorySignNavigator({
                     }
                   }}
                 >
-                  <div className="cs-cat-top">
-                    <span className="cs-cat-icon">{categoryIcon(catName)}</span>
-                    <span className="cs-cat-badge">{catSigns.length}</span>
-                  </div>
-
-                  <h3 className="cs-cat-name">{catName}</h3>
-
-                  {sampleSigns.length > 0 && (
-                    <div className="cs-cat-samples">
-                      {sampleSigns.map((g, idx) => (
-                        <span key={idx} className="cs-sample-pill">
-                          {g}
-                        </span>
-                      ))}
-                      {catSigns.length > 3 && (
-                        <span className="cs-sample-more">+{catSigns.length - 3}</span>
-                      )}
-                    </div>
-                  )}
+                  <span className="cs-cat-name" title={catName}>{catName}</span>
+                  <span className="cs-cat-badge">{catSigns.length}</span>
                 </div>
               )
             })}
@@ -314,20 +249,11 @@ export function CategorySignNavigator({
         </div>
       )}
 
-      {/* -------------------------------------------------------------
-          Global Search Results Grid (when user types in global search)
-         ------------------------------------------------------------- */}
+      {/* Global Search Results Grid */}
       {!selectedCategory && isSearchingGlobal && (
         <div className="cs-search-results-view">
           <div className="cs-results-bar">
             <span><strong>{globalSearchResults.length}</strong> matching signs</span>
-            <button
-              type="button"
-              className="btn btn-ghost small"
-              onClick={() => setGlobalQuery('')}
-            >
-              Clear
-            </button>
           </div>
 
           {globalSearchResults.length === 0 ? (
@@ -340,7 +266,7 @@ export function CategorySignNavigator({
                   style={{ marginTop: '12px' }}
                   onClick={() => onCreateCustom(globalQuery.trim().toUpperCase())}
                 >
-                  + Record custom "{globalQuery.trim().toUpperCase()}"
+                  + Record "{globalQuery.trim().toUpperCase()}"
                 </button>
               )}
             </div>
@@ -363,7 +289,7 @@ export function CategorySignNavigator({
                   >
                     <div className="cs-sign-top">
                       <span className="cs-sign-cat-tag">{categoryOf(r)}</span>
-                      {isSuggested && <span className="badge cs-suggested-chip">★ Suggested</span>}
+                      {isSuggested && <span className="badge cs-suggested-chip">Suggested</span>}
                       {r.source === 'team-recording' && <span className="badge cs-team-chip">Team</span>}
                     </div>
 
@@ -377,9 +303,7 @@ export function CategorySignNavigator({
         </div>
       )}
 
-      {/* -------------------------------------------------------------
-          Step 2: Signs List/Grid for Selected Category
-         ------------------------------------------------------------- */}
+      {/* Step 2: Signs List/Grid for Selected Category */}
       {selectedCategory && (
         <div className="cs-category-signs-view">
           {categorySigns.length === 0 ? (
@@ -410,14 +334,17 @@ export function CategorySignNavigator({
                       if (e.key === 'Enter' || e.key === ' ') onSelect(r)
                     }}
                   >
-                    <div className="cs-sign-top">
-                      <span className="cs-sign-cat-tag">{categoryOf(r)}</span>
-                      {isSuggested && <span className="badge cs-suggested-chip">★ Suggested</span>}
-                      {r.source === 'team-recording' && <span className="badge cs-team-chip">Team</span>}
+                    <div className="cs-sign-main">
+                      <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
+                      {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                     </div>
 
-                    <h4 className="cs-sign-gloss">{glossLabel(r.gloss)}</h4>
-                    {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
+                    {(isSuggested || r.source === 'team-recording') && (
+                      <div className="cs-sign-badges">
+                        {isSuggested && <span className="badge cs-suggested-chip">Suggested</span>}
+                        {r.source === 'team-recording' && <span className="badge cs-team-chip">Team</span>}
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -348,56 +348,31 @@ const earlier = forGloss.slice(0, -1)
 
   return (
     <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
-      {/* HUD (Heads-Up Display) Bottom Center */}
-      {phase !== 'result' && (
-      <div className="aww-hud">
+      {/* HUD (Heads-Up Display) Bottom Center - Only visible when practicing an active sign */}
+      {!isBrowsing && selected && phase !== 'result' && (
+        <div className="aww-hud">
           {tracking.status !== 'running' ? (
-              <div className="aww-hud-idle">
-                  <button className="btn massive ghost" onClick={() => void tracking.start()}>Turn on Camera</button>
-                  <p>Tracking runs entirely in your browser.</p>
-              </div>
-          ) : isBrowsing || !selected ? (
-              <div className="aww-hud-idle">
-                  <p className="aww-hud-hint" style={{ margin: 0, color: 'var(--text-dim)' }}>
-                    {suggested ? (
-                      <>
-                        <span>Select a sign on the left or </span>
-                        <button
-                          type="button"
-                          className="btn ghost small"
-                          style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: '6px' }}
-                          onClick={() => {
-                            const rec = references.find((r) => r.gloss === suggested)
-                            if (rec) {
-                              setSelected(rec)
-                              setIsBrowsing(false)
-                            }
-                          }}
-                        >
-                          Practice Suggested: {glossLabel(suggested)}
-                        </button>
-                      </>
-                    ) : (
-                      'Select a sign from the category menu on the left to start'
-                    )}
-                  </p>
-              </div>
+            <button className="btn massive ghost" onClick={() => void tracking.start()}>
+              Turn on Camera to Practice
+            </button>
           ) : phase === 'idle' ? (
-              <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
-                {reference ? 'Record Attempt' : 'Loading reference...'}
-              </button>
+            <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
+              {reference ? 'Record Attempt' : 'Loading reference...'}
+            </button>
           ) : phase === 'countdown' ? (
-              <div className="aww-hud-countdown">
-                  <span>{count}</span>
-                  <button className="btn ghost massive" onClick={cancelCountdown}>Cancel</button>
-              </div>
+            <div className="aww-hud-countdown">
+              <span>{count}</span>
+              <button className="btn ghost massive" onClick={cancelCountdown}>Cancel</button>
+            </div>
           ) : phase === 'recording' ? (
-              <div className="aww-hud-recording">
-                 <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
-                 <button className="btn massive" style={{background: 'var(--p-coral-500)'}} onClick={finishRecording}>Stop & Score</button>
-              </div>
+            <div className="aww-hud-recording">
+              <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
+              <button className="btn massive" style={{ background: 'var(--p-coral-500)' }} onClick={finishRecording}>
+                Stop & Score
+              </button>
+            </div>
           ) : null}
-      </div>
+        </div>
       )}
 
       {/* The Split Screen */}
@@ -424,7 +399,7 @@ const earlier = forGloss.slice(0, -1)
                   <h2 className="aww-pane-title">
                     {glossLabel(selected.gloss)}
                     {selected.gloss === suggested && (
-                      <span className="practice-star" title="Suggested next"> ★</span>
+                      <span className="badge cs-suggested-chip" style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Suggested</span>
                     )}
                   </h2>
                 </div>

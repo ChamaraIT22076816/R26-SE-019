@@ -203,10 +203,10 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
                     <span className="search-text">Search 490+ signs...</span>
                   </div>
                   <div className="card-vocab-pills">
-                    <span className="v-pill v-pill-1">AYUBOWAN 👋</span>
-                    <span className="v-pill v-pill-2">STHUTHI 🙏</span>
-                    <span className="v-pill v-pill-3">KANAWA 🍽️</span>
-                    <span className="v-pill v-pill-4">AMMA 👥</span>
+                    <span className="v-pill v-pill-1">AYUBOWAN</span>
+                    <span className="v-pill v-pill-2">STHUTHI</span>
+                    <span className="v-pill v-pill-3">KANAWA</span>
+                    <span className="v-pill v-pill-4">AMMA</span>
                   </div>
                   <div className="card-vocab-badge">20 Categories</div>
                 </div>
@@ -255,7 +255,7 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
               {index === 3 && (
                 <div className="aww-preview-card card-mastery">
                   <div className="mastery-header">
-                    <span className="mastery-streak">🔥 5 Day Streak</span>
+                    <span className="mastery-streak">5 Day Streak</span>
                     <span className="mastery-level">Mastery: 84%</span>
                   </div>
                   <div className="mastery-chart">
@@ -268,8 +268,8 @@ export function Hero({ onEnter }: { onEnter: (tab: Tab) => void }) {
                     <div className="chart-bar b7" />
                   </div>
                   <div className="mastery-badge-row">
-                    <span className="m-badge gold">🏆 Fluent</span>
-                    <span className="m-badge teal">⚡ Fast</span>
+                    <span className="m-badge gold">Fluent</span>
+                    <span className="m-badge teal">Consistent</span>
                   </div>
                 </div>
               )}
