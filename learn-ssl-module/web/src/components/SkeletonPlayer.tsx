@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Pause, Play } from 'lucide-react'
 import { drawHands, fitFor } from '../vision/drawing'
 import type { HandFrame } from '../vision/types'
 
@@ -120,11 +121,11 @@ export function SkeletonPlayer({
         className={mirrored ? 'mirrored' : undefined}
       />
       <div className="player-controls">
-        <button className="btn btn-ghost" onClick={togglePlay}>
-          {playing ? 'Pause' : 'Play'}
+        <button className="player-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+          {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
         </button>
         <button
-          className="btn btn-ghost"
+          className="player-btn"
           onClick={() => setSpeed((s) => (s === 1 ? 0.5 : 1))}
           aria-pressed={speed === 0.5}
           aria-label={speed === 1 ? 'Play at half speed' : 'Play at normal speed'}

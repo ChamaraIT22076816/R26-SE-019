@@ -22,6 +22,7 @@ import type { PracticeSession } from '../learner/session'
 import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
+import { ChevronLeft, Circle, Square, X } from 'lucide-react'
 import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
@@ -431,33 +432,6 @@ const earlier = forGloss.slice(0, -1)
 
   return (
     <div className={`aww-practice-env${browsing ? ' aww-browse' : ''}`} data-phase={phase}>
-      {/* HUD — only while the camera is live. Turning the camera on is the
-          camera pane's job (CameraStage intro), so there is one such button. */}
-      {!browsing && phase !== 'result' && tracking.status === 'running' && (
-        <div className="aww-hud">
-          {phase === 'idle' ? (
-            <button className="btn massive" onClick={beginCountdown} disabled={!reference}>
-              {reference ? 'Record attempt' : 'Loading reference…'}
-            </button>
-          ) : phase === 'countdown' ? (
-            <div className="aww-hud-countdown">
-              <span>{count}</span>
-              <button className="btn ghost massive" onClick={cancelCountdown}>Cancel</button>
-            </div>
-          ) : phase === 'recording' ? (
-            <div className="aww-hud-recording">
-              <span className="aww-rec-timer">
-                <span className="aww-rec-dot" aria-hidden="true" />
-                REC {(elapsedMs / 1000).toFixed(1)}s
-              </span>
-              <button className="btn massive aww-btn-stop" onClick={finishRecording}>
-                Stop &amp; Score
-              </button>
-            </div>
-          ) : null}
-        </div>
-      )}
-
       {/* The Split Screen */}
       <div className="aww-split-screen">
         
@@ -478,8 +452,17 @@ const earlier = forGloss.slice(0, -1)
             />
           ) : (
             <>
-              <div className="aww-pane-header">
-                <div>
+              <div className="aww-pane-header aww-ref-header">
+                {phase !== 'result' && (
+                  <button
+                    className="aww-back-round"
+                    onClick={() => setIsBrowsing(true)}
+                    aria-label="Choose a different sign"
+                  >
+                    <ChevronLeft size={20} aria-hidden="true" />
+                  </button>
+                )}
+                <div className="aww-ref-heading">
                   <p className="aww-pane-label">Reference</p>
                   <h2 className="aww-pane-title">
                     {glossLabel(selected.gloss)}
@@ -488,11 +471,6 @@ const earlier = forGloss.slice(0, -1)
                     )}
                   </h2>
                 </div>
-                {phase !== 'result' && (
-                  <div className="aww-pane-header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn ghost" onClick={() => setIsBrowsing(true)}>← Choose a sign</button>
-                  </div>
-                )}
               </div>
               
               <div className="aww-pane-content">
@@ -584,6 +562,43 @@ const earlier = forGloss.slice(0, -1)
                  }
                />
            </div>
+
+           {/* Camera controls, anchored to this pane. One action button at a
+               time: bottom-left; the countdown centres over the view, the
+               recording timer sits top-right. */}
+           {!browsing && phase !== 'result' && tracking.status === 'running' && (
+             <>
+               {phase === 'countdown' && (
+                 <div className="aww-cam-countdown" aria-hidden="true">{count}</div>
+               )}
+               {phase === 'recording' && (
+                 <div className="aww-cam-rec">
+                   <span className="aww-rec-dot" aria-hidden="true" />
+                   REC {(elapsedMs / 1000).toFixed(1)}s
+                 </div>
+               )}
+               <div className="aww-cam-action">
+                 {phase === 'idle' && (
+                   <button className="aww-cam-btn" onClick={beginCountdown} disabled={!reference}>
+                     <Circle size={15} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                     {reference ? 'Record attempt' : 'Loading…'}
+                   </button>
+                 )}
+                 {phase === 'countdown' && (
+                   <button className="aww-cam-btn aww-cam-btn-ghost" onClick={cancelCountdown}>
+                     <X size={16} aria-hidden="true" />
+                     Cancel
+                   </button>
+                 )}
+                 {phase === 'recording' && (
+                   <button className="aww-cam-btn aww-cam-btn-stop" onClick={finishRecording}>
+                     <Square size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                     Stop &amp; Score
+                   </button>
+                 )}
+               </div>
+             </>
+           )}
 
            {/* Replay Overlay */}
            {phase === 'result' && attempt && (

@@ -1580,9 +1580,31 @@
   gap: 10px;
 }
 
-.player-controls .btn {
-  padding: 6px 14px;
-  font-size: 13px;
+/* Play/Pause and the speed toggle: same footprint, so the bar does not jiggle
+   when Play (icon) becomes 0.5x (text). */
+.player-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-interactive);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 600 13px var(--sans);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.player-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+.player-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .player-controls input[type='range'] {
@@ -2581,13 +2603,17 @@
     -webkit-backdrop-filter: none;
   }
 
-  .aww-hud {
-    position: fixed;
+  /* The pane already ends above the tab bar (env bottom: var(--nav-offset)). */
+  .aww-cam-action {
     left: 12px;
+    bottom: 14px;
+  }
+  .aww-cam-rec {
+    top: 12px;
     right: 12px;
-    bottom: calc(var(--nav-offset) + 12px);
-    transform: none;
-    width: auto;
+  }
+  .aww-cam-countdown {
+    font-size: 4.5rem;
   }
 }
 
@@ -2687,6 +2713,39 @@
   color: #fff;
   margin: 0;
   line-height: 1.1;
+}
+
+/* Reference pane: round back button top-left, the label + sign name to the
+   right corner. */
+.aww-ref-header {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.aww-back-round {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border-interactive);
+  background: rgba(var(--surface-rgb), 0.7);
+  color: var(--text);
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.aww-back-round:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.aww-ref-heading {
+  text-align: right;
+  min-width: 0;
 }
 
 .aww-pane-content, .aww-camera-container, .aww-replay-container {
@@ -2816,54 +2875,72 @@
 
 
 /* ============================================================================
-   HUD (Heads-Up Display)
+   CAMERA CONTROLS — anchored to the "You" pane, one action at a time
    ========================================================================== */
 
-.aww-hud {
+/* Action button, bottom-left of the camera view. */
+.aww-cam-action {
   position: absolute;
-  bottom: 36px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 24px;
+  bottom: 24px;
   z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  background: rgba(var(--surface-rgb), 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  padding: 20px 36px;
-  border-radius: 24px;
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-  color: var(--text);
 }
 
-.aww-hud-idle, .aww-hud-actions, .aww-hud-recording {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.aww-hud-idle p {
-  color: var(--text-dim);
-  font-size: 0.9rem;
-}
-
-/* Recording state: timer above the stop button, laid out in flow — the old
-   .rec-badge is absolutely positioned for a camera corner and landed on top
-   of the button here. */
-.aww-hud-recording {
-  flex-direction: column;
-  gap: 12px;
-}
-
-.aww-rec-timer {
+.aww-cam-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding: 12px 22px;
+  border: none;
+  border-radius: 999px;
+  font: 600 0.95rem var(--sans);
+  cursor: pointer;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.aww-cam-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.aww-cam-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.aww-cam-btn-stop {
+  background: var(--recording);
+  color: #fff;
+}
+.aww-cam-btn-stop:hover:not(:disabled) {
+  background: var(--recording-strong);
+}
+
+.aww-cam-btn-ghost {
+  background: rgba(var(--surface-rgb), 0.85);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Recording timer, top-right — clear of the "You" label top-left. */
+.aww-cam-rec {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
   font: 700 13px var(--mono);
   letter-spacing: 1px;
-  color: var(--text);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .aww-rec-dot {
@@ -2874,26 +2951,17 @@
   animation: blinkRec 1s infinite alternate;
 }
 
-.aww-hud-recording .btn.massive.aww-btn-stop {
-  background: var(--recording);
-  color: #fff !important;
-}
-.aww-hud-recording .btn.massive.aww-btn-stop:hover {
-  background: var(--recording-strong);
-}
-
-.aww-hud-countdown {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.aww-hud-countdown span {
-  font-size: 4rem;
-  font-weight: 800;
-  font-family: var(--mono);
+/* Countdown, centred over the camera. */
+.aww-cam-countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  font: 800 6rem var(--mono);
   color: var(--p-gold-400);
-  line-height: 1;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 
 
@@ -3102,9 +3170,6 @@
   border-radius: 999px;
 }
 
-.aww-practice-env .aww-pane-left .player-controls .btn {
-  flex-shrink: 0;
-}
 
 .aww-result-center .score-badge svg {
   background: var(--surface);
