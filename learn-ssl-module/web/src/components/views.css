@@ -1145,10 +1145,12 @@
   gap: 8px;
 }
 
+/* A label, not a control — filled tag rather than an outlined pill, so it
+   doesn't read as a button the learner should press. */
 .finger-chip {
   font: 600 13px var(--sans);
   color: var(--caution);
-  border: 1px solid currentColor;
+  background: rgb(218 165 32 / 0.14);
   border-radius: 999px;
   padding: 4px 12px;
   text-transform: capitalize;
@@ -2778,7 +2780,7 @@
   position: absolute;
   inset: 0;
   background: var(--surface);
-  opacity: 0.85;
+  opacity: 0.9;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: -1;
@@ -2824,6 +2826,77 @@
   margin-top: 20px;
   border-top: 1px solid var(--border-subtle);
   padding-top: 20px;
+}
+
+/* Practice result: ring + feedback + actions in ONE card, so the card can
+   never clip the ring (it used to float over the ring's lower third).
+   ScenarioView keeps the older .aww-result-center / .aww-result-feedback. */
+.aww-result-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  text-align: center;
+  width: min(520px, calc(100% - 48px));
+  padding: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+/* Size the ring through the SVG — the old transform: scale(1.5) blurred it. */
+.aww-result-panel .score-badge svg {
+  width: 176px;
+  height: 176px;
+  background: var(--surface);
+  border-radius: 50%;
+}
+
+.aww-result-panel p {
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.aww-result-panel .aww-result-lead {
+  color: var(--text);
+}
+
+.aww-result-panel .aww-result-feedback {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  gap: 14px;
+  align-items: center;
+}
+
+.aww-result-panel .focus-block {
+  align-items: center;
+  margin-top: 4px;
+  border-top: none;
+  padding-top: 0;
+}
+
+.aww-result-panel .finger-chips {
+  justify-content: center;
+}
+
+.aww-result-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* Don't let the reference / replay skeletons ghost through the blurred
+   result overlay. */
+.aww-practice-env[data-phase='result'] .aww-pane-left .aww-pane-content,
+.aww-practice-env[data-phase='result'] .aww-replay-container {
+  visibility: hidden;
 }
 
 

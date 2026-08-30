@@ -272,8 +272,6 @@ export function PracticeView() {
     // Survives the next retry, so the learner signs while reading the fix.
     setRevealArmed(false)
     setPhase('result')
-    // One scored attempt completes a session sign, whatever the score.
-    setSession((prev) => (prev ? markAttempted(prev, reference.gloss) : prev))
 
     // A take with no frames has no capture instant to measure from, so it is
     // left unsampled rather than recorded as an implausibly fast one.
@@ -292,6 +290,16 @@ export function PracticeView() {
       // this attempt's result would sit frozen in its pre-animation state.
       requestAnimationFrame(() => setRevealArmed(true))
     }
+
+    // A take the tracker never saw a hand in is a capture failure, not a
+    // performance. Recording it as a 0 would sink mastery and make the next
+    // real attempt read as a huge jump "since your last try". Show the
+    // framing guidance (the result view branches on this), but keep it out of
+    // the log and don't count it toward the session.
+    if (scored.hands.length > 0 && scored.hands.every((h) => h.missing)) return
+
+    // One scored attempt completes a session sign, whatever the score.
+    setSession((prev) => (prev ? markAttempted(prev, reference.gloss) : prev))
 
     // Log the attempt: feeds mastery/suggestions now, error mining later.
     const entry: AttemptLogEntry = {
@@ -313,7 +321,16 @@ export function PracticeView() {
     setEntries((prev) => [...prev, entry])
   }
 
-  const noAttemptHands = result != null && result.hands.every((h) => h.missing)
+  // A take the tracker never saw a hand in — a capture failure, not a 0/100
+  // performance. `.every()` is true for an empty array, so guard the length.
+  const noAttemptHands =
+    result != null && result.hands.length > 0 && result.hands.every((h) => h.missing)
+
+  // Finger feedback is shown once, as the Focus-on chips. The per-finger
+  // "Check your X — its shape drifts" sentences are the same information in
+  // prose, so they are filtered out of the notes here.
+  const fingerFocus = result ? topFingers(result) : []
+  const resultNotes = result ? result.hints.filter((h) => !h.startsWith('Check your ')) : []
 
   /**
    * How this attempt compares with the learner's own history for this sign.
@@ -345,6 +362,32 @@ const earlier = forGloss.slice(0, -1)
   useEffect(() => {
     if (selected) setIsBrowsing(false)
   }, [selected])
+
+  // Shared by both result states. "Try again" runs the countdown, which needs a
+  // live camera — if it dropped, offer to turn it back on rather than a button
+  // that silently does nothing. retryRef takes focus when the result appears.
+  const resultActions = (
+    <div className="aww-result-actions">
+      {tracking.status === 'running' ? (
+        <button ref={retryRef} className="btn massive" onClick={beginCountdown}>
+          Try again
+        </button>
+      ) : (
+        <button ref={retryRef} className="btn massive" onClick={() => void tracking.start()}>
+          Turn on camera
+        </button>
+      )}
+      <button
+        className="btn ghost massive"
+        onClick={() => {
+          leaveResult()
+          setIsBrowsing(true)
+        }}
+      >
+        Choose another sign
+      </button>
+    </div>
+  )
 
   return (
     <div className="aww-practice-env" data-phase={phase} data-picker-open={pickerOpen}>
@@ -458,31 +501,47 @@ const earlier = forGloss.slice(0, -1)
            )}
         </div>
 
-        {/* Dynamic Center Scoring View */}
+        {/* Centre result: a capture failure and a scored attempt are different
+            outcomes and get different panels. */}
         {phase === 'result' && result && (
-            <div className="aww-result-overlay" data-reveal={revealArmed ? 'on' : undefined}>
-                <div className="aww-result-center">
-                    <ScoreBadge score={result.score} delta={progress.delta} best={progress.best} />
-                    <div className="aww-result-feedback">
-                        {result.score === 100 ? <p className="perfect-hint">Flawless match! Perfect execution.</p> : result.hints.map((h, i) => <p key={i}>{h}</p>)}
-                        {result.score < 100 && topFingers(result).length > 0 && (
-                            <div className="focus-block">
-                                <p className="pane-label">Focus on</p>
-                                <div className="finger-chips">
-                                    {topFingers(result).map(f => <span key={f} className="finger-chip">{FINGER_LABEL[f]}</span>)}
-                                </div>
-                            </div>
-                        )}
-                        {noAttemptHands && (
-                            <p className="camera-error">No hands were tracked — check your framing.</p>
-                        )}
-                        <div className="aww-result-actions" style={{ marginTop: '24px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                            <button className="btn massive" onClick={beginCountdown}>Try again</button>
-                            <button className="btn ghost massive" onClick={() => { leaveResult(); setIsBrowsing(true); }}>Choose another sign</button>
+          <div className="aww-result-overlay" data-reveal={revealArmed ? 'on' : undefined}>
+            {noAttemptHands ? (
+              <div className="aww-result-panel aww-result-nohands">
+                <p className="pane-label">Couldn't see your hands</p>
+                <p className="aww-result-lead">The tracker didn't pick up a hand in that take.</p>
+                <p>Move back so your hands and shoulders are in frame, and make sure the room is well lit.</p>
+                {resultActions}
+              </div>
+            ) : (
+              <div className="aww-result-panel">
+                <ScoreBadge score={result.score} delta={progress.delta} best={progress.best} />
+                <div className="aww-result-feedback">
+                  {result.score === 100 ? (
+                    <p className="perfect-hint">Flawless match. Perfect execution.</p>
+                  ) : (
+                    <>
+                      {resultNotes.map((h, i) => (
+                        <p key={i}>{h}</p>
+                      ))}
+                      {fingerFocus.length > 0 && (
+                        <div className="focus-block">
+                          <p className="pane-label">Focus on</p>
+                          <div className="finger-chips">
+                            {fingerFocus.map((f) => (
+                              <span key={f} className="finger-chip">
+                                {FINGER_LABEL[f]}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                    </div>
+                      )}
+                    </>
+                  )}
+                  {resultActions}
                 </div>
-            </div>
+              </div>
+            )}
+          </div>
         )}
 
       </div>
