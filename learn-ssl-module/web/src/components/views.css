@@ -2504,30 +2504,109 @@
   z-index: 10;
 }
 
-/* Stacked layout on a phone: two flex:1 panes side by side become two ~185px
-   columns otherwise. */
+/* Phone layout. Two flex:1 panes side by side become two ~185px columns
+   otherwise, and the fixed bottom tab bar (.tabs, --nav-offset tall) would sit
+   over the bottom of a full-height surface. */
 @media (max-width: 760px) {
   .aww-practice-env {
-    overflow-y: auto;
+    /* Stop above the fixed tab bar so nothing is trapped behind it. */
+    bottom: var(--nav-offset);
+    -webkit-overflow-scrolling: touch;
   }
+
   .aww-split-screen {
     flex-direction: column;
+  }
+
+  /* Browsing: a single scrolling column — the sign list. There is no hover on
+     touch, so the desktop preview pane is dropped here. */
+  .aww-browse .aww-split-screen {
+    height: 100%;
+  }
+  .aww-browse .aww-pane-right {
+    display: none;
+  }
+  .aww-browse .aww-pane-left {
+    flex: 1;
+    border-right: none;
+    overflow-y: auto;
+  }
+  .aww-browse .aww-pane-left .cs-nav-pane {
     height: auto;
     min-height: 100%;
   }
-  .aww-split-screen .aww-pane {
-    flex: none;
-    min-height: 62vh;
+  .aww-browse .aww-pane-left .cs-signs-grid {
+    max-height: none;
+    overflow: visible;
   }
-  .aww-pane-left {
+
+  /* Practising: a compact reference on top, the camera filling the rest — both
+     visible at once, no scrolling between them. */
+  .aww-practice-env:not(.aww-browse) .aww-split-screen {
+    height: 100%;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left {
+    flex: 0 0 40vh;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle);
   }
+  .aww-practice-env:not(.aww-browse) .aww-pane-right {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Both pane headers become a compact solid bar in flow instead of a large
+     title floating over the media. */
+  .aww-practice-env:not(.aww-browse) .aww-pane-header {
+    position: static;
+    inset: auto;
+    padding: 8px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    text-shadow: none;
+    align-items: center;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-title {
+    font-size: 1.3rem;
+  }
+  .aww-pane-header-actions .btn {
+    white-space: nowrap;
+  }
+
+  /* Header is in flow, so the media takes what is left. */
+  .aww-practice-env:not(.aww-browse) .aww-pane-content,
+  .aww-practice-env:not(.aww-browse) .aww-camera-container {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .skeleton-player {
+    height: 100%;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .skeleton-player canvas {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  /* Reference transport in flow at the bottom, not floating over a ~180px
+     skeleton. */
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .player-controls {
+    position: static;
+    inset: auto;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .aww-hud {
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: 12px;
+    bottom: calc(var(--nav-offset) + 12px);
     transform: none;
     width: auto;
   }
