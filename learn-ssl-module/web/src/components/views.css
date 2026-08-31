@@ -1235,6 +1235,8 @@
   text-align: center;
 }
 
+/* Each level differs by its wording; the border and fill are a second,
+   non-colour cue on top — dashed for the untried, filled for the finished. */
 .level-chip.new {
   color: var(--text-dim);
   border-style: dashed;
@@ -1246,7 +1248,9 @@
   color: var(--accent);
 }
 .level-chip.mastered {
-  color: var(--success);
+  color: var(--on-accent);
+  background: var(--success);
+  border-color: var(--success);
 }
 
 .mastery-bar {
@@ -3172,6 +3176,12 @@
    ========================================================================== */
 
 .aww-progress-view {
+  /* width:100% because <main> is a flex column: a flex item with `margin:auto`
+     on the inline axis opts out of `align-items: stretch` and shrinks to its
+     content, which since Phase 3 is narrow enough to look broken. The explicit
+     width restores the fill; max-width still caps it and the auto margins still
+     centre it. */
+  width: 100%;
   max-width: 1000px;
   margin: 40px auto;
   padding: 0 24px 100px;
@@ -3200,7 +3210,75 @@
   color: var(--text-dim);
 }
 
-/* 1. Bento Box Grid */
+/* Loading — three grey bars in the shape of what is coming, not the word
+   "Loading". Pulse is collapsed by the global reduced-motion rule. */
+.aww-progress-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.aww-progress-skeleton .sk-bar {
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  animation: aww-sk-pulse 1.4s var(--ease-in-out) infinite;
+}
+
+.aww-progress-skeleton .sk-band {
+  height: 92px;
+  border-radius: var(--r-lg);
+}
+.aww-progress-skeleton .sk-head {
+  height: 34px;
+  width: 40%;
+  margin-top: 28px;
+}
+.aww-progress-skeleton .sk-row {
+  height: 56px;
+}
+
+@keyframes aww-sk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* No-data state (references failed to load) and first-run state (signs are
+   loaded, nothing practised yet) share one calm serif treatment. */
+.aww-progress-empty,
+.aww-progress-firstrun h2 {
+  font-family: var(--serif);
+}
+
+.aww-progress-empty {
+  padding: 24px 0 48px;
+}
+
+.aww-progress-empty h2,
+.aww-progress-firstrun h2 {
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 400;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.aww-progress-empty p,
+.aww-progress-firstrun p {
+  font-size: 1.05rem;
+  color: var(--text-dim);
+  max-width: 46ch;
+  margin: 0;
+}
+
+.aww-progress-firstrun {
+  margin-bottom: 48px;
+}
+
 /* 1. Stat band — one horizontal row of numbers, the same shape as the hero's
    .lhero-stats-strip. Replaced a 1.2fr/1fr/1.5fr bento of cards that lifted on
    hover and carried a mastery ring which, against ~490 signs, was always a 6%

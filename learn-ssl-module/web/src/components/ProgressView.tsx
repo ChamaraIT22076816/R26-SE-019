@@ -139,70 +139,120 @@ export function ProgressView({
       </div>
 
       {loading ? (
-        <p className="empty-state">Loading…</p>
+        <div className="aww-progress-skeleton" aria-hidden="true">
+          <div className="sk-bar sk-band" />
+          <div className="sk-bar sk-head" />
+          <div className="sk-bar sk-row" />
+          <div className="sk-bar sk-row" />
+          <div className="sk-bar sk-row" />
+        </div>
       ) : summaries.length === 0 ? (
-        <p className="empty-state">No reference signs are loaded yet.</p>
+        <div className="aww-progress-empty">
+          <h2>No sign data loaded.</h2>
+          <p>
+            The reference recordings did not load, so there is nothing to track yet. A
+            reload usually fixes it.
+          </p>
+        </div>
       ) : (
         <div className="aww-progress-content">
-          
-          {/* 1. Stat band — one row of numbers, echoing the hero's stats strip */}
-          <div className="aww-progress-stats">
-            <div className="lstat-pill">
-              <span className="lstat-val">
-                {practised}
-                <span className="lstat-of"> / {summaries.length}</span>
-              </span>
-              <span className="lstat-lbl">Practised</span>
-            </div>
-            <div className="lstat-sep" aria-hidden="true" />
-            <div className="lstat-pill">
-              <span className="lstat-val">{mastered}</span>
-              <span className="lstat-lbl">Mastered</span>
-            </div>
-            <div className="lstat-sep" aria-hidden="true" />
-            <div className="lstat-pill">
-              <span className="lstat-val">{streak}</span>
-              <span className="lstat-lbl">Day streak</span>
-            </div>
-            <div className="lstat-sep" aria-hidden="true" />
-            <div className="lstat-pill">
-              <span className="lstat-val">{avgRecent ?? '—'}</span>
-              <span className="lstat-lbl">Recent average</span>
-            </div>
-          </div>
 
-          {/* 2. Activity — full width, its own section */}
-          {attemptCount > 0 && (
-            <section className="aww-activity" aria-labelledby="aww-activity-h">
-              <div className="aww-activity-head">
-                <h2 id="aww-activity-h">Activity</h2>
-                <span className="aww-activity-total">
-                  {activity.reduce((n, d) => n + d.attempts, 0)} attempts · last {ACTIVITY_DAYS} days
-                </span>
+          {attemptCount === 0 ? (
+            /* First run: the stat band would be four zeros and the heatmap a
+               blank grid. Say so plainly and point at the list below. */
+            <div className="aww-progress-firstrun">
+              <h2>Nothing logged yet.</h2>
+              <p>
+                Practise a sign and this page fills in — a mastery estimate for every
+                sign, a daily streak, an activity heatmap.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* 1. Stat band — one row of numbers, echoing the hero's stats strip */}
+              <div className="aww-progress-stats">
+                <div className="lstat-pill">
+                  <span className="lstat-val">
+                    {practised}
+                    <span className="lstat-of"> / {summaries.length}</span>
+                  </span>
+                  <span className="lstat-lbl">Practised</span>
+                </div>
+                <div className="lstat-sep" aria-hidden="true" />
+                <div className="lstat-pill">
+                  <span className="lstat-val">{mastered}</span>
+                  <span className="lstat-lbl">Mastered</span>
+                </div>
+                <div className="lstat-sep" aria-hidden="true" />
+                <div className="lstat-pill">
+                  <span className="lstat-val">{streak}</span>
+                  <span className="lstat-lbl">Day streak</span>
+                </div>
+                <div className="lstat-sep" aria-hidden="true" />
+                <div className="lstat-pill">
+                  <span className="lstat-val">{avgRecent ?? '—'}</span>
+                  <span className="lstat-lbl">Recent average</span>
+                </div>
               </div>
-              <div
-                className="aww-heatmap"
-                role="img"
-                aria-label={`Practice activity over the last ${ACTIVITY_DAYS} days`}
-              >
-                {activity.map((d) => {
-                  const peak = Math.max(...activity.map((x) => x.attempts), 1)
-                  const intensity = d.attempts > 0 ? 0.2 + 0.8 * (d.attempts / peak) : 0
-                  return (
-                    <div
-                      key={d.date}
-                      className="aww-heatmap-day"
-                      style={{ '--intensity': intensity } as React.CSSProperties}
-                      title={
-                        d.attempts === 0
-                          ? `${d.date}: no practice`
-                          : `${d.date}: ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, avg ${d.avgScore}`
-                      }
-                    />
-                  )
-                })}
-              </div>
-            </section>
+
+              {/* 2. Activity — full width, its own section */}
+              <section className="aww-activity" aria-labelledby="aww-activity-h">
+                <div className="aww-activity-head">
+                  <h2 id="aww-activity-h">Activity</h2>
+                  <span className="aww-activity-total">
+                    {activity.reduce((n, d) => n + d.attempts, 0)} attempts · last{' '}
+                    {ACTIVITY_DAYS} days
+                  </span>
+                </div>
+                <div
+                  className="aww-heatmap"
+                  role="img"
+                  aria-label={`Practice activity over the last ${ACTIVITY_DAYS} days`}
+                >
+                  {activity.map((d) => {
+                    const peak = Math.max(...activity.map((x) => x.attempts), 1)
+                    const intensity = d.attempts > 0 ? 0.2 + 0.8 * (d.attempts / peak) : 0
+                    return (
+                      <div
+                        key={d.date}
+                        className="aww-heatmap-day"
+                        style={{ '--intensity': intensity } as React.CSSProperties}
+                        title={
+                          d.attempts === 0
+                            ? `${d.date}: no practice`
+                            : `${d.date}: ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, avg ${d.avgScore}`
+                        }
+                      />
+                    )
+                  })}
+                </div>
+                {/* role="img" makes the grid opaque to a screen reader; this is
+                    the same 14 days in a form it can read. The wrapper div (not
+                    the table) carries .sr-only — overflow-clipping a bare table
+                    is unreliable. */}
+                <div className="sr-only">
+                  <table>
+                    <caption>Practice attempts per day, last {ACTIVITY_DAYS} days</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Attempts</th>
+                        <th scope="col">Average score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activity.map((d) => (
+                        <tr key={d.date}>
+                          <td>{d.date}</td>
+                          <td>{d.attempts}</td>
+                          <td>{d.avgScore ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
           )}
 
           {/* 3. Practise next — the model's ranking, not a catalogue */}
@@ -252,8 +302,9 @@ export function ProgressView({
             </ol>
           </section>
 
-          {/* 4. Coverage by category — a breadth read, not a drill-down */}
-          {coverage.length > 0 && (
+          {/* 4. Coverage by category — a breadth read, not a drill-down.
+              Hidden on first run: 20 empty bars say nothing. */}
+          {attemptCount > 0 && coverage.length > 0 && (
             <section className="aww-coverage" aria-labelledby="aww-coverage-h">
               <h2 id="aww-coverage-h">Coverage by category</h2>
               <ul className="aww-coverage-list">

@@ -153,7 +153,14 @@ gated on `prefers-reduced-motion`. Also fixed a heatmap transition introduced in
 Phase 1 that left Chrome interpolating a `color-mix()` forever. Phase 4 shipped — App
 holds a one-shot `practiceIntent`; `ProgressView`'s `onPractise(gloss)` sets it and
 switches tabs, and `PracticeView` selects that sign on mount and clears the intent, so
-a row's "Practise" button lands straight on the sign instead of the browser.
+a row's "Practise" button lands straight on the sign instead of the browser. Phase 5
+shipped — loading is a three-bar skeleton, the no-data and first-run states each get a
+plain serif treatment (first run drops the all-zero band and empty coverage, keeping
+"Practise next"), the heatmap carries a visually-hidden table for screen readers, and
+the "Mastered" chip is filled so it reads without colour. Also fixed a latent bug the
+lean Phase 3 layout exposed: `.aww-progress-view` sat inside a flex column with
+`margin: auto`, which opted it out of stretch and shrank it to ~480px — an explicit
+`width: 100%` restores the fill.
 
 ### Phase 1 — Fix what is broken (3 h) · shippable alone
 
