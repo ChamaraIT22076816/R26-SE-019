@@ -133,6 +133,12 @@
      screen-designed serif present on every desktop OS — a system-ui fallback
      would swap the whole page between serif and sans on a slow font load. */
   --sans: 'Noto Serif', Georgia, 'Times New Roman', serif;
+  /* Same family as --sans today — the brand pairs one serif voice across both
+     scripts — but named separately so display headings (page titles, hub
+     titles, the mission briefing) carry their own token. Several rules in
+     views.css already reference var(--serif); without this they were resolving
+     by inheritance from body alone. */
+  --serif: 'Noto Serif', Georgia, 'Times New Roman', serif;
   /* Left as it was on purpose: inserting another family ahead of Consolas
      changes the glyph metrics, and the live readouts (fps, inference ms,
      elapsed seconds) are sized against these. ui-monospace already picks

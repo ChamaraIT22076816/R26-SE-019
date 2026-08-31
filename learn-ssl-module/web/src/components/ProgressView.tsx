@@ -151,9 +151,9 @@ export function ProgressView() {
           {/* 1. Bento Box Analytics Header */}
           <div className="aww-bento-grid">
             
-            {/* Mastery Ring */}
+            {/* Practised Ring */}
             <div className="aww-bento-card aww-bento-mastery">
-              <h3>Overall Mastery</h3>
+              <h3>Signs practised</h3>
               <div className="aww-radial-progress" style={{ '--progress': `${overallMastery}%` } as React.CSSProperties}>
                  <svg viewBox="0 0 120 120">
                    <circle cx="60" cy="60" r="54" className="bg" />
@@ -172,9 +172,20 @@ export function ProgressView() {
                <div className="aww-bento-card aww-bento-streak">
                  <h3>Current Streak</h3>
                  <div className="aww-streak-display">
-                    <span className="streak-fire">🔥</span>
+                    <svg
+                      className="streak-fire"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3c.5 3-1.5 4.5-1.5 4.5S9 6 8.5 4.5C6.5 6.5 5 9 5 12a7 7 0 0 0 14 0c0-3.5-2.5-5.5-2.5-5.5s.5 2-.5 3.5c-.5-3-4-4-4-7Z" />
+                    </svg>
                     <span className="streak-val">{streak}</span>
-                    <span className="streak-lbl">Days</span>
+                    <span className="streak-lbl">{streak === 1 ? 'Day' : 'Days'}</span>
                  </div>
                </div>
                
@@ -225,9 +236,9 @@ export function ProgressView() {
                <h2>Sign Library</h2>
                <div className="aww-search-bar">
                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                 <input 
-                   type="text" 
-                   placeholder="Search 490 signs..." 
+                 <input
+                   type="text"
+                   placeholder={`Search ${summaries.length} signs...`}
                    value={searchQuery}
                    onChange={e => setSearchQuery(e.target.value)}
                  />
@@ -272,7 +283,11 @@ export function ProgressView() {
                                     <div className="progress-ring-mini" style={{'--pct': `${s.mastery * 100}%`} as React.CSSProperties}>
                                       <svg viewBox="0 0 36 36">
                                         <circle cx="18" cy="18" r="16" className="bg" />
-                                        <circle cx="18" cy="18" r="16" className="fg" strokeDasharray="100.53" strokeDashoffset={100.53 * (1 - s.mastery)} />
+                                        {/* Below ~5% the arc is a hairline that reads as a
+                                            broken SVG, not a low score — show the track alone. */}
+                                        {s.mastery >= 0.05 && (
+                                          <circle cx="18" cy="18" r="16" className="fg" strokeDasharray="100.53" strokeDashoffset={100.53 * (1 - s.mastery)} />
+                                        )}
                                       </svg>
                                       <span>{Math.round(s.mastery * 100)}%</span>
                                     </div>
