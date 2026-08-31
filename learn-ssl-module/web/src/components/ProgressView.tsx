@@ -8,6 +8,8 @@ import { buildSession } from '../learner/session'
 import { translationOf } from '../data/translations'
 import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceIndex } from '../storage/bundledReferences'
+import { pickReferenceList } from '../storage/references'
+import { toMeta } from '../vision/types'
 import { categoryOf, categoriesIn } from '../data/categories'
 
 const ACTIVITY_DAYS = 14
@@ -68,15 +70,17 @@ export function ProgressView({
         loadReferenceIndex(),
         listAttempts(),
       ])
-      const allRefs = [...loc, ...bun]
-      const glosses = allRefs.map((r) => r.gloss)
-      
+      // The same one-per-gloss list Practice builds, so "35 / 494" here and
+      // "494 signs" there can never disagree (see hero-copy-must-match-build).
+      const refs = pickReferenceList([...loc.map(toMeta), ...bun])
+      const glosses = refs.map((r) => r.gloss)
+
       const cMap = new Map<string, string>()
-      for (const r of allRefs) {
-          cMap.set(r.gloss, categoryOf(r))
+      for (const r of refs) {
+        cMap.set(r.gloss, categoryOf(r))
       }
       setCategoryMap(cMap)
-      setAvailableCategories(categoriesIn(allRefs))
+      setAvailableCategories(categoriesIn(refs))
 
       const now = new Date()
       setSummaries(
