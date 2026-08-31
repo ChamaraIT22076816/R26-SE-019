@@ -1025,24 +1025,6 @@
   }
 }
 
-/* Transform only — full opacity throughout, so every hint is readable on the
-   measured frame and merely settles into place afterwards. */
-[data-reveal='on'] .hint-list li {
-  animation: lift-in var(--dur-base) var(--ease-out) both;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(2) {
-  animation-delay: 60ms;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(3) {
-  animation-delay: 120ms;
-}
-
-[data-reveal='on'] .hint-list li:nth-child(n + 4) {
-  animation-delay: 180ms;
-}
-
 [data-reveal='on'] .finger-chips {
   animation: lift-in var(--dur-base) var(--ease-out) 200ms both;
 }
@@ -1128,15 +1110,6 @@
   font-size: 13px;
   color: var(--text-dim);
   margin-top: 2px;
-}
-
-.hint-list {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
 }
 
 .finger-chips {
@@ -2964,6 +2937,60 @@
   pointer-events: none;
 }
 
+/* RecordView (author-only) still uses the older floating HUD — a full rework
+   is its own critique. This keeps it usable until then. */
+.aww-hud {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 32px;
+  border-radius: 20px;
+  background: rgba(var(--surface-rgb), 0.9);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text);
+}
+
+.aww-hud-idle,
+.aww-hud-recording {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.aww-hud-idle p {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.aww-hud-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.aww-hud-countdown span {
+  font: 800 3.5rem var(--mono);
+  color: var(--p-gold-400);
+  line-height: 1;
+}
+
+.aww-hud-recording .btn.massive {
+  background: var(--recording);
+  color: #fff;
+}
+
 
 /* ============================================================================
    CENTRAL SCORE OVERLAY
@@ -2996,28 +3023,7 @@
   opacity: 1;
 }
 
-.aww-result-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  text-align: center;
-  pointer-events: auto;
-}
-
-/* Override the standard ScoreBadge scale if needed */
-.aww-result-center .score-badge {
-  transform: scale(1.5);
-  margin-bottom: 24px;
-}
-
 .aww-result-feedback {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 32px 40px;
-  min-width: 400px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.15);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -3034,9 +3040,8 @@
   padding-top: 20px;
 }
 
-/* Practice result: ring + feedback + actions in ONE card, so the card can
-   never clip the ring (it used to float over the ring's lower third).
-   ScenarioView keeps the older .aww-result-center / .aww-result-feedback. */
+/* Practice + Scenario result: ring + feedback + actions in ONE card, so the
+   card can never clip the ring (it used to float over the ring's lower third). */
 .aww-result-panel {
   display: flex;
   flex-direction: column;
@@ -3168,12 +3173,6 @@
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-}
-
-
-.aww-result-center .score-badge svg {
-  background: var(--surface);
-  border-radius: 50%;
 }
 
 /* ============================================================================
@@ -3676,71 +3675,68 @@
 
 .aww-scenario-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 32px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  align-items: start;
 }
 
 .aww-scenario-card {
   font-family: inherit;
   position: relative;
-  border: none;
-  border-radius: 28px;
-  height: 420px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--scenario-accent, var(--accent));
+  border-radius: 20px;
   overflow: hidden;
   cursor: pointer;
   text-align: left;
   padding: 0;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+  background: var(--surface);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .aww-scenario-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 28px 56px rgba(0, 0, 0, 0.24);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
 .aww-scenario-card.disabled {
-  opacity: 0.65;
   cursor: not-allowed;
+  opacity: 0.55;
   transform: none !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: none !important;
 }
 
-/* Vibrant Scenario Environment Themes */
-.theme-restaurant {
-  background: linear-gradient(135deg, #871a1a 0%, #1a2a6c 50%, #b21f1f 100%);
-}
-
+/* One quiet, palette-derived tint per scenario — not the Vegas gradients. */
 .theme-introductions {
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #6b11ff 100%);
+  --scenario-accent: var(--p-teal-400);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.10), transparent 62%), var(--surface);
 }
-
+.theme-restaurant {
+  --scenario-accent: var(--p-gold-400);
+  background: linear-gradient(135deg, rgba(218, 165, 32, 0.10), transparent 62%), var(--surface);
+}
 .theme-hospital {
-  background: linear-gradient(135deg, #0ba360 0%, #3cba92 50%, #134e5e 100%);
+  --scenario-accent: var(--p-lime-400);
+  background: linear-gradient(135deg, rgba(163, 230, 53, 0.08), transparent 62%), var(--surface);
 }
-
 .theme-bus {
-  background: linear-gradient(135deg, #f12711 0%, #f5af19 100%);
-}
-
-.aww-scenario-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top right, rgba(255,255,255,0.25), transparent 50%),
-              radial-gradient(circle at bottom left, rgba(0,0,0,0.4), transparent 50%);
-  mix-blend-mode: overlay;
+  --scenario-accent: #d98a2b;
+  background: linear-gradient(135deg, rgba(217, 138, 43, 0.09), transparent 62%), var(--surface);
 }
 
 .card-glass-layer {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 32px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.75) 100%);
-  color: #fff;
+  gap: 12px;
+  min-height: 168px;
+  padding: 24px;
+  color: var(--text);
+}
+
+.aww-scenario-card.disabled .card-glass-layer {
+  min-height: 96px;
+  gap: 8px;
 }
 
 .card-top {
@@ -3750,54 +3746,55 @@
 }
 
 .card-status {
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 6px 14px;
+  background: var(--surface-2);
+  padding: 5px 12px;
   border-radius: 100px;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+.card-bottom {
+  margin-top: auto;
 }
 
 .card-bottom h3 {
   font-family: var(--serif);
   font-size: 2.2rem;
   font-weight: 400;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   line-height: 1.15;
-  color: #fff;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  color: var(--text);
 }
 
 .card-bottom p {
   font-size: 1.05rem;
-  color: rgba(255,255,255,0.85);
+  color: var(--text-dim);
   margin: 0;
   line-height: 1.45;
 }
 
 .play-circle {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.2);
-  backdrop-filter: blur(12px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 20px;
-  color: #fff;
-  transition: all 0.3s ease;
+  margin-top: 16px;
+  color: var(--text);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .aww-scenario-card:hover .play-circle {
   background: var(--accent);
-  color: var(--p-ink);
-  transform: scale(1.1);
+  color: var(--on-accent);
+  transform: scale(1.08);
 }
 
 /* ============================================================================
@@ -3951,6 +3948,75 @@
   font-size: 0.85rem;
   color: var(--text-dim);
   text-transform: uppercase;
+}
+
+/* The vocabulary — the point of the briefing: what you'll sign and whether
+   it's ready. Shown up front; the full script is behind the disclosure. */
+.briefing-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.briefing-vocab-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.briefing-vocab-chip em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.briefing-vocab-chip.pending {
+  opacity: 0.5;
+}
+
+.briefing-script {
+  margin-top: 20px;
+}
+
+.briefing-script summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.briefing-script summary::-webkit-details-marker {
+  display: none;
+}
+.briefing-script summary::before {
+  content: '▸';
+  color: var(--accent);
+}
+.briefing-script[open] summary::before {
+  content: '▾';
+}
+.briefing-script summary:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.briefing-script[open] .briefing-flow-list {
+  margin-top: 16px;
 }
 
 .briefing-flow-list {
@@ -4137,56 +4203,56 @@
    SCENARIO PLAY SCREEN (Cinematic Split Screen + Teleprompter Bar)
    ========================================================================== */
 
-.aww-scenario-env .aww-leave-btn {
-  position: absolute;
-  top: 20px;
-  left: 24px;
-  z-index: 100;
+/* Teleprompter strip: in flow across the top of the play screen, above both
+   panes — it used to float over the reference skeleton. */
+.aww-scenario-topbar {
+  position: relative;
+  z-index: 60;
+  flex-shrink: 0;
   display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.aww-scenario-env .aww-split-screen {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.aww-scenario-env .aww-leave-btn {
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border-subtle);
-  padding: 8px 18px;
+  padding: 8px 16px;
   border-radius: 100px;
   font-family: var(--sans);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .aww-scenario-env .aww-leave-btn:hover {
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.9);
-  transform: translateX(-2px);
+  background: var(--surface-hover);
+  border-color: var(--accent);
 }
 
-/* Floating Non-Intrusive Scenario Dialogue Subtitle Bar */
-.aww-scenario-dialogue-bar {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  width: 90%;
-  max-width: 680px;
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 20px;
-  padding: 16px 24px;
-  text-align: center;
-  box-shadow: 0 16px 36px rgba(0,0,0,0.25);
+.aww-scenario-dialogue {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  pointer-events: none;
+  text-align: center;
+  gap: 5px;
 }
 
 .dialogue-meta-row {
@@ -4231,19 +4297,15 @@
 }
 
 .dialogue-hint-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.8rem;
   background: rgba(255,255,255,0.08);
   color: var(--caution);
-  padding: 3px 10px;
+  padding: 3px 12px;
   border-radius: 100px;
   margin-top: 2px;
-}
-
-/* Hide controls on Scenario reference skeleton player */
-.aww-scenario-env .skeleton-scrubber,
-.aww-scenario-env .skeleton-controls button {
-  display: none !important;
 }
 
 /* ============================================================================

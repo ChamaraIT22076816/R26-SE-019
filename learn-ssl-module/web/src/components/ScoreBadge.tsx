@@ -1,3 +1,5 @@
+import { band } from '../scoring/band'
+
 interface ScoreBadgeProps {
   score: number
   /**
@@ -7,13 +9,13 @@ interface ScoreBadgeProps {
   delta?: number | null
   /** True when this attempt beats every earlier attempt at this sign. */
   best?: boolean
+  /**
+   * Drop the delta line entirely. For an aggregate score (a whole scenario's
+   * average) "First attempt at this sign" is nonsense — it is not one sign.
+   */
+  hideDelta?: boolean
 }
 
-function band(score: number): { klass: string; label: string } {
-  if (score >= 85) return { klass: 'good', label: 'Great match' }
-  if (score >= 60) return { klass: 'ok', label: 'Getting there' }
-  return { klass: 'low', label: 'Keep practising' }
-}
 
 /**
  * Circular progress ring showing a 0–100 sign-match score.
@@ -29,7 +31,7 @@ function band(score: number): { klass: string; label: string } {
  * printed final and unanimated. A drop is styled neutrally rather than as an
  * error — a worse attempt is ordinary practice, not a failure state.
  */
-export function ScoreBadge({ score, delta = null, best = false }: ScoreBadgeProps) {
+export function ScoreBadge({ score, delta = null, best = false, hideDelta = false }: ScoreBadgeProps) {
   const r = 52
   const c = 2 * Math.PI * r
   const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100)
@@ -65,15 +67,17 @@ export function ScoreBadge({ score, delta = null, best = false }: ScoreBadgeProp
 
       {best && <span className="score-best">Best yet</span>}
 
-      <span className="score-delta">
-        {delta === null
-          ? 'First attempt at this sign'
-          : delta === 0
-            ? 'Same as your last try'
-            : delta > 0
-              ? `+${delta} since your last try`
-              : `${delta} since your last try`}
-      </span>
+      {!hideDelta && (
+        <span className="score-delta">
+          {delta === null
+            ? 'First attempt at this sign'
+            : delta === 0
+              ? 'Same as your last try'
+              : delta > 0
+                ? `+${delta} since your last try`
+                : `${delta} since your last try`}
+        </span>
+      )}
     </div>
   )
 }

@@ -138,7 +138,7 @@
      titles, the mission briefing) carry their own token. Several rules in
      views.css already reference var(--serif); without this they were resolving
      by inheritance from body alone. */
-  --serif: 'Noto Serif', Georgia, 'Times New Roman', serif;
+  --serif: var(--sans);
   /* Left as it was on purpose: inserting another family ahead of Consolas
      changes the glyph metrics, and the live readouts (fps, inference ms,
      elapsed seconds) are sized against these. ui-monospace already picks
