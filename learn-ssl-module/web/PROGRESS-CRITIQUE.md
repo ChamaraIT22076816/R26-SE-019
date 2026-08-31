@@ -145,7 +145,12 @@ Effort is in focused hours, ~5 h/day realistic. Total ≈ 17 h.
 **Status.** Phase 1 shipped (`648e430`). Phase 2 shipped — the "Sign Library" block is
 gone, replaced by "Practise next" (the `buildSession` ranking, so it matches what
 Practice queues) and "Coverage by category"; a `onOpenPractice` prop on `ProgressView`
-switches to the Practice tab (the per-sign deep-link is still Phase 4).
+switches to the Practice tab (the per-sign deep-link is still Phase 4). Phase 3
+shipped — the bento grid is gone; the three (now four) numbers are one flat stat band
+in the hero's `.lstat-*` shape, the heatmap is its own full-width section, the header
+matches the Scenario hub, and the focus rows settle in with a transform-only stagger
+gated on `prefers-reduced-motion`. Also fixed a heatmap transition introduced in
+Phase 1 that left Chrome interpolating a `color-mix()` forever.
 
 ### Phase 1 — Fix what is broken (3 h) · shippable alone
 

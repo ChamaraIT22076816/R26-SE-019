@@ -3185,212 +3185,119 @@
 
 .aww-progress-title {
   font-family: var(--serif);
-  font-size: 3rem;
+  /* Same construction as .aww-hub-title on the Scenario tab, so the two
+     content tabs open with the same voice. */
+  font-size: clamp(2.25rem, 6vw, 3.5rem);
   font-weight: 400;
   color: var(--text);
   letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
 .aww-progress-sub {
-  margin-top: 8px;
-  font-size: 1.05rem;
+  margin-top: 10px;
+  font-size: 1.1rem;
   color: var(--text-dim);
 }
 
 /* 1. Bento Box Grid */
-.aww-bento-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1.5fr;
-  grid-auto-rows: minmax(240px, auto);
-  gap: 20px;
-  margin-bottom: 48px;
+/* 1. Stat band — one horizontal row of numbers, the same shape as the hero's
+   .lhero-stats-strip. Replaced a 1.2fr/1fr/1.5fr bento of cards that lifted on
+   hover and carried a mastery ring which, against ~490 signs, was always a 6%
+   sliver. */
+.aww-progress-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+  padding: 20px 28px;
+  margin-bottom: 56px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
 }
 
-@media (max-width: 900px) {
-  .aww-bento-grid {
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
+.aww-progress-stats .lstat-pill {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.aww-progress-stats .lstat-val {
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.aww-progress-stats .lstat-of {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.aww-progress-stats .lstat-sep {
+  height: 34px;
+}
+
+@media (max-width: 640px) {
+  .aww-progress-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 16px;
+  }
+  .aww-progress-stats .lstat-sep {
+    display: none;
   }
 }
 
-.aww-bento-card {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  padding: 32px;
+/* 2. Activity — full width, its own section rather than a bento cell */
+.aww-activity {
+  margin-bottom: 64px;
+}
+
+.aww-activity-head {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   justify-content: space-between;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-bottom: 20px;
 }
 
-.aww-bento-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
-}
-
-.aww-bento-card h3 {
-  font-family: var(--sans);
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.aww-activity-head h2 {
+  font-family: var(--serif);
+  font-size: 2.2rem;
+  font-weight: 400;
   margin: 0;
 }
 
-/* Mastery Ring */
-.aww-bento-mastery {
-  align-items: center;
-  text-align: center;
-}
-
-.aww-radial-progress {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  margin: 24px auto;
-}
-
-.aww-radial-progress svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.aww-radial-progress circle {
-  fill: none;
-  stroke-width: 8;
-  stroke-linecap: round;
-}
-
-.aww-radial-progress circle.bg {
-  stroke: var(--surface-2);
-}
-
-.aww-radial-progress circle.fg {
-  stroke: var(--accent);
-  transition: stroke-dashoffset 1s ease-out;
-}
-
-.aww-radial-content {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.aww-radial-content .val {
-  font-size: 2rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.aww-radial-content .lbl {
+.aww-activity-total {
   font-size: 0.9rem;
   color: var(--text-dim);
-  margin-top: 4px;
-}
-
-/* Stats Column (Streak & Avg) */
-.aww-bento-stats-col {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.aww-bento-stats-col .aww-bento-card {
-  flex: 1;
-  padding: 24px 32px;
-}
-
-.aww-streak-display {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.streak-fire {
-  width: 2.25rem;
-  height: 2.25rem;
-  color: var(--accent);
-  align-self: center;
-  flex-shrink: 0;
-}
-
-.streak-val {
-  font-size: 3rem;
-  font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.streak-lbl {
-  font-size: 1.1rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.aww-avg-display {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.avg-val {
-  font-size: 3rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.avg-lbl {
-  font-size: 1.2rem;
-  color: var(--text-dim);
-}
-
-/* Activity Heatmap */
-.activity-header-flex {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.activity-total {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--surface-2);
-  padding: 4px 12px;
-  border-radius: var(--r-full);
 }
 
 .aww-heatmap {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-  margin-top: auto;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 6px;
+  max-width: 520px;
 }
 
 .aww-heatmap-day {
-  /* One track colour that fills toward the accent as the day gets busier.
-     An earlier version drove this with opacity plus a
-     [style*="--intensity: 0"] override — a substring match that also caught
-     "--intensity: 0.857", so every non-peak day was forced flat. color-mix
-     reads the number directly and has no such trap. */
+  /* Fills from the inset-surface toward the accent as the day gets busier.
+     color-mix reads the --intensity number straight; an earlier build used
+     opacity plus a [style*="--intensity: 0"] rule, a substring match that also
+     caught "0.857" and flattened every non-peak day.
+
+     No transition: the intensities are written once on load and never change,
+     and transitioning a color-mix() whose percentage comes from a var() leaves
+     Chrome interpolating forever — the tiles freeze mid-mix. */
   background: color-mix(
     in srgb,
     var(--accent) calc(var(--intensity, 0) * 100%),
     var(--surface-2)
   );
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   aspect-ratio: 1;
-  transition: background 0.3s ease;
 }
 
 /* 2. Practise next + coverage by category
@@ -3449,6 +3356,24 @@
   padding: 18px 4px;
   border-bottom: 1px solid var(--border-subtle);
   flex-wrap: wrap;
+}
+
+/* Rows settle up into place on first paint, one after another. Transform only —
+   the text is legible at frame one — and only when JS has confirmed motion is
+   allowed (ProgressView adds .is-animated), so no row waits out a stagger delay
+   under reduced motion. */
+@keyframes aww-focus-row-in {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.aww-focus-list.is-animated .aww-focus-row {
+  animation: aww-focus-row-in var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
 }
 
 .aww-focus-main {

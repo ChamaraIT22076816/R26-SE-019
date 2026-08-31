@@ -45,6 +45,16 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
 
   const [showAllCategories, setShowAllCategories] = useState(false)
 
+  // Gate the row stagger the way Hero.tsx does — the token layer already
+  // collapses durations under reduced motion, but this drops the transform
+  // offset entirely so nothing sits off its mark waiting for a delay to clear.
+  const [animate] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+
   useEffect(() => {
     void (async () => {
       const [loc, bun, log] = await Promise.all([
@@ -81,8 +91,6 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
 
   const practised = summaries.filter((s) => s.attempts > 0).length
   const mastered = summaries.filter((s) => s.level === 'mastered').length
-  const overallMastery = summaries.length > 0 ? (practised / summaries.length) * 100 : 0
-  const cScore = Math.max(0, 100 - overallMastery)
 
   // The same policy PracticeView uses to fill a session — practiceNeed ranking,
   // with the category-aware tie-break that keeps a fresh learner off a run of
@@ -131,89 +139,67 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
       ) : (
         <div className="aww-progress-content">
           
-          {/* 1. Bento Box Analytics Header */}
-          <div className="aww-bento-grid">
-            
-            {/* Practised Ring */}
-            <div className="aww-bento-card aww-bento-mastery">
-              <h3>Signs practised</h3>
-              <div className="aww-radial-progress" style={{ '--progress': `${overallMastery}%` } as React.CSSProperties}>
-                 <svg viewBox="0 0 120 120">
-                   <circle cx="60" cy="60" r="54" className="bg" />
-                   <circle cx="60" cy="60" r="54" className="fg" strokeDasharray="339.29" strokeDashoffset={339.29 * (cScore / 100)} />
-                 </svg>
-                 <div className="aww-radial-content">
-                   <span className="val">{practised}</span>
-                   <span className="lbl">/ {summaries.length}</span>
-                 </div>
-              </div>
-              <p>{mastered} signs fully mastered</p>
+          {/* 1. Stat band — one row of numbers, echoing the hero's stats strip */}
+          <div className="aww-progress-stats">
+            <div className="lstat-pill">
+              <span className="lstat-val">
+                {practised}
+                <span className="lstat-of"> / {summaries.length}</span>
+              </span>
+              <span className="lstat-lbl">Practised</span>
             </div>
-
-            {/* Stats Column */}
-            <div className="aww-bento-stats-col">
-               <div className="aww-bento-card aww-bento-streak">
-                 <h3>Current Streak</h3>
-                 <div className="aww-streak-display">
-                    <svg
-                      className="streak-fire"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M12 3c.5 3-1.5 4.5-1.5 4.5S9 6 8.5 4.5C6.5 6.5 5 9 5 12a7 7 0 0 0 14 0c0-3.5-2.5-5.5-2.5-5.5s.5 2-.5 3.5c-.5-3-4-4-4-7Z" />
-                    </svg>
-                    <span className="streak-val">{streak}</span>
-                    <span className="streak-lbl">{streak === 1 ? 'Day' : 'Days'}</span>
-                 </div>
-               </div>
-               
-               <div className="aww-bento-card aww-bento-avg">
-                 <h3>Recent Average</h3>
-                 <div className="aww-avg-display">
-                    <span className="avg-val">{avgRecent ?? '—'}</span>
-                    <span className="avg-lbl">/ 100</span>
-                 </div>
-                 <p className="stat-sub">Based on last 10 attempts</p>
-               </div>
+            <div className="lstat-sep" aria-hidden="true" />
+            <div className="lstat-pill">
+              <span className="lstat-val">{mastered}</span>
+              <span className="lstat-lbl">Mastered</span>
             </div>
-
-            {/* Activity Heatmap */}
-            {attemptCount > 0 && (
-                <div className="aww-bento-card aww-bento-activity">
-                  <div className="activity-header-flex">
-                    <h3>Activity Heatmap</h3>
-                    <span className="activity-total">{activity.reduce((n, d) => n + d.attempts, 0)} attempts</span>
-                  </div>
-                  <p className="stat-sub" style={{marginBottom: '16px'}}>Last {ACTIVITY_DAYS} days</p>
-                  
-                  <div className="aww-heatmap" role="img" aria-label="Activity heatmap">
-                    {activity.map((d) => {
-                      const peak = Math.max(...activity.map((x) => x.attempts), 1)
-                      const intensity = d.attempts > 0 ? 0.2 + (0.8 * (d.attempts / peak)) : 0
-                      return (
-                        <div
-                          key={d.date}
-                          className="aww-heatmap-day"
-                          style={{ '--intensity': intensity } as React.CSSProperties}
-                          title={
-                            d.attempts === 0
-                              ? `${d.date}: no practice`
-                              : `${d.date}: ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, avg ${d.avgScore}`
-                          }
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-            )}
+            <div className="lstat-sep" aria-hidden="true" />
+            <div className="lstat-pill">
+              <span className="lstat-val">{streak}</span>
+              <span className="lstat-lbl">Day streak</span>
+            </div>
+            <div className="lstat-sep" aria-hidden="true" />
+            <div className="lstat-pill">
+              <span className="lstat-val">{avgRecent ?? '—'}</span>
+              <span className="lstat-lbl">Recent average</span>
+            </div>
           </div>
 
-          {/* 2. Practise next — the model's ranking, not a catalogue */}
+          {/* 2. Activity — full width, its own section */}
+          {attemptCount > 0 && (
+            <section className="aww-activity" aria-labelledby="aww-activity-h">
+              <div className="aww-activity-head">
+                <h2 id="aww-activity-h">Activity</h2>
+                <span className="aww-activity-total">
+                  {activity.reduce((n, d) => n + d.attempts, 0)} attempts · last {ACTIVITY_DAYS} days
+                </span>
+              </div>
+              <div
+                className="aww-heatmap"
+                role="img"
+                aria-label={`Practice activity over the last ${ACTIVITY_DAYS} days`}
+              >
+                {activity.map((d) => {
+                  const peak = Math.max(...activity.map((x) => x.attempts), 1)
+                  const intensity = d.attempts > 0 ? 0.2 + 0.8 * (d.attempts / peak) : 0
+                  return (
+                    <div
+                      key={d.date}
+                      className="aww-heatmap-day"
+                      style={{ '--intensity': intensity } as React.CSSProperties}
+                      title={
+                        d.attempts === 0
+                          ? `${d.date}: no practice`
+                          : `${d.date}: ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, avg ${d.avgScore}`
+                      }
+                    />
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* 3. Practise next — the model's ranking, not a catalogue */}
           <section className="aww-focus" aria-labelledby="aww-focus-h">
             <div className="aww-focus-head">
               <h2 id="aww-focus-h">Practise next</h2>
@@ -224,11 +210,15 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
               )}
             </div>
 
-            <ol className="aww-focus-list">
-              {focus.map((s) => {
+            <ol className={`aww-focus-list${animate ? ' is-animated' : ''}`}>
+              {focus.map((s, i) => {
                 const meaning = translationOf(s.gloss)
                 return (
-                  <li className="aww-focus-row" key={s.gloss}>
+                  <li
+                    className="aww-focus-row"
+                    key={s.gloss}
+                    style={animate ? ({ '--i': i } as React.CSSProperties) : undefined}
+                  >
                     <div className="aww-focus-main">
                       <span className="aww-focus-gloss">{s.gloss}</span>
                       {meaning && <span className="aww-focus-meaning">{meaning}</span>}
@@ -252,7 +242,7 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
             </ol>
           </section>
 
-          {/* 3. Coverage by category — a breadth read, not a drill-down */}
+          {/* 4. Coverage by category — a breadth read, not a drill-down */}
           {coverage.length > 0 && (
             <section className="aww-coverage" aria-labelledby="aww-coverage-h">
               <h2 id="aww-coverage-h">Coverage by category</h2>
