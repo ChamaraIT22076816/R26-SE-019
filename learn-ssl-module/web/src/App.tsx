@@ -168,7 +168,7 @@ function App() {
       <main>
         {tab === 'practice' && <PracticeView />}
         {tab === 'scenario' && <ScenarioView />}
-        {tab === 'progress' && <ProgressView />}
+        {tab === 'progress' && <ProgressView onOpenPractice={() => setTab('practice')} />}
         {(tab === 'record' || tab === 'library' || tab === 'study') && (
           <Suspense fallback={<p className="empty-state">Loading…</p>}>
             {tab === 'record' && <RecordView />}

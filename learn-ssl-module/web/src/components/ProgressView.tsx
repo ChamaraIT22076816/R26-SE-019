@@ -4,12 +4,18 @@ import { currentStreak, dailyActivity } from '../learner/activity'
 import type { DayBucket } from '../learner/activity'
 import { practiceNeed, summarizeAll } from '../learner/mastery'
 import type { GlossMastery, MasteryLevel } from '../learner/mastery'
-import { glossLabel } from '../data/translations'
+import { buildSession } from '../learner/session'
+import { translationOf } from '../data/translations'
 import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceIndex } from '../storage/bundledReferences'
 import { categoryOf, categoriesIn } from '../data/categories'
 
 const ACTIVITY_DAYS = 14
+// The full 490-sign catalogue is Practice's job. Progress shows only the few
+// signs the learner model rates as most worth drilling right now, and a
+// breadth read on the categories.
+const FOCUS_COUNT = 6
+const CATEGORY_PREVIEW = 6
 
 const LEVEL_LABEL: Record<MasteryLevel, string> = {
   new: 'New',
@@ -26,47 +32,18 @@ function relativeDay(iso: string | null): string {
   return `${days} days ago`
 }
 
-function Sparkline({ scores }: { scores: number[] }) {
-  if (scores.length < 2) return null
-  const w = 72
-  const h = 24
-  const pad = 3
-  const step = (w - pad * 2) / (scores.length - 1)
-  const points = scores
-    .map(
-      (s, i) =>
-        `${(pad + i * step).toFixed(1)},${(h - pad - (s / 100) * (h - pad * 2)).toFixed(1)}`,
-    )
-    .join(' ')
-  return (
-    <svg
-      className="sparkline"
-      viewBox={`0 0 ${w} ${h}`}
-      width={w}
-      height={h}
-      role="img"
-      aria-label={`Recent scores: ${scores.join(', ')}`}
-    >
-      <title>{`Recent scores: ${scores.join(' → ')}`}</title>
-      <polyline points={points} />
-    </svg>
-  )
-}
-
-export function ProgressView() {
+export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }) {
   const [summaries, setSummaries] = useState<GlossMastery[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, string>>(new Map())
   const [availableCategories, setAvailableCategories] = useState<string[]>([])
-  
+
   const [attemptCount, setAttemptCount] = useState(0)
   const [avgRecent, setAvgRecent] = useState<number | null>(null)
   const [activity, setActivity] = useState<DayBucket[]>([])
   const [streak, setStreak] = useState(0)
   const [loading, setLoading] = useState(true)
-  
-  // Search and Filter State
-  const [searchQuery, setSearchQuery] = useState('')
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+
+  const [showAllCategories, setShowAllCategories] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -107,44 +84,50 @@ export function ProgressView() {
   const overallMastery = summaries.length > 0 ? (practised / summaries.length) * 100 : 0
   const cScore = Math.max(0, 100 - overallMastery)
 
-  // Filter summaries based on search query
-  const filteredSummaries = useMemo(() => {
-    if (!searchQuery) return summaries
-    const lowerQ = searchQuery.toLowerCase()
-    return summaries.filter(s => glossLabel(s.gloss).toLowerCase().includes(lowerQ))
-  }, [summaries, searchQuery])
+  // The same policy PracticeView uses to fill a session — practiceNeed ranking,
+  // with the category-aware tie-break that keeps a fresh learner off a run of
+  // "1, 100, 1000, …". So this list is literally what "Practise" would queue.
+  const focus = useMemo(() => {
+    if (summaries.length === 0) return []
+    const byGloss = new Map(summaries.map((s) => [s.gloss, s]))
+    return buildSession(
+      summaries,
+      FOCUS_COUNT,
+      new Date(),
+      (g) => categoryMap.get(g) ?? 'Other',
+    )
+      .map((g) => byGloss.get(g))
+      .filter((s): s is GlossMastery => s !== undefined)
+  }, [summaries, categoryMap])
 
-  // Group by category
-  const summariesByCategory = useMemo(() => {
-    const grouped = new Map<string, GlossMastery[]>()
-    for (const cat of availableCategories) {
-        grouped.set(cat, [])
-    }
-    grouped.set('Other', [])
-    
-    for (const s of filteredSummaries) {
-        const cat = categoryMap.get(s.gloss) || 'Other'
-        if (grouped.has(cat)) {
-            grouped.get(cat)!.push(s)
-        } else {
-            grouped.set(cat, [s])
+  // One breadth row per category: how many of its signs have been attempted.
+  const coverage = useMemo(() => {
+    return availableCategories
+      .map((cat) => {
+        const inCat = summaries.filter((s) => (categoryMap.get(s.gloss) ?? 'Other') === cat)
+        return {
+          cat,
+          done: inCat.filter((s) => s.attempts > 0).length,
+          total: inCat.length,
         }
-    }
-    return grouped
-  }, [filteredSummaries, availableCategories, categoryMap])
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.done / b.total - a.done / a.total || b.total - a.total)
+  }, [summaries, availableCategories, categoryMap])
+
+  const visibleCoverage = showAllCategories ? coverage : coverage.slice(0, CATEGORY_PREVIEW)
 
   return (
     <section className="aww-progress-view">
       <div className="aww-progress-header">
         <h1 className="aww-progress-title">Your Progress</h1>
+        <p className="aww-progress-sub">Every attempt is scored and logged in this browser.</p>
       </div>
 
       {loading ? (
         <p className="empty-state">Loading…</p>
       ) : summaries.length === 0 ? (
-        <p className="empty-state">
-          No vocabulary yet — record reference signs in the <strong>Record</strong> tab first.
-        </p>
+        <p className="empty-state">No reference signs are loaded yet.</p>
       ) : (
         <div className="aww-progress-content">
           
@@ -230,98 +213,77 @@ export function ProgressView() {
             )}
           </div>
 
-          {/* 2. The Command Center (Sign Browser) */}
-          <div className="aww-command-center">
-            <div className="aww-command-header">
-               <h2>Sign Library</h2>
-               <div className="aww-search-bar">
-                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                 <input
-                   type="text"
-                   placeholder={`Search ${summaries.length} signs...`}
-                   value={searchQuery}
-                   onChange={e => setSearchQuery(e.target.value)}
-                 />
-               </div>
+          {/* 2. Practise next — the model's ranking, not a catalogue */}
+          <section className="aww-focus" aria-labelledby="aww-focus-h">
+            <div className="aww-focus-head">
+              <h2 id="aww-focus-h">Practise next</h2>
+              {onOpenPractice && (
+                <button type="button" className="aww-inline-link" onClick={onOpenPractice}>
+                  See all signs in Practice
+                </button>
+              )}
             </div>
 
-            {/* Accordions */}
-            <div className="aww-accordions">
-               {availableCategories.map(cat => {
-                   const items = summariesByCategory.get(cat) || []
-                   if (items.length === 0) return null
-                   
-                   const isExpanded = expandedCategory === cat || (searchQuery !== '' && items.length > 0)
-                   
-                   const categoryPractised = items.filter(s => s.attempts > 0).length
-                   const categoryProgress = (categoryPractised / items.length) * 100
-                   
-                   return (
-                     <div className={`aww-accordion ${isExpanded ? 'expanded' : ''}`} key={cat}>
-                       <button className="aww-accordion-header" onClick={() => setExpandedCategory(isExpanded ? null : cat)}>
-                         <div className="cat-info">
-                            <h3>{cat}</h3>
-                            <span className="cat-count">{categoryPractised} / {items.length} practised</span>
-                         </div>
-                         <div className="cat-progress-bar">
-                            <div className="cat-progress-fill" style={{width: `${categoryProgress}%`}}></div>
-                         </div>
-                         <svg className="chevron" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
-                       </button>
-                       
-                       {isExpanded && (
-                         <div className="aww-accordion-content">
-                            <div className="aww-sign-grid">
-                              {items.map(s => (
-                                <div className={`aww-sign-card ${s.level}`} key={s.gloss}>
-                                  <div className="sign-card-header">
-                                    <h4>{glossLabel(s.gloss)}</h4>
-                                    <span className={`level-chip ${s.level}`}>{LEVEL_LABEL[s.level]}</span>
-                                  </div>
-                                  
-                                  <div className="sign-card-body">
-                                    <div className="progress-ring-mini" style={{'--pct': `${s.mastery * 100}%`} as React.CSSProperties}>
-                                      <svg viewBox="0 0 36 36">
-                                        <circle cx="18" cy="18" r="16" className="bg" />
-                                        {/* Below ~5% the arc is a hairline that reads as a
-                                            broken SVG, not a low score — show the track alone. */}
-                                        {s.mastery >= 0.05 && (
-                                          <circle cx="18" cy="18" r="16" className="fg" strokeDasharray="100.53" strokeDashoffset={100.53 * (1 - s.mastery)} />
-                                        )}
-                                      </svg>
-                                      <span>{Math.round(s.mastery * 100)}%</span>
-                                    </div>
-                                    
-                                    <div className="sign-card-stats">
-                                      <span className="attempts-text">
-                                        {s.attempts === 0 ? 'Not started' : `${s.attempts} attempt${s.attempts === 1 ? '' : 's'}`}
-                                      </span>
-                                      <span className="last-practised">
-                                        {s.attempts === 0 ? '' : `Last: ${relativeDay(s.lastPracticedAt)}`}
-                                      </span>
-                                    </div>
-                                    
-                                    <div className="spark-wrap">
-                                      <Sparkline scores={s.recentScores} />
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                         </div>
-                       )}
-                     </div>
-                   )
-               })}
-               
-               {filteredSummaries.length === 0 && (
-                   <div className="aww-no-results">
-                      <p>No signs found matching "{searchQuery}"</p>
-                   </div>
-               )}
-            </div>
-          </div>
-          
+            <ol className="aww-focus-list">
+              {focus.map((s) => {
+                const meaning = translationOf(s.gloss)
+                return (
+                  <li className="aww-focus-row" key={s.gloss}>
+                    <div className="aww-focus-main">
+                      <span className="aww-focus-gloss">{s.gloss}</span>
+                      {meaning && <span className="aww-focus-meaning">{meaning}</span>}
+                    </div>
+                    <span className={`level-chip ${s.level}`}>{LEVEL_LABEL[s.level]}</span>
+                    <span className="aww-focus-stat">
+                      {s.attempts === 0
+                        ? 'Not started'
+                        : `${Math.round(s.mastery * 100)}% · ${s.attempts} attempt${
+                            s.attempts === 1 ? '' : 's'
+                          } · ${relativeDay(s.lastPracticedAt)}`}
+                    </span>
+                    {onOpenPractice && (
+                      <button type="button" className="btn aww-focus-go" onClick={onOpenPractice}>
+                        Practise
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+
+          {/* 3. Coverage by category — a breadth read, not a drill-down */}
+          {coverage.length > 0 && (
+            <section className="aww-coverage" aria-labelledby="aww-coverage-h">
+              <h2 id="aww-coverage-h">Coverage by category</h2>
+              <ul className="aww-coverage-list">
+                {visibleCoverage.map((r) => (
+                  <li className="aww-coverage-row" key={r.cat}>
+                    <span className="aww-coverage-name">{r.cat}</span>
+                    <span className="aww-coverage-count">
+                      {r.done} / {r.total}
+                    </span>
+                    <div className="aww-coverage-track">
+                      <div
+                        className="aww-coverage-fill"
+                        style={{ width: `${(r.done / r.total) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {coverage.length > CATEGORY_PREVIEW && (
+                <button
+                  type="button"
+                  className="aww-inline-link aww-coverage-more"
+                  onClick={() => setShowAllCategories((v) => !v)}
+                >
+                  {showAllCategories ? 'Show fewer' : `Show all ${coverage.length} categories`}
+                </button>
+              )}
+            </section>
+          )}
+
         </div>
       )}
     </section>

@@ -142,6 +142,11 @@ real work. Phase 4 needs a small App-level change. Phase 5 is finish.
 
 Effort is in focused hours, ~5 h/day realistic. Total ≈ 17 h.
 
+**Status.** Phase 1 shipped (`648e430`). Phase 2 shipped — the "Sign Library" block is
+gone, replaced by "Practise next" (the `buildSession` ranking, so it matches what
+Practice queues) and "Coverage by category"; a `onOpenPractice` prop on `ProgressView`
+switches to the Practice tab (the per-sign deep-link is still Phase 4).
+
 ### Phase 1 — Fix what is broken (3 h) · shippable alone
 
 **1.1 — Heatmap intensity (0.5 h).** `views.css`, `ProgressView.tsx`.
