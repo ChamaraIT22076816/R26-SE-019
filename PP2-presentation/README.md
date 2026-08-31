@@ -9,7 +9,8 @@ to **kvn's Learn module (IT22552860)**.
 | Read this | If you are |
 |---|---|
 | [COWORK-BRIEF.md](COWORK-BRIEF.md) | **building the slide deck** — slide-by-slide plan, speaker notes, assets |
-| [DEFENCE.md](DEFENCE.md) | **preparing for Q&A** — metric / dataset / methodology / repeatability + a question bank with answers |
+| [PANEL-QA.md](PANEL-QA.md) | **rehearsing answers** — 24 likely panel questions, answered from the code |
+| [DEFENCE.md](DEFENCE.md) | **going deeper on one answer** — metric / dataset / methodology / repeatability + a question bank with answers |
 | [EVALUATION.md](EVALUATION.md) | writing the report, or want the results with the figures inline |
 | [EVIDENCE.md](EVIDENCE.md) | asked "where does this number come from?" or "can you reproduce it?" |
 | [AI-USE-DISCLOSURE.md](AI-USE-DISCLOSURE.md) | submitting the AI declaration |
@@ -30,6 +31,7 @@ to **kvn's Learn module (IT22552860)**.
 
 ```
 COWORK-BRIEF.md          slide-by-slide brief for the deck builder
+PANEL-QA.md              24 likely panel questions, answered from the code
 DEFENCE.md               justification + Q&A bank
 EVALUATION.md            results report with figures inline
 EVIDENCE.md              claim → source → reproduction command
@@ -87,8 +89,9 @@ the repeatability demonstration, and it is worth doing live.
 - **Screenshots** — the Learn module mid-attempt, the score + hints, the
   Progress tab, a scenario summary. These need a real webcam and cannot be
   captured from an embedded browser.
-- **Confirm the Introductions scenario coverage** — `DEMO.md` says 3/7, the
-  handoff says 1/7. Restaurant is 5/5 either way and is the one to demo.
+- ~~**Confirm Introductions coverage**~~ — **resolved: 3/7.** `YOU`, `WHERE` and
+  `CAN` are covered; `NAME`, `ME`, `YOUR`, `WHAT` are not. Handoff and
+  `CLAUDE.md` corrected. Restaurant is 5/5 and is the one to demo.
 - **Teammate figures** — everything about the other three components in this
   pack is marked owner-supplied and unverified. See [EVIDENCE.md](EVIDENCE.md)
   §7 for two items Lahiru should be ready for.

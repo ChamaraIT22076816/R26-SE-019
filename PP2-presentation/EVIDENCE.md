@@ -69,6 +69,7 @@ All rendered at 200 dpi in the Suvana palette, from
 PP2-presentation/
 ├── README.md                  index
 ├── COWORK-BRIEF.md            slide-by-slide brief for building the deck
+├── PANEL-QA.md                24 likely panel questions, answered from the code
 ├── DEFENCE.md                 metric / dataset / methodology / repeatability + Q&A bank
 ├── AI-USE-DISCLOSURE.md       declaration of AI assistance
 ├── EVIDENCE.md                this file
@@ -163,7 +164,7 @@ spots one will discount the rest.
 | `HANDOFF-pp2-endgame.md` | "74.3% separation" | **74.6%**, and never without its baseline | **fixed 31 Aug** |
 | `web/README.md` | separation 73.8%, median 0.474, p10 0.220, p90 0.788 | **74.6%**, median **0.459**, p10 **0.222**, p90 **0.767** | **fixed 31 Aug** |
 | `web/README.md` | cross-sign floor 0.134 | **0.135** | **fixed 31 Aug** |
-| `HANDOFF-pp2-endgame.md` | Introductions **1/7** | `DEMO.md` says **3/7** | **open — confirm which** |
+| `HANDOFF-pp2-endgame.md`, `CLAUDE.md` | Introductions **1/7** | **3/7** — `YOU`/`WHERE`/`CAN` covered; `NAME`/`ME`/`YOUR`/`WHAT` missing. `DEMO.md` was right | **fixed 31 Aug** |
 | `HANDOFF-pp2-endgame.md` | `.git` is ~130 MB | `CLAUDE.md` says ~199 MB | open, immaterial |
 | `README.md` (PP1) | mentions `sign_learning_demo.py` | only `feedback_demo.py` is committed | open, cosmetic |
 
