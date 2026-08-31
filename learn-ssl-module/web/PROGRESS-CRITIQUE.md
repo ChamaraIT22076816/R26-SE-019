@@ -150,7 +150,10 @@ shipped — the bento grid is gone; the three (now four) numbers are one flat st
 in the hero's `.lstat-*` shape, the heatmap is its own full-width section, the header
 matches the Scenario hub, and the focus rows settle in with a transform-only stagger
 gated on `prefers-reduced-motion`. Also fixed a heatmap transition introduced in
-Phase 1 that left Chrome interpolating a `color-mix()` forever.
+Phase 1 that left Chrome interpolating a `color-mix()` forever. Phase 4 shipped — App
+holds a one-shot `practiceIntent`; `ProgressView`'s `onPractise(gloss)` sets it and
+switches tabs, and `PracticeView` selects that sign on mount and clears the intent, so
+a row's "Practise" button lands straight on the sign instead of the browser.
 
 ### Phase 1 — Fix what is broken (3 h) · shippable alone
 

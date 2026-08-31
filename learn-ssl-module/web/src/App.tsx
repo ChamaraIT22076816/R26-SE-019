@@ -41,6 +41,16 @@ function App() {
   const [mode, setModeState] = useState<AppMode>(readMode)
   const [entered, setEntered] = useState<boolean>(readEntered)
 
+  // A gloss handed from Progress's "Practise" rows to the next mount of
+  // PracticeView. In-memory and one-shot: reloading just lands you in Practice,
+  // which is fine. PracticeView clears it once it has selected the sign.
+  const [practiceIntent, setPracticeIntent] = useState<string | null>(null)
+
+  function openPractice(gloss?: string) {
+    setPracticeIntent(gloss ?? null)
+    setTab('practice')
+  }
+
   const tabs = mode === 'author' ? AUTHOR_TABS : LEARNER_TABS
 
   function setMode(next: AppMode) {
@@ -166,9 +176,14 @@ function App() {
       </header>
 
       <main>
-        {tab === 'practice' && <PracticeView />}
+        {tab === 'practice' && (
+          <PracticeView
+            initialGloss={practiceIntent}
+            onIntentConsumed={() => setPracticeIntent(null)}
+          />
+        )}
         {tab === 'scenario' && <ScenarioView />}
-        {tab === 'progress' && <ProgressView onOpenPractice={() => setTab('practice')} />}
+        {tab === 'progress' && <ProgressView onPractise={openPractice} />}
         {(tab === 'record' || tab === 'library' || tab === 'study') && (
           <Suspense fallback={<p className="empty-state">Loading…</p>}>
             {tab === 'record' && <RecordView />}

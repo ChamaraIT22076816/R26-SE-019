@@ -33,7 +33,14 @@ const COUNTDOWN_S = 3
 
 type Phase = 'idle' | 'countdown' | 'recording' | 'result'
 
-export function PracticeView() {
+export function PracticeView({
+  initialGloss = null,
+  onIntentConsumed,
+}: {
+  /** A sign to open on directly, handed over from Progress's "Practise" rows. */
+  initialGloss?: string | null
+  onIntentConsumed?: () => void
+} = {}) {
   const [references, setReferences] = useState<RecordingMeta[]>([])
   const [localRecs, setLocalRecs] = useState<SignRecording[]>([])
   const [selected, setSelected] = useState<RecordingMeta | null>(null)
@@ -120,6 +127,20 @@ export function PracticeView() {
       cancelled = true
     }
   }, [selected, localRecs])
+
+  // Honour a "Practise this" handoff from Progress: once the reference list is
+  // in, select that sign and drop out of browsing. Runs once — clearing the
+  // intent makes initialGloss null, so a later re-render is a no-op.
+  useEffect(() => {
+    if (!initialGloss || references.length === 0) return
+    const rec = references.find((r) => r.gloss === initialGloss)
+    if (rec) {
+      setSelected(rec)
+      setIsBrowsing(false)
+      setHoverRec(null)
+    }
+    onIntentConsumed?.()
+  }, [initialGloss, references, onIntentConsumed])
 
   // Category lookup for the practice ranking's tie-break. It only separates
   // signs the model rates equally — see buildSession.

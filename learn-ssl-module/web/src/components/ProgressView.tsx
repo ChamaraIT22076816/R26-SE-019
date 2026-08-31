@@ -32,7 +32,13 @@ function relativeDay(iso: string | null): string {
   return `${days} days ago`
 }
 
-export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }) {
+export function ProgressView({
+  onPractise,
+}: {
+  /** Open the Practice tab. With a gloss, land straight on that sign; without
+   *  one, just switch tabs. */
+  onPractise?: (gloss?: string) => void
+}) {
   const [summaries, setSummaries] = useState<GlossMastery[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, string>>(new Map())
   const [availableCategories, setAvailableCategories] = useState<string[]>([])
@@ -203,8 +209,8 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
           <section className="aww-focus" aria-labelledby="aww-focus-h">
             <div className="aww-focus-head">
               <h2 id="aww-focus-h">Practise next</h2>
-              {onOpenPractice && (
-                <button type="button" className="aww-inline-link" onClick={onOpenPractice}>
+              {onPractise && (
+                <button type="button" className="aww-inline-link" onClick={() => onPractise()}>
                   See all signs in Practice
                 </button>
               )}
@@ -231,8 +237,12 @@ export function ProgressView({ onOpenPractice }: { onOpenPractice?: () => void }
                             s.attempts === 1 ? '' : 's'
                           } · ${relativeDay(s.lastPracticedAt)}`}
                     </span>
-                    {onOpenPractice && (
-                      <button type="button" className="btn aww-focus-go" onClick={onOpenPractice}>
+                    {onPractise && (
+                      <button
+                        type="button"
+                        className="btn aww-focus-go"
+                        onClick={() => onPractise(s.gloss)}
+                      >
                         Practise
                       </button>
                     )}
