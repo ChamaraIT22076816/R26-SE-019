@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Circle, Square, X } from 'lucide-react'
 import { useHandTracking } from '../vision/useHandTracking'
 import { handCoverage } from '../vision/types'
 import type { HandFrame, RecordingMeta, SignRecording } from '../vision/types'
@@ -270,7 +271,7 @@ export function RecordView() {
               disabled={phase === 'countdown' || phase === 'recording'}
             />
           </div>
-          {justSaved && <span className="studio-saved-pill">✓ Saved Take</span>}
+          {justSaved && <span className="studio-saved-pill">Saved take</span>}
         </div>
       </div>
 
@@ -381,10 +382,84 @@ export function RecordView() {
               status={tracking.status}
               error={tracking.error}
               onStart={() => void tracking.start()}
-              idleHint="Turn on camera to begin recording reference data"
+              idleHint=""
               inferring={tracking.inferring}
+              intro={
+                <div className="aww-camera-intro">
+                  <p className="aww-camera-intro-lead">Record a reference take.</p>
+                  <p className="aww-camera-intro-note">
+                    Hand tracking runs entirely in your browser. No video is uploaded or
+                    recorded.
+                  </p>
+                  <svg
+                    className="aww-camera-intro-guide"
+                    viewBox="0 0 120 96"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="4" y="4" width="112" height="88" rx="10" opacity="0.35" />
+                    <circle cx="60" cy="34" r="12" />
+                    <path d="M38 74c4-13 13-20 22-20s18 7 22 20" />
+                    <path d="M26 60h10M84 60h10" opacity="0.5" />
+                  </svg>
+                  <button className="btn massive" onClick={() => void tracking.start()}>
+                    Turn on camera
+                  </button>
+                </div>
+              }
             />
           </div>
+
+          {/* Capture controls, anchored to this pane — one action at a time,
+              matching Practice: action bottom-left, timer top-right, the
+              countdown centred over the video. */}
+          {phase !== 'review' && tracking.status === 'running' && (
+            <>
+              {phase === 'countdown' && (
+                <div className="aww-cam-countdown" aria-hidden="true">
+                  {count}
+                </div>
+              )}
+              {phase === 'recording' && (
+                <div className="aww-cam-rec">
+                  <span className="aww-rec-dot" aria-hidden="true" />
+                  REC {(elapsedMs / 1000).toFixed(1)}s
+                </div>
+              )}
+              <div className="aww-cam-action">
+                {phase === 'idle' && (
+                  <button
+                    className="aww-cam-btn"
+                    onClick={beginCountdown}
+                    disabled={!activeGloss.trim() || !signer.trim()}
+                  >
+                    <Circle size={15} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    {!activeGloss.trim()
+                      ? 'Select a sign first'
+                      : !signer.trim()
+                        ? 'Add signer name'
+                        : 'Record take'}
+                  </button>
+                )}
+                {phase === 'countdown' && (
+                  <button className="aww-cam-btn aww-cam-btn-ghost" onClick={cancelCountdown}>
+                    <X size={16} aria-hidden="true" />
+                    Cancel
+                  </button>
+                )}
+                {phase === 'recording' && (
+                  <button className="aww-cam-btn aww-cam-btn-stop" onClick={finishRecording}>
+                    <Square size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    Stop &amp; review
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Review Replay */}
           {phase === 'review' && review && (
@@ -399,44 +474,8 @@ export function RecordView() {
         </div>
       </div>
 
-      {/* Bottom HUD Controls */}
-      {phase !== 'review' ? (
-        <div className="aww-hud">
-          {tracking.status !== 'running' ? (
-            <div className="aww-hud-idle">
-              <button className="btn massive ghost" onClick={() => void tracking.start()}>
-                Turn on Camera
-              </button>
-              <p>Motion capture tracks 21 hand landmarks frame-by-frame.</p>
-            </div>
-          ) : phase === 'idle' ? (
-            <button
-              className="btn massive"
-              onClick={beginCountdown}
-              disabled={!activeGloss.trim() || !signer.trim()}
-            >
-              {!activeGloss.trim()
-                ? 'Select or Enter a Sign First'
-                : !signer.trim()
-                  ? 'Enter Signer Name First'
-                  : `Record Take: ${activeGloss}`}
-            </button>
-          ) : phase === 'countdown' ? (
-            <div className="aww-hud-countdown">
-              <span>{count}</span>
-              <button className="btn ghost massive" onClick={cancelCountdown}>Cancel</button>
-            </div>
-          ) : phase === 'recording' ? (
-            <div className="aww-hud-recording">
-              <div className="rec-badge">● REC {(elapsedMs / 1000).toFixed(1)} s</div>
-              <button className="btn massive" onClick={finishRecording}>
-                Stop &amp; Review
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        /* Review Take Overlay Bar */
+      {/* Review Take Overlay Bar */}
+      {phase === 'review' &&
         review && (
           <div className="aww-studio-review-bar">
             <div className="review-metrics">
@@ -464,7 +503,7 @@ export function RecordView() {
 
             <div className="review-actions">
               <button className="btn massive" onClick={() => void save()}>
-                Save to Library ✓
+                Save to library
               </button>
               <button className="btn ghost massive" onClick={beginCountdown}>
                 Re-record
@@ -476,12 +515,11 @@ export function RecordView() {
                   setPhase('idle')
                 }}
               >
-                Discard Take
+                Discard take
               </button>
             </div>
           </div>
-        )
-      )}
+        )}
 
       {/* Command Palette Sign Search Modal */}
       <div className={`aww-picker-modal ${pickerOpen ? 'open' : ''}`}>

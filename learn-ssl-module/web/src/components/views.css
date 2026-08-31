@@ -3318,7 +3318,11 @@
 }
 
 .streak-fire {
-  font-size: 2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--accent);
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .streak-val {
@@ -3344,7 +3348,7 @@
 .avg-val {
   font-size: 3rem;
   font-weight: 700;
-  color: var(--danger);
+  color: var(--text);
 }
 
 .avg-lbl {
@@ -3376,15 +3380,19 @@
 }
 
 .aww-heatmap-day {
-  background: var(--accent);
-  opacity: var(--intensity, 0);
+  /* One track colour that fills toward the accent as the day gets busier.
+     An earlier version drove this with opacity plus a
+     [style*="--intensity: 0"] override — a substring match that also caught
+     "--intensity: 0.857", so every non-peak day was forced flat. color-mix
+     reads the number directly and has no such trap. */
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(var(--intensity, 0) * 100%),
+    var(--surface-2)
+  );
   border-radius: 8px;
   aspect-ratio: 1;
-  transition: opacity 0.3s ease;
-}
-.aww-heatmap-day[style*="--intensity: 0"] {
-  background: var(--surface-2);
-  opacity: 1 !important;
+  transition: background 0.3s ease;
 }
 
 /* 2. Command Center (Sign Library) */

@@ -55,7 +55,7 @@ Full scope-cut rationale: `PP2-Scope-Plan.docx` in the separate "Research" folde
 1–2. React app, in-browser MediaPipe capture, reference-recording tool, DTW scoring for ~10 signs
 3–4. Feedback overlay + corrective text hints at ≤300 ms; per-sign accuracy logging; polished practice UI (kvn's strength — make it look great)
 5. Learner model v1: mastery tracking, weighted practice selection, progress dashboard
-6. Scenario simulation; vocabulary to 20–30 signs. **Scenario changed 1 Aug 2026: Restaurant → Social Gathering (Introductions)**, because Restaurant needs food/drink vocabulary we have no references for, while ME/YOU/NAME/WHAT/WHERE/CAN/YOUR is already a first-meeting conversation the avatar can perform. "Social Gathering" is one of the five proposal-approved scenarios, so this is a retarget, not a deviation. (In the end Restaurant shipped with 5/5 real-signer references and Introductions 1/7 — see HANDOFF-pp2-endgame.md; Restaurant is the one to demo.)
+6. Scenario simulation; vocabulary to 20–30 signs. **Scenario changed 1 Aug 2026: Restaurant → Social Gathering (Introductions)**, because Restaurant needs food/drink vocabulary we have no references for, while ME/YOU/NAME/WHAT/WHERE/CAN/YOUR is already a first-meeting conversation the avatar can perform. "Social Gathering" is one of the five proposal-approved scenarios, so this is a retarget, not a deviation. (In the end Restaurant shipped with 5/5 real-signer references and Introductions 3/7 — see HANDOFF-pp2-endgame.md; Restaurant is the one to demo.)
 7. Integrate into team platform, pilot test, measure latency/accuracy, PP2 slides
 
 ### Proposal targets to keep in sight

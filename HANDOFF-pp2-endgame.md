@@ -19,9 +19,9 @@ and that is where the marks are.
 |---|---|
 | Web app, capture, recorder, library | Done |
 | DTW scoring + per-finger corrective feedback | Done, constants fitted to data |
-| Reference data — 362 files, 351 signs, 2 corpora | Done |
+| Reference data — 501 recordings, 490 signs, 2 corpora | Done |
 | Learner model v1 + progress dashboard | Done (BKT deferred by plan) |
-| Scenarios — Restaurant 5/5 refs, Introductions 1/7 | Done for PP2 scope |
+| Scenarios — Restaurant 5/5 refs, Introductions 3/7 | Done for PP2 scope |
 | Latency instrumentation | Done — **needs ~20 scored attempts to produce figures** |
 | **UI/UX overhaul** | **Done.** Six phases, see `web/UIUX-PLAN.md` |
 | **Deployment** | **Live on Vercel** |
@@ -35,7 +35,7 @@ and that is where the marks are.
 | Target | Status |
 |---|---|
 | ≤300 ms feedback latency | Instrumented end to end; the Study tab reports median/p95/% within target. **Needs ~20 attempts** before p95 stops reading *provisional*. Closest to done — about an hour of kvn's own signing. |
-| ≥90% accuracy vs expert | **Not measured, and no code addresses it.** The 74.3% separation figure is a different claim — do not conflate them. Weakest target. |
+| ≥90% accuracy vs expert | **Not measured, and no code addresses it.** The 74.6% separation figure is a different claim — do not conflate them, and never quote it without its 65.4% majority-class baseline. Weakest target. |
 | ≥20% learning gain | Needs the pilot. Attempts now carry a `sessionId`, so "after N sessions" is countable rather than inferred from clock gaps. |
 | SUS ≥70 | Needs the pilot **and a questionnaire that does not yet exist**. |
 
@@ -97,8 +97,10 @@ reasoning now lives in `web/README.md`.
 
 - **The pilot has no SUS instrument.** Biggest gap outside the pilot itself.
 - **kvn's 7 recorded glosses were never committed.** They exist only in one
-  browser's IndexedDB. Introductions therefore shows **1 of 7**; Restaurant runs
-  5/5 on real-signer references and is the one to demo.
+  browser's IndexedDB. Introductions therefore shows **3 of 7** — `YOU`, `WHERE`
+  and `CAN` are covered by the bundled corpora; `NAME`, `ME`, `YOUR` and `WHAT`
+  are the missing four. Restaurant runs 5/5 on real-signer references and is the
+  one to demo. (Verified against `public/reference-index.json`, 31 Aug 2026.)
 - **Video references are the agreed fix for reference legibility, deferred.**
   A landmark skeleton cannot convey palm orientation or handshape detail.
   Mitigations shipped (frame-relative stroke sizing, translucent palm,
