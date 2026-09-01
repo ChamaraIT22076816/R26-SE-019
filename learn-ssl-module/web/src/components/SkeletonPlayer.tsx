@@ -113,34 +113,47 @@ export function SkeletonPlayer({
   }
 
   return (
-    <div className="skeleton-player">
+    <div className="skeleton-player aww-skeleton-player">
+      <div className="aww-viewfinder-grid" aria-hidden="true">
+        <div className="reticle-corner tl" />
+        <div className="reticle-corner tr" />
+        <div className="reticle-corner bl" />
+        <div className="reticle-corner br" />
+      </div>
+
       <canvas
         ref={canvasRef}
         width={videoWidth}
         height={videoHeight}
         className={mirrored ? 'mirrored' : undefined}
       />
-      <div className="player-controls">
-        <button className="player-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
+      <div className="player-controls aww-player-controls">
+        <button className="player-btn aww-player-play-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
         </button>
         <button
-          className="player-btn"
+          className="player-btn aww-player-speed-btn"
           onClick={() => setSpeed((s) => (s === 1 ? 0.5 : 1))}
           aria-pressed={speed === 0.5}
           aria-label={speed === 1 ? 'Play at half speed' : 'Play at normal speed'}
         >
           {speed === 1 ? '1x' : '0.5x'}
         </button>
-        <input
-          type="range"
-          min={0}
-          max={durationMs}
-          value={Math.round(timeMs)}
-          onChange={(e) => seek(Number(e.target.value))}
-          aria-label="Scrub reference playback"
-        />
-        <span className="player-time">
+        <div className="aww-scrubber-wrap">
+          <input
+            type="range"
+            min={0}
+            max={durationMs}
+            value={Math.round(timeMs)}
+            onChange={(e) => seek(Number(e.target.value))}
+            aria-label="Scrub reference playback"
+            className="aww-player-range"
+            style={{
+              '--seek-pct': `${(timeMs / durationMs) * 100}%`,
+            } as React.CSSProperties}
+          />
+        </div>
+        <span className="player-time aww-player-time">
           {(timeMs / 1000).toFixed(1)} / {(durationMs / 1000).toFixed(1)} s
         </span>
       </div>

@@ -155,6 +155,8 @@ export function drawHands(
     // inked pixels, and is also *slower* here (0.022 ms vs 0.017 ms per frame)
     // because Path2D setup costs more than the draw calls it saves on paths
     // this small.
+    ctx.shadowColor = color
+    ctx.shadowBlur = 6
     ctx.strokeStyle = color
     ctx.lineWidth = bone
     for (const [from, to] of HAND_CONNECTIONS) {
@@ -166,6 +168,7 @@ export function drawHands(
       ctx.lineTo(px(b), py(b))
       ctx.stroke()
     }
+    ctx.shadowBlur = 0
 
     // z is depth relative to the wrist, negative toward the camera. Normalising
     // per hand rather than against a fixed range keeps the cue readable whether

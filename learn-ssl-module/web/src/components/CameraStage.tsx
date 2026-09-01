@@ -49,8 +49,14 @@ export function CameraStage({
   const [swapped, setSwapped] = useState(false)
 
   return (
-    <div className={swapped ? 'camera-stage camera-stage--swapped' : 'camera-stage'}>
+    <div className={swapped ? 'camera-stage camera-stage--swapped aww-camera-stage' : 'camera-stage aww-camera-stage'}>
       <div className="stage-live">
+        <div className="aww-viewfinder-grid" aria-hidden="true">
+          <div className="reticle-corner tl" />
+          <div className="reticle-corner tr" />
+          <div className="reticle-corner bl" />
+          <div className="reticle-corner br" />
+        </div>
         <video ref={videoRef} playsInline muted />
         <canvas
           ref={canvasRef}

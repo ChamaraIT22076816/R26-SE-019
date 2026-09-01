@@ -15,6 +15,24 @@ export interface CategorySignNavigatorProps {
   onPreview?: (sign: RecordingMeta | null) => void
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  'A-Z': 'M4 7V4h16v3M9 20h6M12 4v16',
+  'Numbers': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
+  '20-99': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
+  '100-1 million': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
+  'Days': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  'Months': 'M3 4h18v18H3zM16 2v4M8 2v4M3 10h18',
+  'Greetings': 'M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3',
+  'People': 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  'Places': 'M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6z',
+  'Verbs': 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  'Adjectives': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  'Colors': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  'Vehicles': 'M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2',
+  'Food': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',
+  'Other': 'M4 6h16M4 12h16M4 18h16',
+}
+
 export function CategorySignNavigator({
   references,
   suggested = null,
@@ -94,12 +112,11 @@ export function CategorySignNavigator({
                 {mode === 'record' ? 'Select Sign' : 'Categories'}
               </h2>
               <p className="cs-nav-subtitle">
-                {references.length} signs in {categories.length} categories
+                {references.length} signs across {categories.length} categories
               </p>
             </div>
           )}
         </div>
-
       </div>
 
       {/* Search Bar */}
@@ -143,7 +160,7 @@ export function CategorySignNavigator({
               className="cs-search-input"
               value={globalQuery}
               onChange={(e) => setGlobalQuery(e.target.value)}
-              placeholder={`Search ${references.length} signs...`}
+              placeholder={`Search ${references.length} signs (e.g. Ayubowan, Numbers)...`}
               autoComplete="off"
               spellCheck={false}
             />
@@ -170,23 +187,30 @@ export function CategorySignNavigator({
           {suggestedRec && mode === 'practice' && (
             <div className="cs-suggested-banner" onClick={() => onSelect(suggestedRec)} role="button" tabIndex={0}>
               <div className="cs-suggested-left">
-                <span className="cs-suggested-tag">SUGGESTED</span>
+                <div className="cs-suggested-tag-row">
+                  <span className="cs-suggested-tag">
+                    <span className="cs-suggested-dot" />
+                    DAILY RECOMMENDATION
+                  </span>
+                  <span className="cs-suggested-cat">{categoryOf(suggestedRec)}</span>
+                </div>
                 <h3 className="cs-suggested-gloss">{suggestedRec.gloss}</h3>
                 {translationOf(suggestedRec.gloss) && (
-                  <span className="cs-suggested-sub">"{translationOf(suggestedRec.gloss)}"</span>
+                  <span className="cs-suggested-sub" lang="si">
+                    {translationOf(suggestedRec.gloss)}
+                  </span>
                 )}
               </div>
               <button type="button" className="btn small cs-suggested-btn">
-                Select
+                <span>Practise</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
           )}
 
-          {/* Author-only: the single route to recording a gloss the corpus does
-              not have. It hands an empty gloss to the caller, which opens the
-              inline name field in the reference pane — the same field the
-              "Record <query>" button below reaches from an empty search. A
-              window.prompt() used to be a second, unstyled mechanism for this. */}
+          {/* Author-only custom gloss card */}
           {mode === 'record' && onCreateCustom && (
             <div className="cs-custom-gloss-card">
               <div className="cs-custom-info">
@@ -199,10 +223,11 @@ export function CategorySignNavigator({
             </div>
           )}
 
-          {/* Categories Grid (Clean compact tiles) */}
+          {/* Categories Grid */}
           <div className="cs-categories-grid">
             {categories.map((catName) => {
               const catSigns = signsByCategory.get(catName) ?? []
+              const iconPath = CATEGORY_ICONS[catName] || CATEGORY_ICONS['Other']
               return (
                 <div
                   key={catName}
@@ -220,8 +245,15 @@ export function CategorySignNavigator({
                     }
                   }}
                 >
-                  <span className="cs-cat-name" title={catName}>{catName}</span>
-                  <span className="cs-cat-badge">{catSigns.length}</span>
+                  <div className="cs-cat-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={iconPath} />
+                    </svg>
+                  </div>
+                  <div className="cs-cat-card-inner">
+                    <span className="cs-cat-name" title={catName}>{catName}</span>
+                    <span className="cs-cat-badge">{catSigns.length}</span>
+                  </div>
                 </div>
               )
             })}
@@ -276,7 +308,9 @@ export function CategorySignNavigator({
                     </div>
 
                     <h4 className="cs-sign-gloss">{r.gloss}</h4>
-                    {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
+                    {meaning && (
+                      <p className="cs-sign-meaning" lang="si">{meaning}</p>
+                    )}
                   </div>
                 )
               })}
@@ -319,14 +353,13 @@ export function CategorySignNavigator({
                     }}
                   >
                     <div className="cs-sign-main">
-                      {/* Inside the folded "Other" bucket the sign's real
-                          category is the only thing that explains why it is
-                          there, so the card carries it. */}
                       {foldedCategoryOf(r) && foldedCategoryOf(r) !== selectedCategory && (
                         <span className="cs-sign-cat-tag">{foldedCategoryOf(r)}</span>
                       )}
                       <h4 className="cs-sign-gloss">{r.gloss}</h4>
-                      {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
+                      {meaning && (
+                        <p className="cs-sign-meaning" lang="si">{meaning}</p>
+                      )}
                     </div>
 
                     {(isSuggested || r.source === 'team-recording') && (
