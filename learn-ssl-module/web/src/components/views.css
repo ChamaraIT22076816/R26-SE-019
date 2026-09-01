@@ -3112,15 +3112,38 @@
 .aww-pane .skeleton-player {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
-.aww-pane .skeleton-player svg,
-.aww-pane .skeleton-player canvas,
+
+/* The live camera fills its pane and crops — normal webcam framing. The video
+   and its landmark overlay MUST keep the same fit as each other, or the drawn
+   skeleton stops lining up with the hands underneath it. */
 .aww-pane .stage-live video,
 .aww-pane .stage-live canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* A replayed skeleton fills its pane at desktop widths, where the pane is
+   roughly as wide as it is tall and `cover` trims about 12% off a square
+   reference — worth it for the extra size on a diagram someone is copying.
+   The panes get much taller than they are wide as the viewport narrows, and
+   the same rule then cuts the reference in half: measured at a 768px
+   viewport, 49% of the reference width sat outside the pane. Below that
+   point the fit switches to `contain`, which letterboxes instead of cropping.
+   The clip is already centred and zoomed for the whole sequence by fitFor(). */
+.aww-pane .skeleton-player svg,
+.aww-pane .skeleton-player canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 1100px) {
+  .aww-pane .skeleton-player svg,
+  .aww-pane .skeleton-player canvas {
+    object-fit: contain;
+  }
 }
 
 
