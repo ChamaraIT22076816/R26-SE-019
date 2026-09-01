@@ -1224,34 +1224,6 @@
   min-width: 70px;
 }
 
-.level-chip {
-  font: 600 11px var(--sans);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 2px 10px;
-  min-width: 76px;
-  text-align: center;
-}
-
-/* Each level differs by its wording; the border and fill are a second,
-   non-colour cue on top — dashed for the untried, filled for the finished. */
-.level-chip.new {
-  color: var(--text-dim);
-  border-style: dashed;
-}
-.level-chip.learning {
-  color: var(--caution);
-}
-.level-chip.improving {
-  color: var(--accent);
-}
-.level-chip.mastered {
-  color: var(--on-accent);
-  background: var(--success);
-  border-color: var(--success);
-}
 
 .mastery-bar {
   flex: 1;
@@ -3172,206 +3144,432 @@
 }
 
 /* ============================================================================
-   PROGRESS TAB (Awwwards-Level Redesign)
+   PROGRESS TAB — learner dashboard
+
+   Desktop: a full-width masthead, a hairline-divided stat band, then a two
+   column work area — the action lists on the left, activity and coverage in a
+   rail on the right. The shell widens to 1400px for this tab only (index.css,
+   --shell-max), because a dashboard laid out in a 1000px column is mostly
+   margin.
+
+   Everything is restated for narrow screens in the MOBILE block at the end of
+   this section — that is the single place to look for the phone layout.
    ========================================================================== */
 
-.aww-progress-view {
-  /* width:100% because <main> is a flex column: a flex item with `margin:auto`
-     on the inline axis opts out of `align-items: stretch` and shrinks to its
-     content, which since Phase 3 is narrow enough to look broken. The explicit
-     width restores the fill; max-width still caps it and the auto margins still
-     centre it. */
+.pg {
   width: 100%;
-  max-width: 1000px;
-  margin: 40px auto;
-  /* Modest bottom padding: `main` adds its own, and `flex:1` on `main` keeps
-     the footer at the viewport floor, so a big pad here just opened a gap
-     between the last row and the footer on a short page. */
-  padding: 0 24px 48px;
   color: var(--text);
   font-family: var(--sans);
 }
 
-.aww-progress-header {
-  margin-bottom: 40px;
-}
+/* ---- masthead ---------------------------------------------------------- */
 
-.aww-progress-title {
-  font-family: var(--serif);
-  /* Same construction as .aww-hub-title on the Scenario tab, so the two
-     content tabs open with the same voice. */
-  font-size: clamp(2.25rem, 6vw, 3.5rem);
-  font-weight: 400;
-  color: var(--text);
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-}
-
-.aww-progress-sub {
-  margin-top: 10px;
-  font-size: 1.1rem;
-  color: var(--text-dim);
-}
-
-/* Loading — three grey bars in the shape of what is coming, not the word
-   "Loading". Pulse is collapsed by the global reduced-motion rule. */
-.aww-progress-skeleton {
+.pg-masthead {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
-  margin-top: 8px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-6);
+  padding-bottom: var(--s-6);
+  margin-bottom: var(--s-8);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.aww-progress-skeleton .sk-bar {
-  background: var(--surface-2);
-  border-radius: var(--r-md);
-  animation: aww-sk-pulse 1.4s var(--ease-in-out) infinite;
+.pg-masthead-lead {
+  min-width: 0;
 }
 
-.aww-progress-skeleton .sk-band {
-  height: 92px;
-  border-radius: var(--r-lg);
-}
-.aww-progress-skeleton .sk-head {
-  height: 34px;
-  width: 40%;
-  margin-top: 28px;
-}
-.aww-progress-skeleton .sk-row {
-  height: 56px;
+/* Small mono kicker over a serif heading — the hero's numbered-step idiom,
+   reused so every section on this page announces itself the same way. */
+.pg-kicker {
+  margin: 0 0 var(--s-2);
+  font: 600 var(--fs-xs) var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
-@keyframes aww-sk-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
-}
-
-/* No-data state (references failed to load) and first-run state (signs are
-   loaded, nothing practised yet) share one calm serif treatment. */
-.aww-progress-empty,
-.aww-progress-firstrun h2 {
+.pg-title {
+  margin: 0;
   font-family: var(--serif);
-}
-
-.aww-progress-empty {
-  padding: 24px 0 48px;
-}
-
-.aww-progress-empty h2,
-.aww-progress-firstrun h2 {
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
   font-weight: 400;
-  margin: 0 0 12px;
+  line-height: 1;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
-.aww-progress-empty p,
-.aww-progress-firstrun p {
+.pg-sub {
+  margin: var(--s-4) 0 0;
+  max-width: 56ch;
   font-size: 1.05rem;
   color: var(--text-dim);
-  max-width: 46ch;
-  margin: 0;
 }
 
-.aww-progress-firstrun {
-  margin-bottom: 48px;
+/* ---- stat band --------------------------------------------------------- */
+
+/* One-pixel gaps over a border-coloured backdrop give crisp full-height
+   dividers without a border on each cell doubling up at the seams. */
+.pg-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-bottom: var(--s-8);
+  background: var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
 }
 
-/* 1. Stat band — one horizontal row of numbers, the same shape as the hero's
-   .lhero-stats-strip. Replaced a 1.2fr/1fr/1.5fr bento of cards that lifted on
-   hover and carried a mastery ring which, against ~490 signs, was always a 6%
-   sliver. */
-.aww-progress-stats {
+.pg-stat {
   display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-6);
+  background: var(--surface);
+}
+
+.pg-stat-val {
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 2.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.pg-stat-of {
+  margin-left: 0.3em;
+  font-size: 0.44em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+
+.pg-stat-lbl {
+  font: 500 var(--fs-xs) var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.pg-stat-track {
+  height: 4px;
+  margin-top: var(--s-2);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+
+.pg-stat-fill {
+  height: 100%;
+  min-width: 4px;
+  background: var(--accent);
+  border-radius: inherit;
+}
+
+/* Seven dots for the trailing week — the streak number says how long, these
+   say which days, without repeating the 14-day heatmap in the rail. */
+.pg-week {
+  display: flex;
+  gap: 5px;
+  margin-top: var(--s-2);
+  height: 4px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 14px 28px;
-  padding: 20px 28px;
-  margin-bottom: 56px;
+}
+
+.pg-week-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+.pg-week-dot.is-on {
+  background: var(--accent);
+}
+
+/* ---- two-column work area ---------------------------------------------- */
+
+.pg-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+  gap: var(--s-6);
+  align-items: start;
+}
+
+.pg-col-main,
+.pg-col-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  min-width: 0;
+}
+
+.pg-panel {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-lg);
+  padding: var(--s-6);
 }
 
-.aww-progress-stats .lstat-pill {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+.pg-panel-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-bottom: var(--s-5);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--s-2);
 }
 
-.aww-progress-stats .lstat-val {
+.pg-panel-head h2 {
+  margin: 0;
+  font-family: var(--serif);
   font-size: 1.6rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.aww-progress-stats .lstat-of {
-  color: var(--text-dim);
   font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
-.aww-progress-stats .lstat-sep {
-  height: 34px;
+.pg-panel-figure {
+  flex: none;
+  font: 700 1.25rem var(--serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
-@media (max-width: 640px) {
-  .aww-progress-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px 16px;
-  }
-  .aww-progress-stats .lstat-sep {
-    display: none;
-  }
+.pg-panel-figure span {
+  font: 500 var(--fs-xs) var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
-/* 2. Activity — full width, its own section rather than a bento cell */
-.aww-activity {
-  margin-bottom: 64px;
+/* One text-link style for every non-primary action on the page. */
+.pg-link {
+  flex: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: 500 var(--fs-md) var(--sans);
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
-.aww-activity-head {
+.pg-link:hover {
+  color: var(--accent-soft);
+}
+
+/* ---- sign rows --------------------------------------------------------- */
+
+.pg-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pg-row {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) minmax(130px, 190px) 104px auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  margin-inline: calc(var(--s-4) * -1);
+  border-radius: var(--r-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* An inset shadow rather than border-bottom: it draws the divider without
+   fighting the row's own border-radius on hover. */
+.pg-row + .pg-row {
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+}
+
+.pg-row:hover {
+  background: var(--surface-2);
+}
+
+.pg-rank {
+  font: 600 var(--fs-sm) var(--mono);
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.pg-row-id {
+  min-width: 0;
+}
+
+.pg-row-title {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 6px 20px;
-  margin-bottom: 20px;
-}
-
-.aww-activity-head h2 {
-  font-family: var(--serif);
-  font-size: 2.2rem;
-  font-weight: 400;
+  gap: var(--s-3);
   margin: 0;
 }
 
-.aww-activity-total {
-  font-size: 0.9rem;
+.pg-gloss {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.pg-meaning {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+.pg-row-meta {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 
-.aww-heatmap {
-  display: grid;
-  grid-template-columns: repeat(14, 1fr);
-  gap: 6px;
-  max-width: 520px;
+.pg-row-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
 }
 
-.aww-heatmap-day {
-  /* Fills from the inset-surface toward the accent as the day gets busier.
-     color-mix reads the --intensity number straight; an earlier build used
-     opacity plus a [style*="--intensity: 0"] rule, a substring match that also
-     caught "0.857" and flattened every non-peak day.
+.pg-meter {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
 
-     No transition: the intensities are written once on load and never change,
-     and transitioning a color-mix() whose percentage comes from a var() leaves
-     Chrome interpolating forever — the tiles freeze mid-mix. */
+.pg-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* The meter carries the level as colour; the chip beside it carries the same
+   level as words, so neither is the only cue. */
+.pg-meter.is-new .pg-meter-fill {
+  background: var(--border-interactive);
+}
+.pg-meter.is-learning .pg-meter-fill {
+  background: var(--caution);
+}
+.pg-meter.is-improving .pg-meter-fill {
+  background: var(--accent);
+}
+.pg-meter.is-mastered .pg-meter-fill {
+  background: var(--success);
+}
+
+.pg-meter-val {
+  flex: none;
+  min-width: 3.5ch;
+  text-align: right;
+  font: 600 var(--fs-sm) var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.pg-chip {
+  justify-self: start;
+  font: 600 var(--fs-2xs) var(--sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 4px 11px;
+  border: 1px solid currentColor;
+  border-radius: var(--r-full);
+}
+
+.pg-chip.is-new {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+.pg-chip.is-learning {
+  color: var(--caution);
+}
+.pg-chip.is-improving {
+  color: var(--accent);
+}
+/* Filled, not another outline — "mastered" differs by shape as well as hue. */
+.pg-chip.is-mastered {
+  color: var(--on-accent);
+  background: var(--success);
+  border-color: var(--success);
+}
+
+/* Ghost until hovered. Six filled buttons stacked down a list shout over the
+   content they are attached to; this keeps the gloss the loudest thing. */
+.pg-go {
+  flex: none;
+  white-space: nowrap;
+  font: 600 var(--fs-sm) var(--sans);
+  padding: 9px 18px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-interactive);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.pg-go:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Rows settle up into place on first paint, one after another. Transform only —
+   the text is legible at frame one — and only when JS confirms motion is
+   allowed (the list gets .is-animated), so no row waits out a stagger delay
+   under reduced motion. */
+@keyframes pg-row-in {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.pg-rows.is-animated .pg-row {
+  animation: pg-row-in var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* ---- activity ---------------------------------------------------------- */
+
+/* One strip of 14, not a 7x2 block: it reads as a timeline, matches the
+   "last 14 days" label, and keeps the tiles small enough to stay a chart
+   rather than becoming the loudest thing in the rail. */
+.pg-heat {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 5px;
+  margin-top: var(--s-5);
+}
+
+/* Fills from the inset surface toward the accent as the day gets busier.
+   color-mix reads --intensity straight; an earlier build used opacity plus a
+   [style*="--intensity: 0"] rule, a substring match that also caught "0.857"
+   and flattened every non-peak day. No transition: the values are written once
+   on load, and transitioning a var()-driven color-mix() never settles. */
+.pg-heat-day,
+.pg-heat-key i {
   background: color-mix(
     in srgb,
     var(--accent) calc(var(--intensity, 0) * 100%),
@@ -3381,182 +3579,279 @@
   aspect-ratio: 1;
 }
 
-/* 2. Practise next + coverage by category
-   Replaced the in-Progress "Sign Library" (a second search box and 20
-   accordions spilling ~490 cards) — that browser is Practice's job. */
-.aww-focus {
-  margin-top: 64px;
-}
-
-.aww-focus-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px 24px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-.aww-focus-head h2,
-.aww-coverage h2 {
-  font-family: var(--serif);
-  font-size: 2.2rem;
-  font-weight: 400;
-  margin: 0;
-}
-
-/* One text link style for both "See all signs in Practice" and the category
-   disclosure — nothing on this page is a button that could be a link. */
-.aww-inline-link {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.95rem;
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.aww-inline-link:hover {
-  color: var(--accent-soft);
-}
-
-.aww-focus-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.aww-focus-row {
+.pg-heat-key {
   display: flex;
   align-items: center;
-  gap: 12px 16px;
-  padding: 18px 4px;
-  border-bottom: 1px solid var(--border-subtle);
-  flex-wrap: wrap;
-}
-
-/* Rows settle up into place on first paint, one after another. Transform only —
-   the text is legible at frame one — and only when JS has confirmed motion is
-   allowed (ProgressView adds .is-animated), so no row waits out a stagger delay
-   under reduced motion. */
-@keyframes aww-focus-row-in {
-  from {
-    transform: translateY(10px);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-.aww-focus-list.is-animated .aww-focus-row {
-  animation: aww-focus-row-in var(--dur-base) var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 45ms);
-}
-
-.aww-focus-main {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex: 1 1 200px;
-}
-
-.aww-focus-gloss {
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.aww-focus-meaning {
-  font-size: 0.95rem;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: var(--s-4);
+  font: 500 var(--fs-2xs) var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.aww-focus-stat {
-  font-size: 0.9rem;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
+.pg-heat-key i {
+  width: 11px;
+  height: 11px;
 }
 
-.aww-focus-go {
-  flex-shrink: 0;
-  padding: 8px 18px;
-  font-size: 13px;
-}
+/* ---- coverage ---------------------------------------------------------- */
 
-.aww-coverage {
-  margin-top: 64px;
-}
-
-.aww-coverage h2 {
-  margin-bottom: 24px;
-}
-
-.aww-coverage-list {
+.pg-cov {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
 }
 
-.aww-coverage-row {
+.pg-cov-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 2fr);
-  align-items: center;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 var(--s-3);
+  padding: var(--s-3) 0;
 }
 
-.aww-coverage-name {
-  font-size: 0.95rem;
+.pg-cov-row + .pg-cov-row {
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+}
+
+.pg-cov-name {
+  font-size: var(--fs-base);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pg-cov-count {
+  font: 600 var(--fs-sm) var(--mono);
+  font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
-.aww-coverage-count {
-  font-size: 0.85rem;
+.pg-cov-count span {
+  font-weight: 400;
   color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
 }
 
-.aww-coverage-track {
-  height: 6px;
+.pg-cov-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  margin-top: var(--s-2);
   background: var(--surface-2);
   border-radius: var(--r-full);
   overflow: hidden;
 }
 
-.aww-coverage-fill {
+.pg-cov-fill {
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
 }
 
-.aww-coverage-more {
-  margin-top: 20px;
+.pg-cov-more {
+  margin-top: var(--s-5);
 }
 
-@media (max-width: 600px) {
-  .aww-coverage-row {
-    grid-template-columns: 1fr auto;
+/* ---- loading and empty states ------------------------------------------ */
+
+.pg-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.pg-skeleton .sk {
+  background: var(--surface-2);
+  border-radius: var(--r-lg);
+  animation: pg-sk-pulse 1.4s var(--ease-in-out) infinite;
+}
+
+.pg-skeleton .sk-band {
+  height: 128px;
+}
+.pg-skeleton .sk-panel {
+  height: 320px;
+}
+.pg-skeleton .sk-short {
+  height: 180px;
+}
+
+@keyframes pg-sk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.pg-notice h2 {
+  margin: 0 0 var(--s-3);
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 400;
+  color: var(--text);
+}
+
+.pg-notice p {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 1.05rem;
+  color: var(--text-dim);
+}
+
+/* First run: signs are loaded but nothing is practised, so the stat band would
+   be four zeros. This replaces it and the rail panels stay hidden. */
+.pg-notice-inline {
+  padding: var(--s-6);
+  margin-bottom: var(--s-8);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+}
+
+/* ============================================================================
+   PROGRESS TAB — MOBILE
+
+   The layout above assumes two columns and a five-column row. Everything that
+   has to change for a narrow screen changes here, in one place.
+   ========================================================================== */
+
+/* Tablet: the rail drops beneath the lists rather than squeezing both. */
+@media (max-width: 1100px) {
+  .pg-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pg-heat {
+    max-width: 420px;
+  }
+
+  .pg-heat-key {
+    justify-content: flex-start;
+    max-width: 420px;
+  }
+}
+
+/* Small tablet / large phone: the stat band folds to 2x2, and the five-column
+   sign row folds to two lines — identity + chip, then meter + action — with
+   the rank numeral spanning both. Two lines, not four: six rows of a
+   four-band stack is a very long scroll for very little information. */
+@media (max-width: 820px) {
+  .pg-masthead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-5);
+  }
+
+  .pg-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pg-row {
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
     grid-template-areas:
-      'name count'
-      'track track';
+      'rank id    chip'
+      'rank meter go';
+    align-items: center;
+    row-gap: var(--s-3);
+    column-gap: var(--s-3);
   }
-  .aww-coverage-name {
-    grid-area: name;
+
+  .pg-rank {
+    grid-area: rank;
+    align-self: start;
+    padding-top: 3px;
   }
-  .aww-coverage-count {
-    grid-area: count;
+  .pg-row-id {
+    grid-area: id;
   }
-  .aww-coverage-track {
-    grid-area: track;
+  .pg-row-meter {
+    grid-area: meter;
+  }
+  .pg-chip {
+    grid-area: chip;
+    justify-self: end;
+  }
+  .pg-go {
+    grid-area: go;
+  }
+
+  /* Stacked rather than wrapped: sharing one line, a long gloss and its meaning
+     wrap into three ragged lines in the narrowed column. Explicit lines are
+     both shorter and predictable. */
+  .pg-row-title {
+    display: block;
+  }
+
+  .pg-meaning {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fs-sm);
+  }
+
+  /* No hover state on touch, and a persistent tint would read as "selected". */
+  .pg-row:hover {
+    background: transparent;
+  }
+
+  .pg-panel-head {
+    align-items: flex-start;
   }
 }
 
+/* Phone: the stat band stacks and the panels lose a step of padding. The row
+   keeps the two-line shape from 820px — it survives 320px fine — and only the
+   action grows, to clear a 44px touch target. */
+@media (max-width: 560px) {
+  .pg-masthead {
+    padding-bottom: var(--s-5);
+    margin-bottom: var(--s-6);
+  }
+
+  /* Stays 2x2 — four full-width cells stacked is a screen and a half of
+     scrolling before the page has said anything. */
+  .pg-stat {
+    padding: var(--s-4);
+  }
+
+  .pg-stat-lbl {
+    letter-spacing: 0.06em;
+  }
+
+  .pg-panel {
+    padding: var(--s-5);
+    border-radius: var(--r-md);
+  }
+
+  .pg-row {
+    padding: var(--s-4) var(--s-3);
+    margin-inline: calc(var(--s-3) * -1);
+  }
+
+  .pg-go {
+    padding: 12px 16px;
+  }
+
+  /* Tracked-out small caps are the first thing to break a narrow column:
+     "Ranked by the learner model" wraps to two lines at 0.16em and fits on
+     one at 0.1em. The head can still wrap if a translation runs longer. */
+  .pg-kicker {
+    letter-spacing: 0.1em;
+  }
+
+  .pg-panel-head {
+    flex-wrap: wrap;
+  }
+
+  .pg-heat,
+  .pg-heat-key {
+    max-width: none;
+  }
+}
 
 /* ============================================================================
    SCENARIO HUB & THEMES

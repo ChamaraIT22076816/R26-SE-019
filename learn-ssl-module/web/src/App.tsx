@@ -175,7 +175,9 @@ function App() {
         </div>
       </header>
 
-      <main>
+      {/* data-tab drives the shell width: Progress is a dashboard and takes
+          the wide shell, every other tab keeps the reading column. */}
+      <main data-tab={tab}>
         {tab === 'practice' && (
           <PracticeView
             initialGloss={practiceIntent}
