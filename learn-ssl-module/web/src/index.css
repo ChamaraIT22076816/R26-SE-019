@@ -567,9 +567,9 @@ body::before {
    composites the whole strip every frame, and on the Practice tab it would sit
    directly over a live camera feed on exactly the devices least able to afford
    it. */
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   :root {
-    --nav-offset: calc(64px + env(safe-area-inset-bottom, 0px));
+    --nav-offset: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .tabs {
