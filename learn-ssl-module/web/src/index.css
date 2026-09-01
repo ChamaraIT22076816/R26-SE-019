@@ -192,44 +192,33 @@
   --bg: #fdfdfd;
   --surface: #ffffff;
   --surface-rgb: 255, 255, 255;
-  --surface-2: #f0f5f4;
-  --surface-hover: #e7efed;
+  --surface-2: #faf8f5;
+  --surface-hover: #f3efe6;
 
-  --text: #333333;
-  --text-dim: #5a6b68;
-  /* Accent is dark in this theme, so its foreground is paper, not ink. */
+  --text: #262118;
+  --text-dim: #6e6454;
   --on-accent: #ffffff;
 
-  /* Measured, as in the dark block above. The hairline is 1.25:1 on white,
-     which is decorative and allowed; the interactive border is 3.68:1 on
-     --surface and 3.34:1 on --surface-2, both clearing the 3:1 WCAG 2.1
-     SC 1.4.11 asks of a control boundary. */
-  --border-subtle: #dfe8e6;
-  --border-interactive: #6f8b86;
+  --border-subtle: #e8e2d5;
+  --border-interactive: #9e855a;
 
-  /* 5.46:1 on --surface, and the same in reverse for --on-accent on a filled
-     accent button. */
-  --accent: #00776a;
-  --accent-soft: #00a693;
-  /* Lime and amber are invisible on white; these are the same hues taken
-     dark enough to read as text (4.99:1 and 5.37:1 on --surface). */
-  --success: #4d7c0f;
-  --caution: #8a6410;
-  --integrity: #8a6410;
+  /* Goldenrod / Gold primary accent for Light Mode */
+  --accent: #b45309;
+  --accent-soft: #d97706;
+  --success: #15803d;
+  --caution: #b45309;
+  --integrity: #b45309;
   --danger: #b91c1c;
   --recording: #dc2626;
   --recording-strong: #b91c1c;
 
-  /* Washes: a dark page tints with light, a light page tints with colour. */
-  --glow-accent: rgb(0 166 147 / 0.07);
-  --glow-success: rgb(77 124 15 / 0.05);
-  --glow-stage: rgb(0 166 147 / 0.06);
+  --glow-accent: rgb(218 165 32 / 0.08);
+  --glow-success: rgb(21 128 61 / 0.05);
+  --glow-stage: rgb(218 165 32 / 0.06);
 
-  /* Elevation on white comes from shadow alone — there is no lit top edge to
-     simulate, and the dark-theme inset highlight reads as a scratch. */
-  --elev-1: 0 1px 2px rgb(15 31 28 / 0.08);
-  --elev-2: 0 6px 20px rgb(15 31 28 / 0.1);
-  --elev-3: 0 16px 40px rgb(15 31 28 / 0.14);
+  --elev-1: 0 1px 2px rgb(38 33 24 / 0.06);
+  --elev-2: 0 6px 20px rgb(38 33 24 / 0.09);
+  --elev-3: 0 16px 40px rgb(38 33 24 / 0.12);
   --edge-lit: none;
 
   color-scheme: light;

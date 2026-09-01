@@ -1,4 +1,30 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Binary,
+  Calendar,
+  CalendarDays,
+  Car,
+  FolderPlus,
+  Hash,
+  MapPin,
+  MessageCircle,
+  Navigation,
+  Package,
+  Palette,
+  Plus,
+  Search,
+  Shapes,
+  Sparkles,
+  TrendingUp,
+  Type,
+  Users,
+  Utensils,
+  Wind,
+  X,
+  Zap,
+} from 'lucide-react'
 import type { RecordingMeta } from '../vision/types'
 import { categoryOf, foldedCategoryOf, groupForPicker, orderSigns } from '../data/categories'
 import { matchesSearch, translationOf } from '../data/translations'
@@ -10,27 +36,51 @@ export interface CategorySignNavigatorProps {
   mode?: 'practice' | 'record'
   onSelect: (sign: RecordingMeta) => void
   onCreateCustom?: (gloss: string) => void
-  /** Fired as the pointer / focus moves over a sign card, for a live preview.
-   *  Null when nothing is hovered. */
+  /** Fired as the pointer / focus moves over a sign card, for a live preview. */
   onPreview?: (sign: RecordingMeta | null) => void
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'A-Z': 'M4 7V4h16v3M9 20h6M12 4v16',
-  'Numbers': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
-  '20-99': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
-  '100-1 million': 'M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14M8 12h8',
-  'Days': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
-  'Months': 'M3 4h18v18H3zM16 2v4M8 2v4M3 10h18',
-  'Greetings': 'M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3',
-  'People': 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
-  'Places': 'M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6z',
-  'Verbs': 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
-  'Adjectives': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
-  'Colors': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
-  'Vehicles': 'M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2',
-  'Food': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',
-  'Other': 'M4 6h16M4 12h16M4 18h16',
+function getCategoryLucideIcon(cat: string) {
+  switch (cat) {
+    case 'A-Z':
+      return <Type size={16} />
+    case 'Numbers':
+      return <Binary size={16} />
+    case '20-99':
+      return <Hash size={16} />
+    case '100-1 million':
+      return <TrendingUp size={16} />
+    case 'Days':
+      return <Calendar size={16} />
+    case 'Months':
+      return <CalendarDays size={16} />
+    case 'Greetings':
+      return <MessageCircle size={16} />
+    case 'People':
+      return <Users size={16} />
+    case 'Places':
+      return <MapPin size={16} />
+    case 'Verbs':
+      return <Zap size={16} />
+    case 'Nouns':
+      return <Package size={16} />
+    case 'Adjectives':
+      return <Sparkles size={16} />
+    case 'Adverb':
+      return <Wind size={16} />
+    case 'Preposition':
+      return <Navigation size={16} />
+    case 'Colors':
+      return <Palette size={16} />
+    case 'Vehicles':
+      return <Car size={16} />
+    case 'Food':
+      return <Utensils size={16} />
+    case 'Additional words':
+      return <FolderPlus size={16} />
+    default:
+      return <Shapes size={16} />
+  }
 }
 
 export function CategorySignNavigator({
@@ -45,9 +95,24 @@ export function CategorySignNavigator({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [globalQuery, setGlobalQuery] = useState('')
   const [categoryQuery, setCategoryQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Display order and buckets in one pass — grouping and ordering have to
-  // agree, or a folded category reappears as a stray bucket.
+  // Keyboard shortcut '/' to instantly focus search
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement !== searchInputRef.current) {
+        const target = e.target as HTMLElement
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          e.preventDefault()
+          searchInputRef.current?.focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
+  // Display order and buckets in one pass
   const { order: categories, byCategory: signsByCategory } = useMemo(
     () => groupForPicker(references),
     [references],
@@ -79,7 +144,7 @@ export function CategorySignNavigator({
 
   return (
     <div className="cs-nav-container cs-nav-pane">
-      {/* Header / Topbar */}
+      {/* Luxury Suvana Header */}
       <div className="cs-nav-header">
         <div className="cs-nav-header-left">
           {selectedCategory && !isSearchingGlobal ? (
@@ -92,42 +157,52 @@ export function CategorySignNavigator({
                   setCategoryQuery('')
                 }}
                 aria-label="Back to all categories"
+                title="Back to all categories"
               >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
+                <ArrowLeft size={14} />
                 <span>Categories</span>
               </button>
               <span className="cs-crumb-sep">/</span>
-              <span className="cs-crumb-current">
-                <strong>{selectedCategory}</strong>
-                <span className="cs-crumb-count">
-                  ({signsByCategory.get(selectedCategory)?.length ?? 0})
+              <div className="cs-crumb-current-wrap">
+                <span className="cs-crumb-icon">{getCategoryLucideIcon(selectedCategory)}</span>
+                <span className="cs-crumb-name">{selectedCategory}</span>
+                <span className="cs-crumb-badge">
+                  {signsByCategory.get(selectedCategory)?.length ?? 0}
                 </span>
-              </span>
+              </div>
             </div>
           ) : (
             <div className="cs-nav-title-group">
+              <div className="cs-nav-eyebrow-row">
+                <span className="cs-nav-eyebrow">
+                  <span className="cs-nav-eyebrow-dot" />
+                  CORPUS EXPLORER
+                </span>
+              </div>
               <h2 className="cs-nav-title">
                 {mode === 'record' ? 'Select Sign' : 'Categories'}
               </h2>
-              <p className="cs-nav-subtitle">
-                {references.length} signs across {categories.length} categories
-              </p>
+              <div className="cs-nav-meta-row">
+                <span className="cs-nav-stat">
+                  <strong>{references.length}</strong> signs
+                </span>
+                <span className="cs-nav-dot-sep">•</span>
+                <span className="cs-nav-stat">
+                  <strong>{categories.length}</strong> categories
+                </span>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Luxury Search Capsule */}
       <div className="cs-search-row">
         {selectedCategory && !isSearchingGlobal ? (
           <div className="cs-search-input-wrap">
-            <svg className="cs-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            <Search className="cs-search-icon" size={15} />
             <input
+              ref={searchInputRef}
               type="text"
               className="cs-search-input"
               value={categoryQuery}
@@ -136,26 +211,25 @@ export function CategorySignNavigator({
               autoComplete="off"
               spellCheck={false}
             />
-            {categoryQuery && (
+            {categoryQuery ? (
               <button
                 type="button"
                 className="cs-search-clear"
                 onClick={() => setCategoryQuery('')}
                 aria-label="Clear filter"
+                title="Clear"
               >
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
+                <X size={13} />
               </button>
+            ) : (
+              <kbd className="cs-search-kbd" title="Press / to search">/</kbd>
             )}
           </div>
         ) : (
           <div className="cs-search-input-wrap">
-            <svg className="cs-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            <Search className="cs-search-icon" size={15} />
             <input
+              ref={searchInputRef}
               type="text"
               className="cs-search-input"
               value={globalQuery}
@@ -164,17 +238,18 @@ export function CategorySignNavigator({
               autoComplete="off"
               spellCheck={false}
             />
-            {globalQuery && (
+            {globalQuery ? (
               <button
                 type="button"
                 className="cs-search-clear"
                 onClick={() => setGlobalQuery('')}
                 aria-label="Clear search"
+                title="Clear"
               >
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
+                <X size={13} />
               </button>
+            ) : (
+              <kbd className="cs-search-kbd" title="Press / to search">/</kbd>
             )}
           </div>
         )}
@@ -185,7 +260,15 @@ export function CategorySignNavigator({
         <div className="cs-category-view">
           {/* Suggested Sign Quick-Pick Banner */}
           {suggestedRec && mode === 'practice' && (
-            <div className="cs-suggested-banner" onClick={() => onSelect(suggestedRec)} role="button" tabIndex={0}>
+            <div
+              className="cs-suggested-banner"
+              onClick={() => onSelect(suggestedRec)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onSelect(suggestedRec)
+              }}
+            >
               <div className="cs-suggested-left">
                 <div className="cs-suggested-tag-row">
                   <span className="cs-suggested-tag">
@@ -194,18 +277,18 @@ export function CategorySignNavigator({
                   </span>
                   <span className="cs-suggested-cat">{categoryOf(suggestedRec)}</span>
                 </div>
-                <h3 className="cs-suggested-gloss">{suggestedRec.gloss}</h3>
-                {translationOf(suggestedRec.gloss) && (
-                  <span className="cs-suggested-sub" lang="si">
-                    {translationOf(suggestedRec.gloss)}
-                  </span>
-                )}
+                <div className="cs-suggested-title-row">
+                  <h3 className="cs-suggested-gloss">{suggestedRec.gloss}</h3>
+                  {translationOf(suggestedRec.gloss) && (
+                    <span className="cs-suggested-sub" lang="si">
+                      {translationOf(suggestedRec.gloss)}
+                    </span>
+                  )}
+                </div>
               </div>
               <button type="button" className="btn small cs-suggested-btn">
                 <span>Practise</span>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
+                <ArrowRight size={13} />
               </button>
             </div>
           )}
@@ -218,6 +301,7 @@ export function CategorySignNavigator({
                 <p>Record a sign that has no reference yet.</p>
               </div>
               <button type="button" className="btn small" onClick={() => onCreateCustom('')}>
+                <Plus size={14} />
                 Record a new sign
               </button>
             </div>
@@ -227,7 +311,6 @@ export function CategorySignNavigator({
           <div className="cs-categories-grid">
             {categories.map((catName) => {
               const catSigns = signsByCategory.get(catName) ?? []
-              const iconPath = CATEGORY_ICONS[catName] || CATEGORY_ICONS['Other']
               return (
                 <div
                   key={catName}
@@ -246,9 +329,7 @@ export function CategorySignNavigator({
                   }}
                 >
                   <div className="cs-cat-icon-wrap">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d={iconPath} />
-                    </svg>
+                    {getCategoryLucideIcon(catName)}
                   </div>
                   <div className="cs-cat-card-inner">
                     <span className="cs-cat-name" title={catName}>{catName}</span>
@@ -278,6 +359,7 @@ export function CategorySignNavigator({
                   style={{ marginTop: '12px' }}
                   onClick={() => onCreateCustom(globalQuery.trim().toUpperCase())}
                 >
+                  <Plus size={14} />
                   Record "{globalQuery.trim().toUpperCase()}"
                 </button>
               )}
