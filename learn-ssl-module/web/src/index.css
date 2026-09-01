@@ -44,7 +44,7 @@
   --surface-2: var(--p-teal-700); /* inset rows, fields */
   --surface-hover: #223836; /* interactive tile / row hover, a step up from --surface-2 */
   --stage: var(--p-void); /* camera + canvas letterbox */
-  --app-bar-h: 61px; /* .app-bar height — the fixed practice/scenario surfaces sit below it */
+  --app-bar-h: 64px; /* .app-bar height — the fixed practice/scenario surfaces sit below it */
 
   --text: var(--p-sage-050);
   --text-dim: var(--p-sage-300);
@@ -323,15 +323,7 @@ body::before {
   min-height: 100dvh;
 
   /* How wide the whole shell runs — app bar, main and footer all read it, so
-     they stay aligned with each other whatever the active tab needs. */
-  --shell-max: 1000px;
-}
-
-/* Progress is a dashboard, not an article: a four-across stat band and a
-   list + rail need real width, where a reading column would leave most of the
-   page as margin. :has() keeps the decision in CSS; a browser without it
-   simply gets the 1000px shell everywhere. */
-.app:has(> main[data-tab="progress"]) {
+     they stay aligned with each other across all tabs. */
   --shell-max: 1400px;
 }
 

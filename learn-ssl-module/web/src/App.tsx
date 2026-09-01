@@ -3,7 +3,6 @@ import { PracticeView } from './components/PracticeView'
 import { ProgressView } from './components/ProgressView'
 import { ScenarioView } from './components/ScenarioView'
 import { Hero } from './components/Hero'
-import { ThemeToggle } from './components/ThemeToggle'
 
 // Author-only surfaces, split out of the learner's bundle. A participant never
 // opens Record, Library or Study, so there is no reason for them to download
@@ -11,9 +10,10 @@ import { ThemeToggle } from './components/ThemeToggle'
 const RecordView = lazy(() => import('./components/RecordView').then((m) => ({ default: m.RecordView })))
 const LibraryView = lazy(() => import('./components/LibraryView').then((m) => ({ default: m.LibraryView })))
 const StudyView = lazy(() => import('./components/StudyView').then((m) => ({ default: m.StudyView })))
+import { AppNavBar } from './components/AppNavBar'
 import { persistMode, readMode } from './app/mode'
 import type { AppMode } from './app/mode'
-import { ALL_TABS, AUTHOR_TABS, ICONS, LEARNER_TABS } from './app/tabs'
+import { AUTHOR_TABS, LEARNER_TABS } from './app/tabs'
 import type { Tab } from './app/tabs'
 import './components/views.css'
 
@@ -106,74 +106,14 @@ function App() {
 
   return (
     <div className="app" data-mode={mode}>
-      {mode === 'author' && (
-        // Deliberately loud: a screenshot taken in this mode has to be
-        // unambiguous about which build it shows.
-        <div className="mode-banner-wrap">
-          <div className="mode-banner">
-            <span>
-              <strong>Author &amp; researcher tools.</strong> This is not what a learner sees.
-            </span>
-            <button className="btn btn-ghost" onClick={() => setMode('learner')}>
-              Exit to learner view
-            </button>
-          </div>
-        </div>
-      )}
-
-      <header className="app-bar">
-        <div className="app-bar-inner">
-          <button className="app-brand" onClick={leaveToHero} aria-label="Learn overview">
-            <img
-              className="app-brand-mark"
-              src={`${import.meta.env.BASE_URL}branding/suvana-mark.png`}
-              alt=""
-            />
-            <span className="app-brand-text">
-              <span className="si" lang="si">
-                සුවණ
-              </span>{' '}
-              Suvana
-            </span>
-            <span className="app-brand-sep" aria-hidden="true" />
-            <span className="app-brand-module">Learn</span>
-          </button>
-
-          <nav className="tabs" aria-label="Sections" data-count={tabs.length}>
-            {tabs.map((id) => (
-              <button
-                key={id}
-                className={tab === id ? 'tab active' : 'tab'}
-                // The active tab is otherwise signalled by colour alone, which a
-                // screen reader cannot convey.
-                aria-current={tab === id ? 'page' : undefined}
-                onClick={() => setTab(id)}
-              >
-                <svg
-                  className="tab-icon"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d={ICONS[id]} />
-                </svg>
-                <span className="tab-label">{ALL_TABS[id]}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* No account affordance in this deployment: it is served standalone
-              from the team repo, with no Communicate module to hold identity.
-              Progress lives in this browser's IndexedDB either way. */}
-          <div className="app-account">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <AppNavBar
+        tab={tab}
+        tabs={tabs}
+        onSelectTab={setTab}
+        mode={mode}
+        onSetMode={setMode}
+        onLeaveToHero={leaveToHero}
+      />
 
       {/* data-tab drives the shell width: Progress is a dashboard and takes
           the wide shell, every other tab keeps the reading column. */}
