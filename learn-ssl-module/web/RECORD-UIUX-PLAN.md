@@ -187,7 +187,15 @@ stop using the class.
 Ordered so that stopping after any phase leaves Record better than it is now.
 Effort in focused hours.
 
-### Phase A — Make it work again (functional) · ~4 h
+### Phase A — Make it work again (functional) · ~4 h — **DONE**
+
+> Shipped 31 Aug 2026. One correction to §2.3 for the record: between this plan
+> being written and Phase A landing, the Scenario critique branch merged a
+> stopgap `.aww-hud*` rule set into `views.css` with the comment *"RecordView
+> (author-only) still uses the older floating HUD."* So the "zero CSS" finding
+> was true when measured and briefly untrue afterwards. Phase B deleted those
+> rules — with Record migrated and Scenario already moved to `.aww-cam-*`,
+> nothing referenced them.
 
 **A1. Adopt Practice's control model; delete the `.aww-hud` path from Record.**
 Files: `RecordView.tsx`.
@@ -210,7 +218,21 @@ author banner offset is a generic concern — handle it the way Practice's env
 already does (or let Record inherit `.aww-practice-env` unchanged). Verify
 nothing is clipped at any viewport height.
 
-### Phase B — Collapse the redundancy (rules 3 & 4) · ~4 h
+### Phase B — Collapse the redundancy (rules 3 & 4) · ~4 h — **DONE**
+
+> Shipped 1 Sep 2026. Two additions found while building it, both rule-3
+> duplications the plan had not spotted:
+>
+> - **`glossLabel()` already returns `GLOSS (meaning)`.** The old toolbar
+>   rendered `glossLabel(activeGloss)` *and* `translationOf(activeGloss)` beside
+>   it, so an active sign read `ADINAWA (pull) (pull)`. Only `glossLabel` is
+>   rendered now.
+> - **The custom-sign card carried its own `Creating a New Reference` heading**
+>   60 px under the pane's `New sign` title. The card heading is gone
+>   (which also removes the broken `var(--serif)` reference C1 was going to fix).
+>
+> `isModal` / `onClose` on `CategorySignNavigator` went with the modal — no
+> caller passed them once the picker was deleted.
 
 **B1. One picker, one route.** Delete `.aww-picker-modal` and its second
 `<CategorySignNavigator>` from `RecordView.tsx`. The left pane *is* the picker

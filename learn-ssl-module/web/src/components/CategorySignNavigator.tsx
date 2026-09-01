@@ -8,10 +8,8 @@ export interface CategorySignNavigatorProps {
   suggested?: string | null
   selectedId?: string | null
   mode?: 'practice' | 'record'
-  isModal?: boolean
   onSelect: (sign: RecordingMeta) => void
   onCreateCustom?: (gloss: string) => void
-  onClose?: () => void
   /** Fired as the pointer / focus moves over a sign card, for a live preview.
    *  Null when nothing is hovered. */
   onPreview?: (sign: RecordingMeta | null) => void
@@ -22,10 +20,8 @@ export function CategorySignNavigator({
   suggested = null,
   selectedId = null,
   mode = 'practice',
-  isModal = false,
   onSelect,
   onCreateCustom,
-  onClose,
   onPreview,
 }: CategorySignNavigatorProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -78,7 +74,7 @@ export function CategorySignNavigator({
   const isSearchingGlobal = globalQuery.trim().length > 0
 
   return (
-    <div className={`cs-nav-container ${isModal ? 'cs-nav-modal' : 'cs-nav-pane'}`}>
+    <div className="cs-nav-container cs-nav-pane">
       {/* Header / Topbar */}
       <div className="cs-nav-header">
         <div className="cs-nav-header-left">
@@ -118,13 +114,6 @@ export function CategorySignNavigator({
           )}
         </div>
 
-        {isModal && onClose && (
-          <button type="button" className="btn btn-ghost cs-close-btn" onClick={onClose} aria-label="Close dialog">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {/* Search Bar */}
@@ -207,24 +196,19 @@ export function CategorySignNavigator({
             </div>
           )}
 
-          {/* Admin Custom Mode Action Card */}
+          {/* Author-only: the single route to recording a gloss the corpus does
+              not have. It hands an empty gloss to the caller, which opens the
+              inline name field in the reference pane — the same field the
+              "Record <query>" button below reaches from an empty search. A
+              window.prompt() used to be a second, unstyled mechanism for this. */}
           {mode === 'record' && onCreateCustom && (
             <div className="cs-custom-gloss-card">
               <div className="cs-custom-info">
-                <h4>Custom Sign</h4>
-                <p>Record a new sign not in the corpus.</p>
+                <h4>Not in the corpus?</h4>
+                <p>Record a sign that has no reference yet.</p>
               </div>
-              <button
-                type="button"
-                className="btn small"
-                onClick={() => {
-                  const input = window.prompt('Enter new uppercase gloss name (e.g., HELLO_WORLD):')
-                  if (input && input.trim()) {
-                    onCreateCustom(input.trim().toUpperCase())
-                  }
-                }}
-              >
-                + New Sign
+              <button type="button" className="btn small" onClick={() => onCreateCustom('')}>
+                Record a new sign
               </button>
             </div>
           )}
@@ -276,7 +260,7 @@ export function CategorySignNavigator({
                   style={{ marginTop: '12px' }}
                   onClick={() => onCreateCustom(globalQuery.trim().toUpperCase())}
                 >
-                  + Record "{globalQuery.trim().toUpperCase()}"
+                  Record "{globalQuery.trim().toUpperCase()}"
                 </button>
               )}
             </div>

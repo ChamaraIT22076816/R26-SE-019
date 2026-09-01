@@ -2558,11 +2558,13 @@
   }
 }
 
-/* In Author Mode, .mode-banner-wrap adds ~64px above header, so top offset is ~125px */
+/* In Author Mode, .mode-banner-wrap adds ~64px above header, so top offset is
+   ~125px. The unscoped `.aww-studio-env` that used to be in this list was
+   redundant — Record is an author-only tab, so it is always inside
+   [data-mode="author"] and already matched by the first selector. */
 .app[data-mode="author"] .aww-practice-env,
 .app[data-mode="author"] .aww-scenario-env,
-.app[data-mode="author"] .aww-studio-env,
-.aww-studio-env {
+.app[data-mode="author"] .aww-studio-env {
   top: 155px; /* Cleanly clears author warning banner + app bar */
 }
 
@@ -2905,59 +2907,10 @@
   pointer-events: none;
 }
 
-/* RecordView (author-only) still uses the older floating HUD — a full rework
-   is its own critique. This keeps it usable until then. */
-.aww-hud {
-  position: absolute;
-  bottom: 32px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 32px;
-  border-radius: 20px;
-  background: rgba(var(--surface-rgb), 0.9);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  color: var(--text);
-}
-
-.aww-hud-idle,
-.aww-hud-recording {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.aww-hud-idle p {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.aww-hud-countdown {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.aww-hud-countdown span {
-  font: 800 3.5rem var(--mono);
-  color: var(--p-gold-400);
-  line-height: 1;
-}
-
-.aww-hud-recording .btn.massive {
-  background: var(--recording);
-  color: #fff;
-}
+/* The floating .aww-hud bar is gone. It was added as a stopgap to keep
+   RecordView's controls usable while Record awaited its own critique; Record
+   now uses the anchored .aww-cam-* controls above, the same ones Practice and
+   Scenario use, and no view references .aww-hud any more. */
 
 
 /* ============================================================================
@@ -3079,48 +3032,9 @@
 }
 
 
-/* ============================================================================
-   COMMAND PALETTE MODAL (Sign Picker)
-   ========================================================================== */
-
-.aww-picker-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-}
-
-.aww-picker-modal.open {
-  visibility: visible;
-  opacity: 1;
-}
-
-.aww-picker-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
-}
-
-.aww-picker-content {
-  position: relative;
-  width: 90%;
-  max-width: 920px;
-  max-height: 85vh;
-  background: var(--surface);
-  border: 1px solid var(--border-interactive);
-  border-radius: 24px;
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 40px 100px rgba(0,0,0,0.5);
-  overflow-y: auto;
-}
+/* The command-palette sign-picker modal was removed with the studio toolbar
+   that opened it: it mounted a second CategorySignNavigator showing exactly
+   what the left pane already shows. */
 
 /* The replay in the right pane doesn't need scrub controls; the reference in
    the left pane very much does — a learner has to be able to pause, scrub and
@@ -4523,72 +4437,15 @@
    MOTION CAPTURE REFERENCE STUDIO (RECORD TAB)
    ========================================================================== */
 
-.aww-studio-env .aww-pane-header {
-  top: 80px; /* Offset below studio toolbar */
-}
-
-/* Studio Toolbar at the Top of the Screen */
-.aww-studio-toolbar {
-  position: absolute;
-  top: 16px;
-  left: 32px;
-  right: 32px;
-  z-index: 40;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  pointer-events: none;
-}
-
-.aww-studio-toolbar * {
-  pointer-events: auto;
-}
-
-.studio-tool-left, .studio-tool-right {
+/* The studio toolbar (MOCAP STUDIO badge, "Active Sign" picker button,
+   "Browse Categories", "+ Custom Sign") is gone: all three buttons opened the
+   same sign navigator, and the pane's own back chevron already does that.
+   .studio-tool-right survives because the signer field moved into the camera
+   pane's header. */
+.studio-tool-right {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.studio-badge {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  background: var(--accent);
-  color: var(--p-ink);
-  padding: 6px 14px;
-  border-radius: 100px;
-}
-
-.studio-sign-btn {
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.75) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle) !important;
-  color: var(--text) !important;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 18px !important;
-  border-radius: 100px !important;
-  font-size: 0.95rem;
-}
-
-.studio-sign-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  font-family: var(--mono);
-  letter-spacing: 0.05em;
-}
-
-.studio-sign-sub {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  font-style: italic;
 }
 
 .studio-signer-input-wrap {
@@ -4634,8 +4491,12 @@
 }
 
 /* Studio Reference Header Metadata */
+/* Sits inside .aww-ref-heading, which is right-aligned (the back chevron holds
+   the left edge), so the pills have to end on the same line as the title. */
 .studio-ref-meta {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
 }
@@ -4663,13 +4524,6 @@
   flex-direction: column;
   align-items: center;
   gap: 16px;
-}
-
-.studio-prompt-title {
-  font-family: var(--serif);
-  font-size: 1.8rem;
-  color: var(--text);
-  margin: 0;
 }
 
 .studio-prompt-desc {
@@ -4790,13 +4644,8 @@
   padding: 36px 24px 100px;
 }
 
-.cs-nav-modal {
-  width: 100%;
-  max-height: 75vh;
-  overflow-y: auto;
-  padding: 0;
-}
-
+/* .cs-nav-modal / .cs-close-btn removed with the sign-picker modal — the
+   navigator only ever renders in a pane now. */
 .cs-nav-pane {
   width: 100%;
   height: 100%;
@@ -4828,15 +4677,6 @@
   font-size: 0.78rem;
   color: var(--text-dim);
   margin: 2px 0 0;
-}
-
-.cs-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  border-radius: 999px;
-  color: var(--text-dim);
 }
 
 /* Breadcrumbs & Back Button */

@@ -692,6 +692,17 @@ body::before {
   cursor: default;
 }
 
+/* A size modifier, not a colour one. `.btn.small` was previously defined only
+   under `.aww-topbar`, where it is an inverted hero-topbar variant — so every
+   other `className="btn small"` in the app silently rendered at full size.
+   The topbar rule still wins there on specificity. Touch targets are unaffected:
+   the `pointer: coarse` block keeps `.btn` at a 44px minimum. */
+.btn.small {
+  font-size: var(--fs-sm);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-xs);
+}
+
 .btn-ghost {
   color: var(--text);
   background: var(--surface-2);
