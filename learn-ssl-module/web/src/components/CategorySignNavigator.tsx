@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { RecordingMeta } from '../vision/types'
-import { categoriesIn, categoryOf, orderSigns } from '../data/categories'
+import { categoryOf, foldedCategoryOf, groupForPicker, orderSigns } from '../data/categories'
 import { matchesSearch, translationOf } from '../data/translations'
 
 export interface CategorySignNavigatorProps {
@@ -28,26 +28,12 @@ export function CategorySignNavigator({
   const [globalQuery, setGlobalQuery] = useState('')
   const [categoryQuery, setCategoryQuery] = useState('')
 
-  // Unique categories list
-  const categories = useMemo(() => categoriesIn(references), [references])
-
-  // Signs grouped by category for quick lookup
-  const signsByCategory = useMemo(() => {
-    const map = new Map<string, RecordingMeta[]>()
-    for (const cat of categories) {
-      map.set(cat, [])
-    }
-    for (const ref of references) {
-      const cat = categoryOf(ref)
-      const list = map.get(cat)
-      if (list) {
-        list.push(ref)
-      } else {
-        map.set(cat, [ref])
-      }
-    }
-    return map
-  }, [categories, references])
+  // Display order and buckets in one pass — grouping and ordering have to
+  // agree, or a folded category reappears as a stray bucket.
+  const { order: categories, byCategory: signsByCategory } = useMemo(
+    () => groupForPicker(references),
+    [references],
+  )
 
   // Global search results across all categories
   const globalSearchResults = useMemo(() => {
@@ -333,6 +319,12 @@ export function CategorySignNavigator({
                     }}
                   >
                     <div className="cs-sign-main">
+                      {/* Inside the folded "Other" bucket the sign's real
+                          category is the only thing that explains why it is
+                          there, so the card carries it. */}
+                      {foldedCategoryOf(r) && foldedCategoryOf(r) !== selectedCategory && (
+                        <span className="cs-sign-cat-tag">{foldedCategoryOf(r)}</span>
+                      )}
                       <h4 className="cs-sign-gloss">{r.gloss}</h4>
                       {meaning && <p className="cs-sign-meaning">"{meaning}"</p>}
                     </div>

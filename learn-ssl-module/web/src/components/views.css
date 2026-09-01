@@ -4755,6 +4755,22 @@
   gap: var(--s-3);
 }
 
+/* The camera pane's header carries its label on the left and the signer field
+   on the right. Below roughly 1100px each pane is narrow enough that the two
+   collide — the label wraps to two lines and the field lands on top of it — so
+   let the row wrap instead. Scoped to the studio: Practice's pane header holds
+   only a label and must not start wrapping. */
+@media (max-width: 1100px) {
+  .aww-studio-env .aww-pane-right .aww-pane-header {
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+
+  .studio-signer-input {
+    width: 96px;
+  }
+}
+
 /* Flat, not glass. The blurred translucent panels here were the one place in
    the module using glassmorphism — it appears nowhere in the hero — and a
    backdrop-filter over a live camera feed composites the strip every frame on
@@ -4790,6 +4806,26 @@
   width: 130px;
   padding: var(--s-1) 0;
   outline: none;
+}
+
+/* Only while the signer field has focus — see the note in RecordView. */
+.signer-hint {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+  transition:
+    max-width var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.studio-tool-right:focus-within .signer-hint {
+  /* Wide enough for the full string — 16ch clipped it to "Saved in this". */
+  max-width: 24ch;
+  opacity: 1;
 }
 
 .studio-saved-pill {

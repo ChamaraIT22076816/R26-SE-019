@@ -46,6 +46,13 @@ events.out.tfevents.*
 data/
 dataset/
 datasets/
+# `data/` above is for corpora and generated media, but it also matches the
+# learn module's source folder, where categories.ts / translations.ts /
+# scenarios live. Those files are tracked, so edits commit fine — but any NEW
+# file added there was silently ignored. Re-include the directory itself
+# (git will not descend into an excluded directory, so negating the files
+# alone would not work).
+!learn-ssl-module/web/src/data/
 tts_cache/
 sinhala_sign_language_recognition/webapp/tts_cache/*
 !sinhala_sign_language_recognition/webapp/tts_cache/.gitkeep

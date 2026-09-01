@@ -40,7 +40,23 @@ export function RecordView() {
 
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customGloss, setCustomGloss] = useState('')
-  const [signer, setSigner] = useState(() => localStorage.getItem(SIGNER_KEY) ?? 'Dev Team')
+  /**
+   * Who performed the take. This is written into every saved recording's
+   * provenance, so it must never be a placeholder nobody chose: it starts
+   * empty rather than at "Dev Team", and the record button stays disabled
+   * until it is filled. It persists on edit, not only on save, so the name is
+   * genuinely remembered on the next visit.
+   */
+  const [signer, setSigner] = useState(() => localStorage.getItem(SIGNER_KEY) ?? '')
+
+  function updateSigner(next: string) {
+    setSigner(next)
+    try {
+      localStorage.setItem(SIGNER_KEY, next)
+    } catch {
+      /* Private-mode Safari throws; the field still works for this session. */
+    }
+  }
 
   const [count, setCount] = useState(COUNTDOWN_S)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -199,7 +215,6 @@ export function RecordView() {
       return
     }
     setSaveError('')
-    localStorage.setItem(SIGNER_KEY, signerRef.current)
     setReview(null)
     setPhase('idle')
     setJustSaved(true)
@@ -306,6 +321,11 @@ export function RecordView() {
                     frames={reference.frames}
                     videoWidth={reference.videoWidth}
                     videoHeight={reference.videoHeight}
+                    /* One neutral colour, as Practice does it: the benchmark is
+                       a diagram to copy, and the default two-tone left/right
+                       hand coding says nothing about the sign. The take replay
+                       below keeps the coding, so it matches the live overlay. */
+                    colorOverride="#e6eeec"
                   />
                 ) : selected && refFailed ? (
                   <p className="camera-error">Could not load benchmark reference.</p>
@@ -353,11 +373,15 @@ export function RecordView() {
                   type="text"
                   className="studio-signer-input"
                   value={signer}
-                  onChange={(e) => setSigner(e.target.value)}
-                  placeholder="Performer name"
+                  onChange={(e) => updateSigner(e.target.value)}
+                  placeholder="Your name"
                   disabled={phase === 'countdown' || phase === 'recording'}
                 />
               </div>
+              {/* Shown on focus only — a permanent caption over the camera feed
+                  would be clutter, but the field's persistence is worth stating
+                  the moment someone types in it. */}
+              <span className="signer-hint">Saved in this browser</span>
               {justSaved && <span className="studio-saved-pill">Saved take</span>}
             </div>
           </div>
