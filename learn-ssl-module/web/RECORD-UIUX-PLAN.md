@@ -294,7 +294,36 @@ Files: `views.css` (`.studio-*`, `.aww-studio-*` blocks), `RecordView.tsx`.
   `tabular-nums` readout in the pane header, shown only while recording. Never a
   bare `7`.
 
-### Phase D — Legibility & content · ~3 h
+### Phase D — Legibility & content · ~3 h — **DONE**
+
+> Shipped 1 Sep 2026. Notes:
+>
+> - **D1 split in two.** The `colorOverride` half is a Record-only change and
+>   landed with D. The "fill its pane" half turned out to be a real shared
+>   defect — `object-fit: cover` on a square reference canvas in a portrait
+>   pane cut **49% of the reference width** off at a 768px viewport — and
+>   shipped as its own commit, as this plan asked. The fit is now responsive:
+>   `cover` above 1100px (1% trim, desktop unchanged), `contain` below it.
+>   The camera keeps `cover` at all widths in its own rule, because the video
+>   and its landmark overlay must share one fit or the skeleton stops lining
+>   up with the hands.
+> - **D2 is a new function, not a change to the old ones.** `categoriesIn()`
+>   and `categoryOf()` are also used by ProgressView's coverage rows and the
+>   session model, where the grouping and the lookup must agree on *unfolded*
+>   categories; folding them there would have made the Progress filter
+>   silently miss the folded signs. `groupForPicker()` is picker-only, with
+>   nine tests. Practice shares the picker, so its grid folds and reorders too.
+> - **D3 found a provenance bug.** The signer field defaulted to `"Dev Team"`,
+>   and that string is written into every saved recording. A take recorded
+>   without touching the field claimed an author nobody chose. It now starts
+>   empty and persists on edit rather than only on save.
+> - **Skeleton legibility is not solved and cannot be here.** Nothing is
+>   cropped now, but a landmark skeleton is still a poor thing to imitate at
+>   small sizes. Video reference clips are the real fix and are deferred to
+>   kvn's own Deaf-teacher recordings.
+> - Root `.gitignore` excluded `data/` for corpora, which also matched
+>   `learn-ssl-module/web/src/data`. Tracked files there committed fine but any
+>   **new** file was silently ignored. Re-included that one directory.
 
 - **D1. Reference skeleton.** Apply Practice's `colorOverride="#e6eeec"` and make
   the player fill its pane the way Practice's does. If `SkeletonPlayer` cannot
@@ -307,7 +336,33 @@ Files: `views.css` (`.studio-*`, `.aww-studio-*` blocks), `RecordView.tsx`.
   ("saved for this browser"). Make the default explicit rather than silently
   `"Dev Team"` → `"Kavindu"`.
 
-### Phase E — Verify · ~2 h
+### Phase E — Verify · ~2 h — **DONE**
+
+> Shipped 1 Sep 2026. What was actually checked, at 1280 / 900 / 768 in
+> author mode, after every shared-file touch:
+>
+> - Practice, Scenario, Progress, Library, Study and Record all render, none
+>   overflows horizontally, no console errors.
+> - Every class deleted across Phases A–D is gone from the DOM:
+>   `aww-studio-toolbar`, `studio-badge`, `aww-picker-modal`, `aww-hud`,
+>   `cs-nav-modal`, `cs-close-btn`, `studio-telemetry-row`, `telemetry-pill`,
+>   `studio-prompt-title`, `studio-sign-sub`.
+> - One navigator mounted (was two), one back affordance (was three).
+> - Reference ink measured as a single `#e6eeec`; reference 1% cropped at
+>   1280, 0% at 900 and 768; camera video and overlay fits identical.
+> - Signer input labelled, empty by default, persisted on first keystroke.
+> - Light-theme contrast: control borders 3.34:1 and 3.41:1 (WCAG 2.1
+>   SC 1.4.11 wants 3:1), prompt copy 5.62:1.
+> - `tsc`, `oxlint`, 138 tests and `vite build` pass.
+>
+> **`.aww-hud*` is fully retired.** The original §2.3 finding noted Scenario
+> shared the defect; Scenario moved to the anchored `.aww-cam-*` controls in
+> its own critique before Record did, so once Record migrated nothing
+> referenced those rules and they were deleted. No follow-up needed.
+>
+> Not done, and deliberately: the reference pane's floating title can sit over
+> a letterboxed skeleton at narrow widths, and re-taxonomising the corpus's
+> dataset-derived category names remains a content question for the report.
 
 - Regression-check **Practice and Scenario** after every shared-file touch
   (`CameraStage`, `CategorySignNavigator`, shared `views.css`, `index.css`).
