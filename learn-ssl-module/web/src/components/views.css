@@ -4445,24 +4445,30 @@
 .studio-tool-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--s-3);
 }
 
+/* Flat, not glass. The blurred translucent panels here were the one place in
+   the module using glassmorphism — it appears nowhere in the hero — and a
+   backdrop-filter over a live camera feed composites the strip every frame on
+   exactly the hardware least able to afford it. */
 .studio-signer-input-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
-  padding: 4px 14px;
-  border-radius: 100px;
+  gap: var(--s-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-interactive);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-full);
+}
+
+.studio-signer-input-wrap:focus-within {
+  border-color: var(--accent);
 }
 
 .signer-label {
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   color: var(--text-dim);
 }
@@ -4472,22 +4478,22 @@
   border: none;
   color: var(--text);
   font-family: var(--sans);
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   width: 130px;
-  padding: 4px 0;
+  padding: var(--s-1) 0;
   outline: none;
 }
 
 .studio-saved-pill {
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
-  background: rgba(0, 166, 147, 0.2);
+  background: var(--surface-2);
   color: var(--accent);
   border: 1px solid var(--accent);
-  padding: 6px 14px;
-  border-radius: 100px;
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-full);
 }
 
 /* Studio Reference Header Metadata */
@@ -4497,37 +4503,45 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
 }
 
 .studio-ref-pill {
   font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   color: var(--text-dim);
-  padding: 3px 10px;
-  border-radius: 6px;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-xs);
+}
+
+/* Provenance is a research-integrity disclosure, not decoration: a reference
+   recorded by the team is not validated SSL and must never be mistaken for a
+   corpus reference. --integrity is reserved for exactly this claim. */
+.studio-ref-pill.provisional {
+  color: var(--integrity);
+  border-color: var(--integrity);
 }
 
 /* Studio Custom Input Form inside Left Pane */
 .studio-custom-prompt {
   max-width: 480px;
-  padding: 40px;
+  padding: var(--s-10);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.1);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2), var(--edge-lit);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--s-4);
 }
 
 .studio-prompt-desc {
-  font-size: 0.95rem;
+  font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text-dim);
   margin: 0;
@@ -4535,63 +4549,67 @@
 
 .studio-custom-input {
   width: 100%;
-  padding: 16px 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
+  padding: var(--s-4) var(--s-5);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-interactive);
   background: var(--surface-2);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 1.25rem;
+  font-size: var(--fs-lg);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-align: center;
   text-transform: uppercase;
   outline: none;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--dur-base) var(--ease-out);
 }
 
 .studio-custom-input:focus {
   border-color: var(--accent);
 }
 
-/* Live Telemetry Row */
-.studio-telemetry-row {
-  display: flex;
-  gap: 8px;
+/* Live capture telemetry. Frame rate genuinely affects reference quality — a
+   7 fps take is not usable ground truth — so this stays, but as one labelled
+   readout rather than three unexplained numbers. tabular-nums stops the digits
+   jittering as they update. */
+.studio-telemetry {
+  display: block;
+  margin-top: var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
 }
 
-.telemetry-pill {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  background: rgba(var(--surface-rgb, 20, 20, 20), 0.6);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-dim);
-  padding: 4px 10px;
-  border-radius: 6px;
+/* Below the rate at which a take stops being usable ground truth. */
+.studio-telemetry[data-rate='low'] {
+  color: var(--caution);
 }
 
 /* Review Bar Bottom Overlay */
 .aww-studio-review-bar {
   position: absolute;
-  bottom: 36px;
+  bottom: var(--s-8);
   left: 50%;
   transform: translateX(-50%);
   z-index: 50;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: var(--s-4);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  padding: 24px 36px;
-  border-radius: 24px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.25);
+  padding: var(--s-6) var(--s-8);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-3), var(--edge-lit);
 }
 
 .review-metrics {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-5);
 }
 
 .metric-box {
@@ -4600,20 +4618,21 @@
   align-items: center;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  padding: 10px 20px;
-  border-radius: 12px;
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-md);
   min-width: 80px;
 }
 
 .metric-val {
   font-family: var(--mono);
-  font-size: 1.4rem;
+  font-size: var(--fs-lg);
+  font-variant-numeric: tabular-nums;
   font-weight: 800;
   color: var(--text);
 }
 
 .metric-lbl {
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   color: var(--text-dim);
   letter-spacing: 0.08em;
@@ -4622,8 +4641,10 @@
 
 .review-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 14px;
+  gap: var(--s-3);
 }
 
 /* ============================================================================

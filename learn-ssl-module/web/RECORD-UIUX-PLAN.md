@@ -256,7 +256,24 @@ edits the **shared** `CategorySignNavigator` — keep every change behind
 (check Practice/Progress/Library for existing expectations first), or switch
 those three navigator buttons to `.btn.ghost` sizing.
 
-### Phase C — Re-skin to `Hero.tsx` + tokens (rules 1 & 5) · ~5 h
+### Phase C — Re-skin to `Hero.tsx` + tokens (rules 1 & 5) · ~5 h — **DONE**
+
+> Shipped 1 Sep 2026. Three notes:
+>
+> - **C1 was already fixed elsewhere.** The Scenario branch defined
+>   `--serif: var(--sans)` in `index.css`, so the token is no longer undefined
+>   and the one Record use of it (`.studio-prompt-title`) had already gone with
+>   Phase B. §2.4's "the token does not exist" is stale; 13 uses remain in
+>   `views.css` but they now resolve correctly and are other views' business.
+> - **`.aww-pane-title`'s `2.5rem` / `#fff` is deliberately untouched.** §2.4
+>   listed it, but Record now uses the *shared* rule that Practice also renders,
+>   so changing it here would restyle a learner surface. It is a shared-system
+>   question, not a Record one.
+> - **C6 deviates on one point.** The plan said show telemetry "only while
+>   recording". It is shown whenever the camera runs instead: a low frame rate
+>   has to be caught while framing the shot, not discovered after a take is
+>   already spoiled. The actual complaint — a bare unexplained `7` — is fixed by
+>   labelling it and adding a `--caution` state below 15 fps.
 
 Files: `views.css` (`.studio-*`, `.aww-studio-*` blocks), `RecordView.tsx`.
 

@@ -257,7 +257,10 @@ export function RecordView() {
                   </button>
                 )}
                 <div className="aww-ref-heading">
-                  <p className="aww-pane-label">Benchmark Reference</p>
+                  {/* "Reference", not "Benchmark Reference": the pill below
+                      already says which kind, and Practice's pane uses the
+                      same one-word kicker. */}
+                  <p className="aww-pane-label">Reference</p>
                   <h2 className="aww-pane-title">
                     {isCustomMode ? 'New sign' : selected ? glossLabel(selected.gloss) : 'Choose a sign'}
                   </h2>
@@ -266,9 +269,11 @@ export function RecordView() {
                       "ADINAWA (pull) (pull)". */}
                   {!isCustomMode && selected && (
                     <div className="studio-ref-meta">
-                      <span className="studio-ref-pill">
-                        {selected.source === 'team-recording' ? 'Team provisional' : 'Dataset reference'}
-                      </span>
+                      {selected.source === 'team-recording' ? (
+                        <span className="studio-ref-pill provisional">Team provisional</span>
+                      ) : (
+                        <span className="studio-ref-pill">Dataset</span>
+                      )}
                       <span className="studio-ref-pill">{(selected.durationMs / 1000).toFixed(1)}s</span>
                     </div>
                   )}
@@ -289,7 +294,9 @@ export function RecordView() {
                       className="studio-custom-input"
                       value={customGloss}
                       onChange={(e) => setCustomGloss(e.target.value.toUpperCase())}
-                      placeholder="e.g. MORNING, WATER, TEACHER"
+                      /* One example, not three: the field is centred, uppercase
+                         and 20px, so a longer placeholder clipped mid-word. */
+                      placeholder="e.g. MORNING"
                       autoFocus
                       disabled={phase === 'countdown' || phase === 'recording'}
                     />
@@ -317,12 +324,19 @@ export function RecordView() {
           <div className="aww-pane-header">
             <div>
               <p className="aww-pane-label">{phase === 'review' ? 'Take Review' : 'Live Motion Capture'}</p>
+              {/* One labelled line, not three bare numbers. It stays visible
+                  whenever the camera runs rather than only while recording:
+                  a low frame rate has to be caught while framing the shot,
+                  not discovered after a take is already spoiled. */}
               {tracking.stats && phase !== 'review' && (
-                <div className="studio-telemetry-row">
-                  <span className="telemetry-pill">{tracking.stats.fps.toFixed(0)} FPS</span>
-                  <span className="telemetry-pill">{tracking.stats.inferenceMs.toFixed(1)} ms</span>
-                  <span className="telemetry-pill">{tracking.stats.width}×{tracking.stats.height}</span>
-                </div>
+                <span
+                  className="studio-telemetry"
+                  data-rate={tracking.stats.fps < 15 ? 'low' : undefined}
+                >
+                  {tracking.stats.fps.toFixed(0)} fps &middot;{' '}
+                  {tracking.stats.inferenceMs.toFixed(1)} ms tracking &middot;{' '}
+                  {tracking.stats.width}&times;{tracking.stats.height}
+                </span>
               )}
             </div>
 
