@@ -3184,7 +3184,10 @@
   width: 100%;
   max-width: 1000px;
   margin: 40px auto;
-  padding: 0 24px 100px;
+  /* Modest bottom padding: `main` adds its own, and `flex:1` on `main` keeps
+     the footer at the viewport floor, so a big pad here just opened a gap
+     between the last row and the footer on a short page. */
+  padding: 0 24px 48px;
   color: var(--text);
   font-family: var(--sans);
 }

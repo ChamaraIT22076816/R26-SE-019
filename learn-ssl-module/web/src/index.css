@@ -336,6 +336,10 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: var(--s-6);
+  /* Grow to fill the viewport so a short page (e.g. Progress with coverage
+     collapsed) still puts the footer at the bottom, not floating mid-screen.
+     .app is already `min-height: 100dvh` + column; this completes the pattern. */
+  flex: 1;
   /* --nav-offset clears the fixed mobile tab bar; it is 0 on desktop. */
   padding-block: var(--s-8) calc(var(--s-12) + var(--nav-offset));
 }

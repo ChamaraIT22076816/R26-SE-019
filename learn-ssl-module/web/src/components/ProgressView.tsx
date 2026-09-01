@@ -17,6 +17,10 @@ const ACTIVITY_DAYS = 14
 // signs the learner model rates as most worth drilling right now, and a
 // breadth read on the categories.
 const FOCUS_COUNT = 6
+const REVIEW_COUNT = 4
+// A practised sign needs a real amount of work before it earns a spot in
+// "Review" — otherwise a sign mastered yesterday shows up asking to be redone.
+const REVIEW_NEED_MIN = 0.3
 const CATEGORY_PREVIEW = 6
 
 const LEVEL_LABEL: Record<MasteryLevel, string> = {
@@ -32,6 +36,46 @@ function relativeDay(iso: string | null): string {
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
   return `${days} days ago`
+}
+
+/** One row of "Practise next" / "Review": gloss, meaning, level, a stat line,
+ *  and the single action that opens Practice on this sign. */
+function SignRow({
+  s,
+  index,
+  animate,
+  onPractise,
+}: {
+  s: GlossMastery
+  index: number
+  animate: boolean
+  onPractise?: (gloss?: string) => void
+}) {
+  const meaning = translationOf(s.gloss)
+  return (
+    <li
+      className="aww-focus-row"
+      style={animate ? ({ '--i': index } as React.CSSProperties) : undefined}
+    >
+      <div className="aww-focus-main">
+        <span className="aww-focus-gloss">{s.gloss}</span>
+        {meaning && <span className="aww-focus-meaning">{meaning}</span>}
+      </div>
+      <span className={`level-chip ${s.level}`}>{LEVEL_LABEL[s.level]}</span>
+      <span className="aww-focus-stat">
+        {s.attempts === 0
+          ? 'Not started'
+          : `${Math.round(s.mastery * 100)}% · ${s.attempts} attempt${
+              s.attempts === 1 ? '' : 's'
+            } · ${relativeDay(s.lastPracticedAt)}`}
+      </span>
+      {onPractise && (
+        <button type="button" className="btn aww-focus-go" onClick={() => onPractise(s.gloss)}>
+          Practise
+        </button>
+      )}
+    </li>
+  )
 }
 
 export function ProgressView({
@@ -118,7 +162,23 @@ export function ProgressView({
       .filter((s): s is GlossMastery => s !== undefined)
   }, [summaries, categoryMap])
 
+  // Signs already tried that the model still rates as needing work — the strand
+  // "Practise next" leaves out while it is busy introducing new vocabulary.
+  // Same practiceNeed ranking, just filtered to attempts > 0.
+  const review = useMemo(() => {
+    const now = new Date()
+    const inFocus = new Set(focus.map((s) => s.gloss))
+    return summaries
+      .filter(
+        (s) =>
+          s.attempts > 0 && !inFocus.has(s.gloss) && practiceNeed(s, now) >= REVIEW_NEED_MIN,
+      )
+      .sort((a, b) => practiceNeed(b, now) - practiceNeed(a, now))
+      .slice(0, REVIEW_COUNT)
+  }, [summaries, focus])
+
   // One breadth row per category: how many of its signs have been attempted.
+  // Ordered by signs practised (most-worked categories first), then by size.
   const coverage = useMemo(() => {
     return availableCategories
       .map((cat) => {
@@ -130,7 +190,7 @@ export function ProgressView({
         }
       })
       .filter((r) => r.total > 0)
-      .sort((a, b) => b.done / b.total - a.done / a.total || b.total - a.total)
+      .sort((a, b) => b.done - a.done || b.total - a.total || a.cat.localeCompare(b.cat))
   }, [summaries, availableCategories, categoryMap])
 
   const visibleCoverage = showAllCategories ? coverage : coverage.slice(0, CATEGORY_PREVIEW)
@@ -271,40 +331,32 @@ export function ProgressView({
             </div>
 
             <ol className={`aww-focus-list${animate ? ' is-animated' : ''}`}>
-              {focus.map((s, i) => {
-                const meaning = translationOf(s.gloss)
-                return (
-                  <li
-                    className="aww-focus-row"
-                    key={s.gloss}
-                    style={animate ? ({ '--i': i } as React.CSSProperties) : undefined}
-                  >
-                    <div className="aww-focus-main">
-                      <span className="aww-focus-gloss">{s.gloss}</span>
-                      {meaning && <span className="aww-focus-meaning">{meaning}</span>}
-                    </div>
-                    <span className={`level-chip ${s.level}`}>{LEVEL_LABEL[s.level]}</span>
-                    <span className="aww-focus-stat">
-                      {s.attempts === 0
-                        ? 'Not started'
-                        : `${Math.round(s.mastery * 100)}% · ${s.attempts} attempt${
-                            s.attempts === 1 ? '' : 's'
-                          } · ${relativeDay(s.lastPracticedAt)}`}
-                    </span>
-                    {onPractise && (
-                      <button
-                        type="button"
-                        className="btn aww-focus-go"
-                        onClick={() => onPractise(s.gloss)}
-                      >
-                        Practise
-                      </button>
-                    )}
-                  </li>
-                )
-              })}
+              {focus.map((s, i) => (
+                <SignRow key={s.gloss} s={s} index={i} animate={animate} onPractise={onPractise} />
+              ))}
             </ol>
           </section>
+
+          {/* 3b. Review — practised signs the model still wants worked on, which
+              "Practise next" skips while it introduces new vocabulary. */}
+          {review.length > 0 && (
+            <section className="aww-focus" aria-labelledby="aww-review-h">
+              <div className="aww-focus-head">
+                <h2 id="aww-review-h">Review</h2>
+              </div>
+              <ol className={`aww-focus-list${animate ? ' is-animated' : ''}`}>
+                {review.map((s, i) => (
+                  <SignRow
+                    key={s.gloss}
+                    s={s}
+                    index={i}
+                    animate={animate}
+                    onPractise={onPractise}
+                  />
+                ))}
+              </ol>
+            </section>
+          )}
 
           {/* 4. Coverage by category — a breadth read, not a drill-down.
               Hidden on first run: 20 empty bars say nothing. */}
