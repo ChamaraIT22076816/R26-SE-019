@@ -1,0 +1,720 @@
+<title>Suvana Learn Evidence Dossier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --ground:      #fbfcfb;
+  --surface:     #ffffff;
+  --surface-2:   #f2f5f4;
+  --border:      #dde7e5;
+  --border-firm: #c3d3d0;
+  --text:        #10201d;
+  --text-dim:    #566b67;
+  --text-faint:  #7d918d;
+  --accent:      #00695e;
+  --accent-2:    #00a693;
+  --accent-wash: #e7f2f0;
+  --warn:        #b03d0b;
+  --warn-wash:   #fbeee7;
+  --shadow:      0 1px 2px rgba(4,32,29,.06), 0 8px 24px -16px rgba(4,32,29,.18);
+  --plate-bg:    #ffffff;
+
+  --f-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --f-body:    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --measure: 68ch;
+  --rail: 244px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #050c0b;
+    --surface:     #0c1917;
+    --surface-2:   #12211f;
+    --border:      #1e3230;
+    --border-firm: #2c4744;
+    --text:        #e6efed;
+    --text-dim:    #93a8a4;
+    --text-faint:  #6e8582;
+    --accent:      #4fbfae;
+    --accent-2:    #7ad3c4;
+    --accent-wash: #0e2523;
+    --warn:        #e88a5c;
+    --warn-wash:   #2a1810;
+    --shadow:      0 1px 2px rgba(0,0,0,.5), 0 8px 24px -16px rgba(0,0,0,.8);
+    --plate-bg:    #f7faf9;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:      #050c0b;
+  --surface:     #0c1917;
+  --surface-2:   #12211f;
+  --border:      #1e3230;
+  --border-firm: #2c4744;
+  --text:        #e6efed;
+  --text-dim:    #93a8a4;
+  --text-faint:  #6e8582;
+  --accent:      #4fbfae;
+  --accent-2:    #7ad3c4;
+  --accent-wash: #0e2523;
+  --warn:        #e88a5c;
+  --warn-wash:   #2a1810;
+  --shadow:      0 1px 2px rgba(0,0,0,.5), 0 8px 24px -16px rgba(0,0,0,.8);
+  --plate-bg:    #f7faf9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- shell ---------- */
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  gap: 0;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+nav.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 40px 24px 40px 28px;
+  border-right: 1px solid var(--border);
+  font-size: 13px;
+}
+nav.rail .brand {
+  font-family: var(--f-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin-bottom: 4px;
+}
+nav.rail .brand-sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-bottom: 26px;
+}
+nav.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+nav.rail a {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 6px;
+  padding: 5px 8px 5px 4px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-radius: 4px;
+  line-height: 1.35;
+}
+nav.rail a:hover { background: var(--surface-2); color: var(--text); }
+nav.rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+nav.rail .n {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  padding-top: 2px;
+}
+
+main { padding: 40px 44px 120px; min-width: 0; }
+
+/* ---------- masthead ---------- */
+.masthead { margin-bottom: 34px; }
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+h1 {
+  font-family: var(--f-display);
+  font-weight: 500;
+  font-size: clamp(34px, 4.6vw, 50px);
+  line-height: 1.08;
+  letter-spacing: -.022em;
+  margin: 0 0 14px;
+  text-wrap: balance;
+  max-width: 20ch;
+}
+.standfirst {
+  font-size: 17.5px;
+  color: var(--text-dim);
+  max-width: var(--measure);
+  margin: 0 0 22px;
+}
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+}
+.provenance span {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 3px;
+  padding: 3px 8px;
+  color: var(--text-dim);
+}
+.provenance span b { color: var(--text); font-weight: 500; }
+
+/* ---------- stat band ---------- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0 0 52px;
+}
+.stat { background: var(--surface); padding: 15px 16px 14px; }
+.stat .v {
+  font-family: var(--f-mono);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--accent);
+}
+.stat .v.plain { color: var(--text); }
+.stat .k {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 5px;
+  line-height: 1.35;
+}
+
+/* ---------- sections ---------- */
+section { margin-bottom: 58px; scroll-margin-top: 24px; }
+h2 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -.016em;
+  line-height: 1.2;
+  margin: 0 0 6px;
+  display: grid;
+  grid-template-columns: 2.1rem 1fr;
+  align-items: baseline;
+  text-wrap: balance;
+}
+h2 .n {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.dek {
+  color: var(--text-dim);
+  max-width: var(--measure);
+  margin: 0 0 20px 2.1rem;
+  font-size: 15.5px;
+}
+p { max-width: var(--measure); margin: 0 0 15px; }
+section > p, section > .table-wrap, section > .say, section > .note, section > ul, section > .cmd { margin-left: 2.1rem; }
+@media (max-width: 720px) {
+  section > p, section > .table-wrap, section > .say, section > .note, section > ul, section > .cmd, .dek { margin-left: 0; }
+  h2 { grid-template-columns: 1fr; }
+  h2 .n { display: block; margin-bottom: 2px; }
+}
+strong { font-weight: 600; }
+em { font-style: italic; }
+code {
+  font-family: var(--f-mono);
+  font-size: .87em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ---------- figure plate ---------- */
+figure {
+  margin: 22px 0 22px 2.1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+@media (max-width: 720px) { figure { margin-left: 0; } }
+figure .plate {
+  background: var(--plate-bg);
+  padding: 10px;
+  overflow-x: auto;
+}
+figure img { display: block; width: 100%; height: auto; max-width: 100%; }
+figcaption {
+  border-top: 1px solid var(--border);
+  padding: 11px 15px;
+  font-size: 13px;
+  color: var(--text-dim);
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+figcaption .id {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+figcaption .t { flex: 1 1 260px; min-width: 0; }
+
+/* ---------- say-this ---------- */
+.say {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-wash);
+  border-radius: 0 5px 5px 0;
+  padding: 13px 17px;
+  margin: 20px 0;
+  max-width: var(--measure);
+}
+.say .lbl {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 6px;
+}
+.say p {
+  margin: 0;
+  font-family: var(--f-display);
+  font-size: 17px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--text);
+  max-width: none;
+}
+
+.note {
+  border-left: 3px solid var(--warn);
+  background: var(--warn-wash);
+  border-radius: 0 5px 5px 0;
+  padding: 12px 17px;
+  margin: 20px 0;
+  max-width: var(--measure);
+  font-size: 15px;
+}
+.note .lbl {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--warn);
+  display: block;
+  margin-bottom: 5px;
+}
+.note p { margin: 0; max-width: none; }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x: auto; margin: 0 0 20px; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 420px;
+  font-size: 14.5px;
+}
+th, td {
+  text-align: left;
+  padding: 8px 14px 8px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+thead th {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-firm);
+  padding-bottom: 6px;
+}
+td.num, th.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+
+.pill {
+  display: inline-block;
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  border: 1px solid;
+}
+.pill.done { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
+.pill.part { color: var(--warn); border-color: var(--warn); background: var(--warn-wash); }
+.pill.open { color: var(--text-faint); border-color: var(--border-firm); background: var(--surface-2); }
+
+ul { max-width: var(--measure); padding-left: 20px; margin: 0 0 16px; }
+li { margin-bottom: 8px; }
+
+/* ---------- commands ---------- */
+.cmd {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 11px 14px;
+  margin: 0 0 9px;
+  overflow-x: auto;
+  white-space: pre;
+  max-width: var(--measure);
+}
+.cmd .c { color: var(--text-faint); }
+
+footer {
+  margin: 0 0 0 2.1rem;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-faint);
+  max-width: var(--measure);
+}
+@media (max-width: 720px) { footer { margin-left: 0; } }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  nav.rail {
+    position: static; height: auto; border-right: none;
+    border-bottom: 1px solid var(--border); padding: 24px 22px;
+  }
+  nav.rail ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 0 10px; }
+  main { padding: 28px 22px 80px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+
+<div class="shell">
+<nav class="rail">
+  <div class="brand">Learn · Evidence</div>
+  <div class="brand-sub">R26-SE-019 · PP2</div>
+  <ol>
+    <li><a href="#s1"><span class="n">01</span><span>The headline, stated correctly</span></a></li>
+    <li><a href="#s2"><span class="n">02</span><span>Score-scale calibration</span></a></li>
+    <li><a href="#s3"><span class="n">03</span><span>What the learner sees</span></a></li>
+    <li><a href="#s4"><span class="n">04</span><span>Fitting the feature weights</span></a></li>
+    <li><a href="#s5"><span class="n">05</span><span>A grader, not a classifier</span></a></li>
+    <li><a href="#s6"><span class="n">06</span><span>Per-sign behaviour</span></a></li>
+    <li><a href="#s7"><span class="n">07</span><span>Latency</span></a></li>
+    <li><a href="#s8"><span class="n">08</span><span>Threshold-free view</span></a></li>
+    <li><a href="#s9"><span class="n">09</span><span>Targets &amp; limitations</span></a></li>
+    <li><a href="#s10"><span class="n">10</span><span>Reproduce it live</span></a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="masthead">
+  <div class="eyebrow">Evidence dossier · Component 4</div>
+  <h1>How the Learn module was measured</h1>
+  <p class="standfirst">
+    Every number this component reports, where it came from, and the sentence to
+    say when a panel asks about it. Sign-language practice scored by Dynamic Time
+    Warping against real-signer references, in the browser.
+  </p>
+  <div class="provenance">
+    <span>commit <b>2d85c78</b></span>
+    <span>re-run <b>31 Aug 2026</b></span>
+    <span><b>129</b> tests passing</span>
+    <span>reports <b>byte-identical</b> on re-run</span>
+    <span>IT22552860</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="v">0.744</div><div class="k">ROC AUC — the threshold-free headline</div></div>
+  <div class="stat"><div class="v plain">65.4%</div><div class="k">Majority-class baseline it must beat</div></div>
+  <div class="stat"><div class="v">+28.7</div><div class="k">Points separating a correct rendition from a wrong sign</div></div>
+  <div class="stat"><div class="v">1.8 ms</div><div class="k">Scoring stage, against a 300 ms budget</div></div>
+  <div class="stat"><div class="v plain">557</div><div class="k">Calibration takes across 33 signs, one signer</div></div>
+  <div class="stat"><div class="v plain">501</div><div class="k">Reference recordings shipped, 490 glosses</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="n">01</span><span>The headline, stated correctly</span></h2>
+  <p class="dek">The evaluation set is imbalanced 524&nbsp;:&nbsp;992. Raw accuracy flatters under that, so it is never quoted alone.</p>
+
+  <p>
+    A model that always answered <em>“different sign”</em> would score <strong>65.4%</strong>.
+    The scorer’s best single threshold reaches <strong>74.6%</strong> — a gain of
+    <strong>9.2 points</strong>, not 74.6 from nothing. The threshold-free reading,
+    which the imbalance cannot distort, is an <strong>ROC AUC of 0.744</strong>.
+  </p>
+
+  <figure>
+    <div class="plate"><img src="__FIG9__" alt="Bar chart comparing the 65.4 percent majority baseline against 74.6 percent best-threshold accuracy, 65.4 percent balanced accuracy and 74.4 percent ROC AUC."></div>
+    <figcaption><span class="id">FIG 9</span><span class="t">The headline against its baseline. 32 signs / 557 takes, Yohan Abhishek corpus (CC BY-NC-SA 4.0), one signer.</span></figcaption>
+  </figure>
+
+  <div class="say">
+    <span class="lbl">If asked “why only 74%?”</span>
+    <p>“It’s 74.6% against a majority baseline of 65.4%, so the gain is 9.2 points — and I’d rather state it that way. But the more important point is that this figure characterises the distance metric, not the product. The module never applies a threshold.”</p>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Do not conflate</span>
+    <p>This is <strong>not</strong> the proposal’s ≥90%-accuracy-against-expert target. That one measures grading against an SSL teacher’s judgement and is <strong>not yet measured</strong> — it needs learner attempts a teacher has graded.</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="n">02</span><span>Score-scale calibration</span></h2>
+  <p class="dek">The corpus labels itself, so the score scale is fitted to measured data rather than guessed.</p>
+
+  <p>
+    Two takes of one sign by the same signer are a correct rendition performed
+    twice; takes of different signs are a wrong-sign attempt. No human annotation
+    is involved and none is claimed.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pair</th><th class="num">n</th><th class="num">mean</th><th class="num">p10</th><th class="num">median</th><th class="num">p90</th></tr></thead>
+      <tbody>
+        <tr><td>Same sign, another take</td><td class="num">524</td><td class="num">0.483</td><td class="num"><strong>0.222</strong></td><td class="num">0.459</td><td class="num"><strong>0.767</strong></td></tr>
+        <tr><td>A different sign</td><td class="num">992</td><td class="num">0.669</td><td class="num">0.405</td><td class="num">0.662</td><td class="num">0.954</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="plate"><img src="__FIG1__" alt="Two overlaid density curves of normalised DTW distance; correct renditions peak lower than different signs, with a shaded overlap region and a dashed best-threshold line at 0.370."></div>
+    <figcaption><span class="id">FIG 1</span><span class="t">The two populations separate — and their tails overlap. The overlap is the finding, not a flaw: it is exactly what no single threshold can resolve.</span></figcaption>
+  </figure>
+
+  <p>
+    The score anchors <code>D_PERFECT</code>&nbsp;=&nbsp;0.22 and
+    <code>D_ZERO</code>&nbsp;=&nbsp;0.77 are the <strong>p10 and p90 of the measured
+    correct-rendition distribution</strong>. The best tenth of correct renditions
+    score 100; the worst tenth score 0.
+  </p>
+
+  <figure>
+    <div class="plate"><img src="__FIG4__" alt="The distance-to-score mapping drawn as a descending line from 100 to 0 between the two anchors, over a faint histogram of the measured distance distributions."></div>
+    <figcaption><span class="id">FIG 4</span><span class="t">The previous anchors were 0.05 / 0.35, assumed before any data existed — D_ZERO sat below the median correct rendition, so a genuinely correct attempt scored zero.</span></figcaption>
+  </figure>
+
+  <div class="say">
+    <span class="lbl">If asked what calibration changed</span>
+    <p>“Before calibration a genuinely correct attempt could score zero, because the anchors were guessed and one of them sat below the median correct rendition. Fitting them to the data fixed a real bug, not a cosmetic one.”</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="n">03</span><span>What the learner actually sees</span></h2>
+  <p class="dek">The shipped system applies no threshold. It maps distance to a continuous 0–100 score.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG8__" alt="Two overlaid histograms of the 0 to 100 score; different signs cluster low with a mean of 28.0, correct renditions spread higher with a mean of 56.7, and a labelled 28.7-point gap between the means."></div>
+    <figcaption><span class="id">FIG 8</span><span class="t">Correct renditions average 56.7; different signs average 28.0. 60% of correct renditions score ≥ 50, against 21% of different signs.</span></figcaption>
+  </figure>
+
+  <p>
+    This is the operationally meaningful result. The threshold accuracy in §01
+    describes a classifier the product does not contain; this describes the signal
+    a learner receives.
+  </p>
+</section>
+
+<section id="s4">
+  <h2><span class="n">04</span><span>Fitting the feature weights — and declining the maximum</span></h2>
+  <p class="dek">A grid search found a better score than the one that shipped. It was rejected on purpose.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG3__" alt="Line chart of separation accuracy rising monotonically from 66.2 percent at zero handshape weight to a maximum of 78.6 percent at weight 1.0, with the shipped value of 0.8 marked at 74.2 percent."></div>
+    <figcaption><span class="id">FIG 3</span><span class="t">11 weightings, 24 signs with ≥ 4 takes each. Separation rises monotonically and peaks where movement is discarded entirely.</span></figcaption>
+  </figure>
+
+  <p>
+    The search optimises <em>“is this the same sign?”</em> — a classification
+    objective. This scorer <em>grades a known sign</em>. Movement is a phonological
+    parameter of SSL, so a scorer blind to it would award full marks to a learner
+    with the correct handshape and the wrong movement.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Change tried</th><th>Effect</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Sequence-stable hand-size scaling</td><td class="num">73.7% → 73.4%</td><td>No effect; reverted</td></tr>
+        <tr><td>Trajectory as velocity, not position</td><td class="num">73.5% → 75.5%</td><td><strong>Reverted despite winning</strong> — a test showed a learner moving in entirely the wrong direction still scored 100</td></tr>
+        <tr><td><code>W_SHAPE</code> = 1.0 (drop movement)</td><td class="num">78.6%, the maximum</td><td>Rejected on the same grounds</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="say">
+    <span class="lbl">If asked for a design decision</span>
+    <p>“Our grid search found 78.6% and we shipped 74.2%. The maximum is at zero movement weight, and movement carries linguistic meaning in SSL. We took the measured gain up to 0.8 and stopped, because optimising the available metric instead of the actual goal is the mistake we were trying not to make.”</p>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="n">05</span><span>A grader, not a classifier</span></h2>
+  <p class="dek">Measured evidence for the distinction the whole design rests on.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG7__" alt="Horizontal bars showing the ten closest distinct-sign pairs, all between 0.135 and 0.19, against a vertical line marking the 0.458 median distance between two takes of the same sign."></div>
+    <figcaption><span class="id">FIG 7</span><span class="t">Closest 10 of 1,766 distinct-sign pairs over 60 bundled references. Some genuinely different signs sit closer than two correct takes of one sign typically do.</span></figcaption>
+  </figure>
+
+  <p>
+    A high score is therefore <strong>not proof the right sign was made</strong>.
+    This is why the scenario rubric’s <em>appropriateness</em> component compares
+    only within a scenario’s small vocabulary rather than across all 490
+    references — a bounded closed-set judgement is meaningful where an open-set
+    one would not be.
+  </p>
+</section>
+
+<section id="s6">
+  <h2><span class="n">06</span><span>Per-sign behaviour</span></h2>
+  <p class="dek">One global threshold does not fit every sign, and the chart is how that became visible.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG5__" alt="Horizontal bar chart of 32 signs ranked by separation accuracy, from CHOOSE at 97 percent down to THANK YOU at 29 percent, with a dashed line at the 74.6 percent corpus mean."></div>
+    <figcaption><span class="id">FIG 5</span><span class="t">Best: CHOOSE 97%, AROUND 94%, MONDAY 94%. Worst: THANK_YOU 29%, BEAUTIFUL 61%, HOUR 61%.</span></figcaption>
+  </figure>
+
+  <p>
+    <code>THANK_YOU</code> is a clear outlier worth understanding rather than
+    averaging away. It indicates either that a per-sign threshold is needed, or
+    that this sign’s reference recording is poor. Both are actionable.
+  </p>
+</section>
+
+<section id="s7">
+  <h2><span class="n">07</span><span>Latency</span></h2>
+  <p class="dek">Two figures that must never be swapped for one another.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG6__" alt="Left: scatter of scoring cost against DTW matrix size, rising roughly linearly, one-handed and two-handed distinguished. Right: median and p95 bars far below a 300 millisecond budget line on a log scale."></div>
+    <figcaption><span class="id">FIG 6</span><span class="t">Cost tracks the DTW matrix as O(n·m) predicts. Scoring stage only — measured in Node, not in a participant’s browser.</span></figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Figure</th><th>What it is</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1.8 ms median<br>12.6 ms p95</td><td><strong>Scoring stage only</strong> — DTW between the finished attempt and the reference. Excludes landmark inference, React’s commit and the browser’s paint.</td><td><span class="pill done">Measured</span></td></tr>
+        <tr><td>End-to-end</td><td>The full path in a participant’s browser, from the final captured frame to painted feedback.</td><td><span class="pill part">Instrumented</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The operational definition excludes the camera’s sensor→browser delay and the
+    display’s response time, because JavaScript cannot observe them — so every
+    figure is a <em>software pipeline</em> latency, never glass-to-glass. It
+    <strong>errs high</strong> in two places, which is the safe direction for an
+    “under 300 ms” claim.
+  </p>
+
+  <div class="note">
+    <span class="lbl">Never say</span>
+    <p>“Our feedback latency is 1.8 milliseconds.” It is the <em>scoring stage</em>. The end-to-end instrument exists and reports in the Progress tab, but it needs ~20 real attempts before its 95th percentile means more than “the second slowest one”.</p>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="n">08</span><span>The threshold-free view</span></h2>
+  <p class="dek">Why AUC is the headline and accuracy is the footnote.</p>
+
+  <figure>
+    <div class="plate"><img src="__FIG2__" alt="ROC curve bowing above the diagonal with an area under the curve of 0.744, and the shipped operating point marked at true positive rate 0.36 and false positive rate 0.05."></div>
+    <figcaption><span class="id">FIG 2</span><span class="t">Positive class = two takes of the same sign. At the best-accuracy threshold, TPR is 0.357 and FPR 0.048 — the optimum buys accuracy by rejecting, which is what an imbalanced set rewards.</span></figcaption>
+  </figure>
+</section>
+
+<section id="s9">
+  <h2><span class="n">09</span><span>Targets and limitations</span></h2>
+  <p class="dek">One of four measured, one with a stated proxy, two waiting on the pilot.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Proposal target</th><th>Status</th><th>What exists</th></tr></thead>
+      <tbody>
+        <tr><td>≤ 300 ms feedback latency</td><td><span class="pill done">Measured</span></td><td>1.8 ms median for the scoring stage; live end-to-end instrument built and reporting</td></tr>
+        <tr><td>≥ 90% accuracy vs expert</td><td><span class="pill part">Proxy only</span></td><td>AUC 0.744 / +9.2 over baseline. Needs learner attempts graded by an SSL teacher</td></tr>
+        <tr><td>≥ 20% learning gain</td><td><span class="pill open">Pending pilot</span></td><td>Attempts carry a session id, so “after N sessions” is countable</td></tr>
+        <tr><td>SUS ≥ 70</td><td><span class="pill open">Pending pilot</span></td><td>Needs the pilot <em>and</em> a questionnaire that does not yet exist</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Limitations, stated rather than waited for:</strong></p>
+  <ul>
+    <li><strong>One signer in the calibration corpus.</strong> The measured spread is the natural variation of one fluent person — narrower than a learner’s. Every constant fitted from it is therefore <em>optimistic</em>.</li>
+    <li><strong>No Deaf validation of the references.</strong> The corpora are public and performed by real signers, but nothing has been reviewed by a Deaf signer for this project.</li>
+    <li><strong>Non-manual markers are not scored.</strong> The build tracks hands only, so facial expression, head tilt and body movement are not captured. Their 10% is reallocated to accuracy — reporting a number for them would be fabricating one.</li>
+    <li><strong>Appropriateness is a closed-set judgement.</strong> It detects confusion only with signs the library holds, and sharpens as the library grows.</li>
+    <li><strong>Continuous, co-articulated signing is not evaluated.</strong> Phrases are scored sign-by-sign plus a phrase-level fluency metric.</li>
+    <li><strong>Zero pilot participants to date.</strong></li>
+  </ul>
+</section>
+
+<section id="s10">
+  <h2><span class="n">10</span><span>Reproduce it live</span></h2>
+  <p class="dek">Three commands, about twenty seconds. Worth offering to run in front of the panel.</p>
+
+  <div class="cmd"><span class="c"># 1 — run the suite; this regenerates the committed reports</span>
+npm --prefix learn-ssl-module/web test</div>
+  <div class="cmd"><span class="c"># 2 — export the raw measurements behind every figure</span>
+cd learn-ssl-module/web; $env:EVAL_EXPORT=1; npx vitest run evaluation.export</div>
+  <div class="cmd"><span class="c"># 3 — render the figures</span>
+learn-ssl-module/tools/venv/Scripts/python.exe PP2-presentation/make_figures.py</div>
+
+  <p>
+    After step 1, <code>git diff -- '*-report.md'</code> comes back empty — every
+    regenerated report is byte-identical to the committed one.
+  </p>
+
+  <div class="say">
+    <span class="lbl">On repeatability</span>
+    <p>“The reports are written by the tests that measure them and are marked ‘do not edit by hand’. We re-ran the whole suite last night and the committed numbers didn’t move by a character. The charts are plotted from a JSON export produced by the same scoring function the deployed app calls — the plotting script does no measurement of its own.”</p>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Know this before you offer</span>
+    <p>The 557 calibration takes are derived data and are <strong>gitignored</strong>. Without them the calibration tests <code>describe.skip</code> — they go <em>silently green rather than red</em>. A passing suite on a fresh clone does not prove the calibration ran; check the corpus count printed in <code>calibration-report.md</code>.</p>
+  </div>
+</section>
+
+<footer>
+  Suvana · R26-SE-019 · SLIIT IT4010 · Component 4, Interactive Sign Language Learning and Practice.
+  Figures generated from <code>data/raw-metrics.json</code> by <code>make_figures.py</code>, which
+  performs no measurement of its own. Reference data: Yohan Abhishek SSL dataset
+  (CC BY-NC-SA 4.0, non-commercial) and <code>dckahawearachchi/sinhala-sign-language-dataset</code> (CC0 1.0).
+</footer>
+</main>
+</div>

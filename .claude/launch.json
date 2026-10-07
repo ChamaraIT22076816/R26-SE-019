@@ -2,6 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "recognition",
+      "runtimeExecutable": "sinhala_sign_language_recognition/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "--app-dir",
+        "sinhala_sign_language_recognition",
+        "webapp.server:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "port": 8000
+    },
+    {
       "name": "learn-ssl-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "learn-ssl-module/web", "run", "dev"],

@@ -1,7 +1,9 @@
 import type { TrackedHand } from './types'
 
 export const HAND_COLORS: Record<string, string> = {
-  Left: '#22d3ee',
+  // Must match --hand-left / --hand-right in src/index.css (Suvana teal-400
+  // and lime-400) — this file is the source of truth for the canvas.
+  Left: '#2dd4bf',
   Right: '#a3e635',
 }
 const FALLBACK_COLOR = '#f472b6'
@@ -115,6 +117,13 @@ export function drawHands(
   ctx: CanvasRenderingContext2D,
   hands: TrackedHand[],
   fit: Fit = IDENTITY,
+  /**
+   * Force every hand to one colour instead of the left/right pair. The
+   * reference player passes this: there the skeleton is a teaching diagram and
+   * a colour that changes with which hand the signer used is just noise. In
+   * the live self-view the colour *is* information, so it is left unset.
+   */
+  colorOverride?: string,
 ) {
   const { width, height } = ctx.canvas
   const px = (p: { x: number }) => ((p.x - fit.cx) * fit.k + 0.5) * width
@@ -123,7 +132,7 @@ export function drawHands(
   const joint = Math.max(MIN_PX, width * JOINT_FRACTION)
 
   for (const hand of hands) {
-    const color = HAND_COLORS[hand.handedness] ?? FALLBACK_COLOR
+    const color = colorOverride ?? HAND_COLORS[hand.handedness] ?? FALLBACK_COLOR
     const pts = hand.landmarks
     if (pts.length === 0) continue
 
@@ -171,7 +180,7 @@ export function drawHands(
 
     ctx.fillStyle = color
     ctx.strokeStyle = JOINT_OUTLINE
-    ctx.lineWidth = Math.max(1, bone * 0.2)
+    ctx.lineWidth = Math.max(1, bone * 0.25)
     for (const p of pts) {
       // 1 nearest, 0 furthest → radius spans 0.8×–1.2× of the base. Kept
       // narrow for the same reason the joints are small: on a closed hand a

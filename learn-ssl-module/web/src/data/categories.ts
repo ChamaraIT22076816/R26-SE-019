@@ -42,6 +42,26 @@ export function categoryOf(rec: Categorisable): string {
   return rec.sourceCategory ?? UNCATEGORISED
 }
 
+const MONTH_ORDER = [
+  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+]
+
+/**
+ * Order the signs within a category for display. Alphabetical is the sensible
+ * default, but the months have a canonical sequence everyone knows — showing
+ * "April, August, December…" reads as broken. Non-month glosses in the folder
+ * (MONTH, YEAR, dataset typos) fall through to the end, alphabetically.
+ */
+export function orderSigns<T extends { gloss: string }>(category: string, signs: T[]): T[] {
+  if (category !== 'Months') return signs
+  const rank = (gloss: string) => {
+    const i = MONTH_ORDER.indexOf(gloss.toUpperCase())
+    return i === -1 ? MONTH_ORDER.length : i
+  }
+  return [...signs].sort((a, b) => rank(a.gloss) - rank(b.gloss) || a.gloss.localeCompare(b.gloss))
+}
+
 /** Category names present in a set of references, ordered for display. */
 export function categoriesIn(recs: Categorisable[]): string[] {
   const names = [...new Set(recs.map(categoryOf))]
@@ -51,4 +71,67 @@ export function categoriesIn(recs: Categorisable[]): string[] {
     if (b === MY_RECORDINGS) return -1
     return a.localeCompare(b)
   })
+}
+
+/**
+ * Categories smaller than this are folded into "Other" in the picker grid.
+ *
+ * The corpus has three categories holding a single sign each — Conjunctions,
+ * Determiner, Interjection — and as tiles they claimed the same row slot, and
+ * the same visual weight, as Verbs (144). Folding is a *display* decision only:
+ * the sign keeps its real category, which the picker shows on the card, and
+ * nothing here changes categoryOf(), the Progress filter or the session model.
+ */
+const MIN_PICKER_CATEGORY = 3
+
+export interface PickerGroups<T> {
+  /** Category names in display order. */
+  order: string[]
+  /** Signs per displayed category — already folded. */
+  byCategory: Map<string, T[]>
+}
+
+/**
+ * Group references for the two-step picker grid.
+ *
+ * Ordered by size, largest first, rather than alphabetically: the grid sits
+ * behind a search box, so scanning for the categories worth opening beats
+ * alphabetical lookup. "Other" and the learner's own recordings are pinned to
+ * the end — both are destinations you go to deliberately, not ones you browse.
+ */
+export function groupForPicker<T extends Categorisable>(recs: T[]): PickerGroups<T> {
+  const raw = new Map<string, T[]>()
+  for (const rec of recs) {
+    const cat = categoryOf(rec)
+    const list = raw.get(cat)
+    if (list) list.push(rec)
+    else raw.set(cat, [rec])
+  }
+
+  const byCategory = new Map<string, T[]>()
+  for (const [cat, list] of raw) {
+    const fold =
+      cat !== MY_RECORDINGS && cat !== UNCATEGORISED && list.length < MIN_PICKER_CATEGORY
+    const target = fold ? UNCATEGORISED : cat
+    const existing = byCategory.get(target)
+    if (existing) existing.push(...list)
+    else byCategory.set(target, [...list])
+  }
+
+  const pin = (name: string) => (name === MY_RECORDINGS ? 2 : name === UNCATEGORISED ? 1 : 0)
+  const order = [...byCategory.keys()].sort((a, b) => {
+    const byPin = pin(a) - pin(b)
+    if (byPin !== 0) return byPin
+    const bySize = (byCategory.get(b)?.length ?? 0) - (byCategory.get(a)?.length ?? 0)
+    return bySize !== 0 ? bySize : a.localeCompare(b)
+  })
+
+  return { order, byCategory }
+}
+
+/** True when a sign sits in the picker's "Other" bucket but has a real category
+ *  of its own worth showing on its card. */
+export function foldedCategoryOf(rec: Categorisable): string | null {
+  const cat = categoryOf(rec)
+  return cat === UNCATEGORISED ? null : cat
 }
