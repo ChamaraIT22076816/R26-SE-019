@@ -6420,12 +6420,12 @@
 
 /* Light Theme Overrides */
 :root[data-theme='light'] .cs-nav-eyebrow {
-  color: #8a6410;
+  color: #00a693;
 }
 
 :root[data-theme='light'] .cs-nav-eyebrow-dot {
-  background: #8a6410;
-  box-shadow: 0 0 5px rgba(138, 100, 16, 0.5);
+  background: #00a693;
+  box-shadow: 0 0 6px rgba(0, 166, 147, 0.6);
 }
 
 :root[data-theme='light'] .cs-nav-title {
@@ -6433,7 +6433,7 @@
 }
 
 :root[data-theme='light'] .cs-nav-stat strong {
-  color: #00776a;
+  color: #daa520;
 }
 
 :root[data-theme='light'] .cs-nav-dot-sep {
