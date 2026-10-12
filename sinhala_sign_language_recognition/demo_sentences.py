@@ -220,11 +220,14 @@ def run_sentence_demo(sentence_key, visual=False):
 
     # Load label encoder
     labels_file = ROOT_DIR / config['dataset']['processed_path'] / "labels.npy"
-    if labels_file.exists():
-        labels = np.unique(np.load(labels_file, allow_pickle=True))
-        pred_label = labels[pred_idx] if pred_idx < len(labels) else f"Class_{pred_idx}"
+    if pred_idx is not None:
+        if labels_file.exists():
+            labels = np.unique(np.load(labels_file, allow_pickle=True))
+            pred_label = str(labels[pred_idx]) if pred_idx < len(labels) else f"Class_{pred_idx}"
+        else:
+            pred_label = sentence_key
     else:
-        pred_label = sentence_key
+        pred_label = f"Uncertain / Low Confidence ({sentence_key})"
 
     print("\n" + "=" * 70)
     print("RECOGNITION RESULT:")

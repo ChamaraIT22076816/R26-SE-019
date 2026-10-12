@@ -38,7 +38,7 @@ sys.path.insert(0, str(ROOT_DIR / "src"))
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from tensorflow.keras.utils import to_categorical
+to_categorical = tf.keras.utils.to_categorical
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 from model.lstm_model import LSTMRecognizer

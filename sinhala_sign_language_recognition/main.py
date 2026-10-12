@@ -91,9 +91,9 @@ def main():
         X = np.load(os.path.join(data_path, 'processed_data.npy'))
         y = np.load(os.path.join(data_path, 'labels.npy'), allow_pickle=True)
         
-        # Preprocess labels
+        import tensorflow as tf
         from sklearn.preprocessing import LabelEncoder
-        from tensorflow.keras.utils import to_categorical
+        to_categorical = tf.keras.utils.to_categorical
 
         label_encoder = LabelEncoder()
         y_encoded = label_encoder.fit_transform(y)
