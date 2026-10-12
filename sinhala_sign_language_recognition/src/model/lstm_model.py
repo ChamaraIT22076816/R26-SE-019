@@ -1,6 +1,8 @@
 import tensorflow as tf
-from tensorflow.keras import layers, models
 import numpy as np
+
+layers = tf.keras.layers
+models = tf.keras.models
 
 class LSTMRecognizer:
     def __init__(self, config):

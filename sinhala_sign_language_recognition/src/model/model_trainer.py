@@ -1,10 +1,14 @@
 import tensorflow as tf
-from tensorflow.keras import callbacks, optimizers, losses
 import numpy as np
 import os
 import json
 from datetime import datetime
 import matplotlib.pyplot as plt
+from typing import Any, cast
+
+callbacks = tf.keras.callbacks
+optimizers = tf.keras.optimizers
+losses = tf.keras.losses
 
 class ModelTrainer:
     def __init__(self, config):
@@ -77,6 +81,7 @@ class ModelTrainer:
     def plot_training_history(self, history, model_name="training"):
         """Plot training and validation metrics"""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4))
+        fig = cast(Any, fig)
         
         # Accuracy
         ax1.plot(history.history['accuracy'], label='Train Accuracy', color='#2563eb', lw=2)
@@ -100,7 +105,7 @@ class ModelTrainer:
         
         plt.tight_layout()
         save_file = os.path.join(self.model_save_path, f'{model_name}_training_history.png')
-        plt.savefig(save_file, dpi=300)
+        fig.savefig(save_file, dpi=300)  # type: ignore
         plt.close(fig)
         print(f"Training curves saved to {save_file}")
         
