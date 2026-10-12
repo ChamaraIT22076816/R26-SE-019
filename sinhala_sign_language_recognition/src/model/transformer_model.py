@@ -19,6 +19,7 @@ layers = tf.keras.layers
 models = tf.keras.models
 
 
+@tf.keras.utils.register_keras_serializable(package="SSLTransformer")
 class PositionalEncoding(layers.Layer):
     """Adds positional embeddings to landmark sequence vectors."""
 
@@ -51,6 +52,7 @@ class PositionalEncoding(layers.Layer):
         return config
 
 
+@tf.keras.utils.register_keras_serializable(package="SSLTransformer")
 class TransformerEncoderBlock(layers.Layer):
     """Transformer Encoder block with Multi-Head Attention and Feed-Forward network."""
 

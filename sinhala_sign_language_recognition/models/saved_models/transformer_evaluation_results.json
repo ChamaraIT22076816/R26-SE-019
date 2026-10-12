@@ -1,0 +1,15 @@
+{
+  "model_name": "transformer",
+  "parameters": 1582251,
+  "test_loss": 2.139209508895874,
+  "test_accuracy": 0.2895376980304718,
+  "precision_macro": 0.19611423142124898,
+  "precision_weighted": 0.19565563279066928,
+  "recall_macro": 0.2933723196881092,
+  "recall_weighted": 0.2895377128953771,
+  "f1_score_macro": 0.2100957822433996,
+  "f1_score_weighted": 0.2073800594767205,
+  "top_3_accuracy": 0.5912408828735352,
+  "top_5_accuracy": 0.7031630277633667,
+  "inference_latency_ms": 150.62
+}

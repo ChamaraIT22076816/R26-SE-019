@@ -57,6 +57,8 @@ def main():
     parser.add_argument('--config', default='config/config.yaml', help='Path to config file')
     parser.add_argument('--mode', choices=['prepare', 'train', 'recognize', 'full'], 
                        default='full', help='Mode of operation')
+    parser.add_argument('--model_type', choices=['lstm', 'bilstm', 'transformer'], 
+                        default='lstm', help='Model architecture to build/train')
     parser.add_argument('--model_path', help='Path to saved model for recognition')
     parser.add_argument('--workers', type=int, help='Number of parallel workers')
     
@@ -64,6 +66,8 @@ def main():
     
     # Load configuration
     config = load_config(args.config)
+    if args.model_type:
+        config['model']['type'] = args.model_type
     
     # Update model path if provided
     if args.model_path:
@@ -74,10 +78,12 @@ def main():
         X, y = prepare_dataset_fast(config)
         
     if args.mode in ['train', 'full']:
-        print("Training model...")
+        model_type = config['model'].get('type', 'lstm').lower()
+        print(f"Training model: {model_type.upper()}...")
         # Add training code here
         from model.model_trainer import ModelTrainer
         from model.lstm_model import LSTMRecognizer
+        from model.transformer_model import SignTransformerRecognizer
         import numpy as np
         
         # Load processed data
@@ -107,22 +113,38 @@ def main():
             X_train, y_train, test_size=0.2, random_state=42
         )
         
-        # Build model
-        model_builder = LSTMRecognizer(config)
-        model = model_builder.build_model()
+        # Build model based on selected architecture
+        if model_type == 'transformer':
+            print("Building Spatial-Temporal Transformer model...")
+            builder = SignTransformerRecognizer(config)
+            model = builder.build_model()
+        elif model_type == 'bilstm':
+            print("Building Bidirectional LSTM model...")
+            builder = LSTMRecognizer(config)
+            model = builder.build_bidirectional_lstm()
+        else:
+            print("Building Stacked LSTM model...")
+            builder = LSTMRecognizer(config)
+            model = builder.build_model()
+            
+        print(model.summary())
         
         # Train model
         trainer = ModelTrainer(config)
-        trained_model, history = trainer.train_model(model, X_train, y_train, X_val, y_val)
+        trained_model, history = trainer.train_model(
+            model, X_train, y_train, X_val, y_val, model_name=model_type
+        )
         
-        # Evaluate model
-        results = trainer.evaluate_model(trained_model, X_test, y_test)
+        # Evaluate model with comprehensive metrics
+        results = trainer.evaluate_model(
+            trained_model, X_test, y_test, labels=list(label_encoder.classes_), model_name=model_type
+        )
         
         # Plot training history
-        trainer.plot_training_history(history)
+        trainer.plot_training_history(history, model_name=model_type)
         
         # Save model
-        trainer.save_model(trained_model, 'lstm')
+        trainer.save_model(trained_model, model_type)
         
     if args.mode in ['recognize', 'full']:
         print("Starting real-time recognition...")
