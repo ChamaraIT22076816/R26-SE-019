@@ -11,10 +11,12 @@ Features:
 - Global sequence pooling and Softmax gesture classification
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers, models
+
+layers = tf.keras.layers
+models = tf.keras.models
 
 
 class PositionalEncoding(layers.Layer):
@@ -33,7 +35,7 @@ class PositionalEncoding(layers.Layer):
         angle_rates = 1.0 / (10000.0 ** depths)
         angle_rads = positions * angle_rates
         pos_encoding = np.concatenate([np.sin(angle_rads), np.cos(angle_rads)], axis=-1)
-        return tf.cast(pos_encoding, dtype=tf.float32)
+        return tf.constant(cast(Any, pos_encoding), dtype=tf.float32)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         length = tf.shape(x)[1]
@@ -79,7 +81,7 @@ class TransformerEncoderBlock(layers.Layer):
         self.norm2 = layers.LayerNormalization(epsilon=1e-6)
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
-        attn_output = self.mha(query=x, value=x, key=x)
+        attn_output = cast(tf.Tensor, self.mha(query=x, value=x, key=x))
         attn_output = self.dropout1(attn_output, training=training)
         x = self.norm1(x + attn_output)
 

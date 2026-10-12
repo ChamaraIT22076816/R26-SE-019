@@ -1,7 +1,7 @@
 """Visualization utilities for Sinhala Sign Language Recognition."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, cast
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -13,6 +13,7 @@ def plot_training_curves(
 ) -> None:
     """Plot and save training/validation accuracy and loss curves."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig = cast(Any, fig)
 
     # Accuracy
     if "accuracy" in history:
@@ -39,7 +40,7 @@ def plot_training_curves(
     plt.tight_layout()
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=300)
+        fig.savefig(save_path, dpi=300)  # type: ignore
     if show:
         plt.show()
     plt.close(fig)
@@ -55,7 +56,7 @@ def plot_confusion_matrix(
     """Plot confusion matrix for the most frequent or top-k classes."""
     from sklearn.metrics import confusion_matrix
 
-    cm = confusion_matrix(y_true, y_pred)
+    cm = confusion_matrix(cast(Any, y_true), cast(Any, y_pred))
     display_labels: List[str] = list(labels)
 
     # Sub-select top_k classes if too large for legible display
@@ -64,6 +65,7 @@ def plot_confusion_matrix(
         display_labels = display_labels[:top_k]
 
     fig, ax = plt.subplots(figsize=(10, 8))
+    fig = cast(Any, fig)
     cax = ax.matshow(cm, cmap="Blues", alpha=0.85)
     fig.colorbar(cax)
 
@@ -73,12 +75,12 @@ def plot_confusion_matrix(
     ax.set_xticklabels(display_labels, rotation=45, ha="left", fontsize=9)
     ax.set_yticklabels(display_labels, fontsize=9)
 
-    plt.title(f"Confusion Matrix (Top {len(display_labels)} Classes)", pad=20, fontweight="bold")
-    plt.ylabel("True Class")
-    plt.xlabel("Predicted Class")
+    ax.set_title(f"Confusion Matrix (Top {len(display_labels)} Classes)", pad=20, fontweight="bold")
+    ax.set_ylabel("True Class")
+    ax.set_xlabel("Predicted Class")
     plt.tight_layout()
 
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, dpi=300)
+        fig.savefig(save_path, dpi=300)  # type: ignore
     plt.close(fig)

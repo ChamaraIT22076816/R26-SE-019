@@ -3,6 +3,15 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+try:
+    # Direct import resolves IDE static typing / Pylance attribute resolution
+    from tensorflow.lite.python.interpreter import Interpreter as TFLiteInterpreter  # type: ignore
+except (ImportError, AttributeError):
+    try:
+        from tflite_runtime.interpreter import Interpreter as TFLiteInterpreter  # type: ignore
+    except (ImportError, AttributeError):
+        TFLiteInterpreter = getattr(tf.lite, "Interpreter", None)
+
 
 class FastInferenceEngine:
     """High-performance inference engine for real-time sign language recognition.
@@ -40,16 +49,17 @@ class FastInferenceEngine:
                 resolved_tflite = candidate
         
         # Try initializing TFLite first (Fastest)
-        if resolved_tflite is not None and resolved_tflite.exists():
+        if resolved_tflite is not None and resolved_tflite.exists() and TFLiteInterpreter is not None:
             try:
-                interpreter = tf.lite.Interpreter(model_path=str(resolved_tflite))
+                interpreter = TFLiteInterpreter(model_path=str(resolved_tflite))
                 interpreter.allocate_tensors()
                 inp_details = interpreter.get_input_details()
                 out_details = interpreter.get_output_details()
                 
                 # Warm-up run
                 if inp_details and out_details:
-                    dummy_input = np.zeros(inp_details[0]['shape'], dtype=np.float32)
+                    input_shape: Any = inp_details[0]['shape']
+                    dummy_input = np.zeros(input_shape, dtype=np.float32)
                     interpreter.set_tensor(inp_details[0]['index'], dummy_input)
                     interpreter.invoke()
                     _ = interpreter.get_tensor(out_details[0]['index'])
@@ -118,7 +128,7 @@ class FastInferenceEngine:
         # 2. tf.function backend
         if self.compiled_fn is not None:
             try:
-                tensor_in = tf.constant(contiguous_input)
+                tensor_in = tf.convert_to_tensor(contiguous_input, dtype=tf.float32)  # type: ignore[arg-type]
                 out_tensor = self.compiled_fn(tensor_in)
                 out_np = out_tensor.numpy() if hasattr(out_tensor, 'numpy') else np.asarray(out_tensor)
                 return np.asarray(out_np[0], dtype=np.float32)
