@@ -16,7 +16,7 @@ import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
 import { categoryOf, orderSigns } from '../data/categories'
-import { glossLabel, translationOf } from '../data/translations'
+import { glossLabel } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
 import { summarizeAll } from '../learner/mastery'
@@ -32,16 +32,30 @@ import type { PracticeSession } from '../learner/session'
 import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
 import { FINGER_LABEL } from '../scoring/landmarks'
-import type { Finger } from '../scoring/landmarks'
+import { band } from '../scoring/band'
 import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
 import { drawHands, fitFor } from '../vision/drawing'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
-import type { HandAccuracyInfo } from './ScoreBadge'
+import type { HandFeedback } from './ScoreBadge'
 import { CategorySignNavigator } from './CategorySignNavigator'
+import { Onboarding } from './Onboarding'
+import { onboardingSeen } from './onboardingFlag'
+import { trimTake } from '../scoring/trimTake'
+import { shortcutBlockedByTarget } from '../app/keyboard'
+import { captureDeadline } from '../vision/cameraLifecycle'
+import { progressAgainstEarlier, shouldLogAttempt } from '../learner/attemptProgress'
 
 const COUNTDOWN_S = 3
+/**
+ * Slack after the capture window before the wall-clock backstop finishes the
+ * take: frames normally end it at captureMs, so this only fires when frames
+ * stop arriving. Untuned.
+ */
+const BACKSTOP_SLACK_MS = 500
+/** Consecutive tracked frames with a hand before Record unlocks (spec L-07). */
+const READY_STREAK = 5
 
 type Phase = 'idle' | 'countdown' | 'recording' | 'result'
 
@@ -67,6 +81,14 @@ export function PracticeView({
   const [suggested, setSuggested] = useState<string | null>(null)
   const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
   const [isBrowsing, setIsBrowsing] = useState(true)
+  // Why the last countdown or take was abandoned, shown until the next one.
+  const [captureNotice, setCaptureNotice] = useState<string | null>(null)
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const firstRunCheckedRef = useRef(false)
+  // Hands seen in READY_STREAK consecutive frames; a frame without one resets it.
+  const [handsReady, setHandsReady] = useState(false)
+  const handsReadyRef = useRef(false)
+  const handStreakRef = useRef(0)
 
   // Ghost Mode State (Overlay reference skeleton onto live webcam)
   const [ghostActive, setGhostActive] = useState(false)
@@ -92,13 +114,30 @@ export function PracticeView({
   const retryRef = useRef<HTMLButtonElement>(null)
   const completeRef = useRef<HTMLHeadingElement>(null)
   const lastFrameAtRef = useRef<number | null>(null)
+  const finishRef = useRef<() => void>(() => {})
 
   const [revealArmed, setRevealArmed] = useState(false)
   const latency = useFeedbackLatency('practice', () => setRevealArmed(true))
 
-  const captureMs = selected ? Math.max(selected.durationMs + 1500, 2500) : 3500
+  // Long enough for a hesitant start; the take is trimmed to its tracked span
+  // before scoring, so the extra hands-down time does not count against it.
+  const captureMs = selected
+    ? Math.max(2 * selected.durationMs, selected.durationMs + 3000)
+    : 3500
+
+  const setReady = (ready: boolean) => {
+    if (ready === handsReadyRef.current) return
+    handsReadyRef.current = ready
+    setHandsReady(ready)
+  }
+  const resetReady = () => {
+    handStreakRef.current = 0
+    setReady(false)
+  }
 
   const tracking = useHandTracking((frame) => {
+    handStreakRef.current = frame.hands.length > 0 ? handStreakRef.current + 1 : 0
+    setReady(handStreakRef.current >= READY_STREAK)
     if (phaseRef.current !== 'recording') return
     if (startTsRef.current === null) startTsRef.current = frame.timestampMs
     const rel = frame.timestampMs - startTsRef.current
@@ -110,11 +149,19 @@ export function PracticeView({
 
   useEffect(() => {
     void (async () => {
-      const [loc, index, log] = await Promise.all([
-        listRecordings(),
+      // allSettled: a failed IndexedDB (blocked site storage) must not blank
+      // the bundled signs. Each store that fails contributes nothing.
+      const [locR, indexR, logR] = await Promise.allSettled([
+        Promise.resolve().then(listRecordings),
         loadReferenceIndex(),
-        listAttempts(),
+        Promise.resolve().then(listAttempts),
       ])
+      const loc = locR.status === 'fulfilled' ? locR.value : []
+      const index = indexR.status === 'fulfilled' ? indexR.value : []
+      const log = logR.status === 'fulfilled' ? logR.value : []
+      for (const r of [locR, indexR, logR]) {
+        if (r.status === 'rejected') console.error('Practice could not load a store', r.reason)
+      }
       setLocalRecs(loc)
       setReferences(pickReferenceList([...loc.map(toMeta), ...index]))
       setEntries(log)
@@ -233,29 +280,66 @@ export function PracticeView({
     }
   }, [ghostActive, reference, tracking.status, phase])
 
-  // Cancel countdown if camera turns off
+  // Readiness is about the frames arriving now: start over whenever they stop.
+  useEffect(() => {
+    if (tracking.status !== 'running') resetReady()
+  }, [tracking.status])
+
+  // Abandon the countdown or take if the camera stops. An error (lost camera,
+  // failed tracker) says so; the learner's own Stop needs no message.
   useEffect(() => {
     if (
       tracking.status !== 'running' &&
       (phaseRef.current === 'countdown' || phaseRef.current === 'recording')
     ) {
       window.clearInterval(countdownRef.current)
+      framesRef.current = []
       setPhase('idle')
+      if (tracking.status === 'error') {
+        setCaptureNotice('The camera stopped, so that take was not scored. Try again.')
+      }
     }
   }, [tracking.status])
+
+  // Wall-clock backstop: frames normally finish the take at captureMs, but if
+  // they stop arriving the take still ends instead of recording forever.
+  useEffect(() => {
+    if (phase !== 'recording') return
+    return captureDeadline(captureMs + BACKSTOP_SLACK_MS, () => finishRef.current())
+  }, [phase, captureMs])
+
+  // Tracking pauses while the tab is hidden, so a take running then would be
+  // scored on a gap. Abandon it instead.
+  useEffect(() => {
+    const abandon = () => {
+      if (!document.hidden) return
+      if (phaseRef.current !== 'countdown' && phaseRef.current !== 'recording') return
+      window.clearInterval(countdownRef.current)
+      framesRef.current = []
+      setPhase('idle')
+      setCaptureNotice('You left the page, so that take was not scored. Try again.')
+    }
+    document.addEventListener('visibilitychange', abandon)
+    return () => document.removeEventListener('visibilitychange', abandon)
+  }, [])
 
   useEffect(() => () => window.clearInterval(countdownRef.current), [])
 
   const { pause: pauseTracking, resume: resumeTracking } = tracking
   useEffect(() => {
-    if (phase === 'result' || isBrowsing || !selected) pauseTracking()
-    else resumeTracking()
+    if (phase === 'result' || isBrowsing || !selected) {
+      pauseTracking()
+      resetReady()
+    } else resumeTracking()
   }, [phase, isBrowsing, selected, pauseTracking, resumeTracking])
 
   useEffect(() => {
     if (session) saveSession(session)
     else clearSession()
   }, [session])
+
+  // A notice belongs to the sign it happened on.
+  useEffect(() => setCaptureNotice(null), [selected])
 
   function leaveResult() {
     setResult(null)
@@ -269,14 +353,14 @@ export function PracticeView({
   const liveMessage = useMemo(() => {
     if (phase === 'countdown') return `Get ready. Recording starts in ${COUNTDOWN_S} seconds.`
     if (phase === 'recording') return 'Recording. Sign now.'
+    if (phase === 'idle' && captureNotice) return captureNotice
     if (phase === 'result' && result) {
-      const bandLabel =
-        result.score >= 85 ? 'Great match' : result.score >= 60 ? 'Getting there' : 'Keep practising'
+      const bandLabel = band(result.score).label
       const hint = result.hints[0] ? ` ${result.hints[0]}` : ''
       return `${selectedRef.current?.gloss ?? 'Sign'} scored ${result.score} out of 100. ${bandLabel}.${hint}`
     }
     return ''
-  }, [phase, result])
+  }, [phase, result, captureNotice])
 
   useEffect(() => {
     if (phase === 'result') retryRef.current?.focus({ preventScroll: true })
@@ -288,6 +372,7 @@ export function PracticeView({
 
   function beginCountdown() {
     if (tracking.status !== 'running' || !referenceRef.current) return
+    setCaptureNotice(null)
     setResult(null)
     setAttempt(null)
     setRevealArmed(false)
@@ -309,16 +394,35 @@ export function PracticeView({
     }, 1000)
   }
 
+  /** Record (button or Space) from idle: only once the learner's hands are tracked. */
+  function recordFromIdle() {
+    if (!handsReadyRef.current) return
+    beginCountdown()
+  }
+
   function cancelCountdown() {
     window.clearInterval(countdownRef.current)
+    setPhase('idle')
+  }
+
+  /** Esc while recording: discard the take unscored and stay on this sign. */
+  function cancelRecording() {
+    framesRef.current = []
+    startTsRef.current = null
+    lastFrameAtRef.current = null
+    setElapsedMs(0)
     setPhase('idle')
   }
 
   function finishRecording() {
     if (phaseRef.current !== 'recording') return
     const currentRef = referenceRef.current
-    const frames = framesRef.current
+    const captured = framesRef.current
     framesRef.current = []
+    // Score the tracked span only, as references are built (see trimTake).
+    // A take with no hand at all keeps its frames: nothing to trim to.
+    const trimmed = trimTake(captured)
+    const frames = trimmed.length > 0 ? trimmed : captured
     if (!currentRef) {
       setPhase('idle')
       return
@@ -359,7 +463,7 @@ export function PracticeView({
       requestAnimationFrame(() => setRevealArmed(true))
     }
 
-    if (scored.hands.length > 0 && scored.hands.every((h) => h.missing)) return
+    if (!shouldLogAttempt(scored)) return
 
     setSession((prev) => (prev ? markAttempted(prev, currentRef.gloss) : prev))
 
@@ -377,49 +481,44 @@ export function PracticeView({
     })
     setEntries((prev) => [...prev, entry])
   }
+  finishRef.current = finishRecording
 
   const noAttemptHands =
     result != null && result.hands.length > 0 && result.hands.every((h) => h.missing)
 
-  const fingerFocus = result ? topFingers(result) : []
   const resultNotes = result ? result.hints.filter((h) => !h.startsWith('Check your ')) : []
 
-  // Compute handsData for anatomical vector illustration in ScoreBadge
-  const handsData: HandAccuracyInfo[] = useMemo(() => {
+  // Measured per-hand scores for ScoreBadge. When the take was scored
+  // mirrored, the learner signed with the other hand than the reference's, so
+  // each score is labelled with the learner's hand.
+  const handFeedback: HandFeedback[] = useMemo(() => {
     if (!result) return []
-    const worstSet = new Set(topFingers(result))
-    return result.hands.map((h) => {
-      const fingerList: Finger[] = ['thumb', 'index', 'middle', 'ring', 'pinky']
-      const fingers = fingerList.map((key) => {
-        const isWeak = worstSet.has(key)
-        const name = FINGER_LABEL[key] || (key.charAt(0).toUpperCase() + key.slice(1))
-        const accuracy = isWeak
-          ? Math.max(45, Math.min(Math.round(h.score * 0.8), 75))
-          : Math.min(99, Math.max(Math.round(h.score * 1.05), 88))
-        return { name, key, accuracy, isWeak }
-      })
-      return {
-        handedness: h.handedness,
-        score: h.score,
-        missing: h.missing,
-        fingers,
-      }
-    })
+    return result.hands.map((h) => ({
+      handedness: result.mirrored ? (h.handedness === 'Left' ? 'Right' : 'Left') : h.handedness,
+      score: h.score,
+      missing: h.missing,
+    }))
   }, [result])
 
+  const fingerFocus = result ? topFingers(result) : []
+
   const progress = useMemo(() => {
-    if (!result || !selected) return { delta: null as number | null, best: false }
-    const forGloss = entries.filter((e) => e.gloss === selected.gloss)
-    const earlier = forGloss.slice(0, -1)
-    if (earlier.length === 0) return { delta: null as number | null, best: false }
-    const previous = earlier[earlier.length - 1].score
-    const bestBefore = Math.max(...earlier.map((e) => e.score))
-    return { delta: result.score - previous, best: result.score > bestBefore }
-  }, [entries, result, selected])
+    if (!result || !selected || !attempt) return { delta: null, best: false }
+    return progressAgainstEarlier(entries, selected.gloss, attempt.id, result.score)
+  }, [entries, result, selected, attempt])
 
   useEffect(() => {
     if (selected) setIsBrowsing(false)
   }, [selected])
+
+  // First run: the guide opens on the learner's first sign, once.
+  useEffect(() => {
+    if (isBrowsing || !selected || firstRunCheckedRef.current) return
+    firstRunCheckedRef.current = true
+    if (!onboardingSeen()) setOnboardingOpen(true)
+  }, [isBrowsing, selected])
+
+  const closeOnboarding = useCallback(() => setOnboardingOpen(false), [])
 
   const browsing = isBrowsing || !selected
 
@@ -465,66 +564,86 @@ export function PracticeView({
     }
   }, [selected, references])
 
-  // Global keyboard shortcuts
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+  // Global keyboard shortcuts. The handler is rebuilt every render (it reads
+  // fresh state) but registered once, through a ref, so the listener does not
+  // churn with the tracking object. It listens in the capture phase so that
+  // its preventDefault reaches AppNavBar's window listener (registered earlier,
+  // bubble phase) before that one sends Esc to the Hero.
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    // The guide is modal: no Practice shortcut runs behind it. Esc is taken
+    // here (so AppNavBar does not send it to the Hero) and closes the guide.
+    if (onboardingOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOnboardingOpen(false)
+      }
+      return
+    }
+    const key = e.code === 'Space' ? ' ' : e.key
+    // A focused button or link keeps Enter/Space; text fields keep every key.
+    if (shortcutBlockedByTarget(key, e.target)) return
 
-      if (e.code === 'Space') {
-        if (phaseRef.current === 'idle' && !isBrowsing && referenceRef.current && tracking.status === 'running') {
-          e.preventDefault()
-          beginCountdown()
-        } else if (phaseRef.current === 'recording') {
-          e.preventDefault()
-          finishRecording()
-        } else if (phaseRef.current === 'result') {
-          e.preventDefault()
-          if (tracking.status === 'running') beginCountdown()
-          else void tracking.start()
-        }
-      } else if (e.key === 'ArrowLeft') {
-        if (phaseRef.current === 'result') {
-          e.preventDefault()
-          if (tracking.status === 'running') beginCountdown()
-          else void tracking.start()
-        }
-      } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
-        if (phaseRef.current === 'result') {
-          e.preventDefault()
-          handleNextSign()
-        }
-      } else if (e.key === 'Escape') {
-        if (phaseRef.current === 'countdown') {
-          e.preventDefault()
-          cancelCountdown()
-        } else if (phaseRef.current === 'result') {
-          e.preventDefault()
-          leaveResult()
-          setIsBrowsing(true)
-        } else if (phaseRef.current === 'idle' && !isBrowsing) {
-          e.preventDefault()
-          setIsBrowsing(true)
-        }
-      } else if (e.key === 'm' || e.key === 'M') {
-        if (!isBrowsing && phaseRef.current !== 'result') {
-          e.preventDefault()
-          setGhostActive((prev) => !prev)
-        }
-      } else if (e.key === '[') {
-        if (!isBrowsing && phaseRef.current === 'idle') {
-          e.preventDefault()
-          handlePrevSign()
-        }
-      } else if (e.key === ']') {
-        if (!isBrowsing && phaseRef.current === 'idle') {
-          e.preventDefault()
-          handleNextSign()
-        }
+    if (key === ' ') {
+      if (phaseRef.current === 'idle' && !isBrowsing && referenceRef.current && tracking.status === 'running') {
+        e.preventDefault()
+        recordFromIdle()
+      } else if (phaseRef.current === 'recording') {
+        e.preventDefault()
+        finishRecording()
+      } else if (phaseRef.current === 'result') {
+        e.preventDefault()
+        if (tracking.status === 'running') beginCountdown()
+        else void tracking.start()
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if (phaseRef.current === 'result') {
+        e.preventDefault()
+        if (tracking.status === 'running') beginCountdown()
+        else void tracking.start()
+      }
+    } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      if (phaseRef.current === 'result') {
+        e.preventDefault()
+        handleNextSign()
+      }
+    } else if (e.key === 'Escape') {
+      if (phaseRef.current === 'countdown') {
+        e.preventDefault()
+        cancelCountdown()
+      } else if (phaseRef.current === 'recording') {
+        e.preventDefault()
+        cancelRecording()
+      } else if (phaseRef.current === 'result') {
+        e.preventDefault()
+        leaveResult()
+        setIsBrowsing(true)
+      } else if (phaseRef.current === 'idle' && !isBrowsing) {
+        e.preventDefault()
+        setIsBrowsing(true)
+      }
+    } else if (e.key === 'm' || e.key === 'M') {
+      if (!isBrowsing && phaseRef.current !== 'result') {
+        e.preventDefault()
+        setGhostActive((prev) => !prev)
+      }
+    } else if (e.key === '[') {
+      if (!isBrowsing && phaseRef.current === 'idle') {
+        e.preventDefault()
+        handlePrevSign()
+      }
+    } else if (e.key === ']') {
+      if (!isBrowsing && phaseRef.current === 'idle') {
+        e.preventDefault()
+        handleNextSign()
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isBrowsing, tracking, handleNextSign, handlePrevSign])
+  }
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => keyHandlerRef.current(e)
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [])
 
   // Iconized Action Buttons with ArrowLeft / ArrowRight Key Badges
   const resultActions = (
@@ -617,14 +736,10 @@ export function PracticeView({
                 <div className="aww-ref-heading">
                   <p className="aww-pane-label">Reference</p>
                   <div className="aww-ref-title-wrap">
+                    {/* glossLabel() already carries the English meaning */}
                     <h2 className="aww-pane-title">
                       {glossLabel(selected.gloss)}
                     </h2>
-                    {translationOf(selected.gloss) && (
-                      <span className="aww-pane-si-sub" lang="si">
-                        {translationOf(selected.gloss)}
-                      </span>
-                    )}
                     {selected.gloss === suggested && (
                       <span className="badge cs-suggested-chip">Suggested</span>
                     )}
@@ -654,9 +769,20 @@ export function PracticeView({
         <div className="aww-pane aww-pane-right" data-camera-status={tracking.status}>
           <div className="aww-pane-header">
             <div>
-              <p className="aww-pane-label">{browsing ? 'Preview' : 'You'}</p>
+              <div className="aww-you-row">
+                <p className="aww-pane-label">{browsing ? 'Preview' : 'You'}</p>
+                {!browsing && (
+                  <button
+                    type="button"
+                    className="aww-how-link"
+                    onClick={() => setOnboardingOpen(true)}
+                  >
+                    How it works
+                  </button>
+                )}
+              </div>
               {browsing && previewRec && (
-                <h2 className="aww-pane-title">{previewRec.gloss}</h2>
+                <h2 className="aww-pane-title">{glossLabel(previewRec.gloss)}</h2>
               )}
             </div>
           </div>
@@ -709,6 +835,10 @@ export function PracticeView({
             />
           </div>
 
+          {!browsing && phase === 'idle' && captureNotice && (
+            <p className="aww-cam-notice">{captureNotice}</p>
+          )}
+
           {/* Camera controls */}
           {!browsing && phase !== 'result' && tracking.status === 'running' && (
             <>
@@ -723,16 +853,27 @@ export function PracticeView({
               )}
               <div className="aww-cam-action">
                 {phase === 'idle' && (
-                  <button
-                    className="aww-cam-btn"
-                    onClick={beginCountdown}
-                    disabled={!reference}
-                    aria-label="Record attempt (Space)"
-                  >
-                    <Circle size={14} fill="currentColor" strokeWidth={0} aria-hidden="true" />
-                    <span>{reference ? 'Record' : 'Loading…'}</span>
-                    <span className="aww-key-badge-sm">Space</span>
-                  </button>
+                  <>
+                    <button
+                      className="aww-cam-btn"
+                      onClick={recordFromIdle}
+                      disabled={!reference || !handsReady}
+                      aria-label="Record attempt (Space)"
+                      aria-describedby="aww-hands-pill"
+                    >
+                      <Circle size={14} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                      <span>{reference ? 'Record' : 'Loading…'}</span>
+                      <span className="aww-key-badge-sm">Space</span>
+                    </button>
+                    <span
+                      id="aww-hands-pill"
+                      className="aww-hands-pill"
+                      data-ready={handsReady ? 'yes' : 'no'}
+                    >
+                      <span className="aww-hands-dot" aria-hidden="true" />
+                      {handsReady ? 'Hands in frame' : 'Show your hands'}
+                    </span>
+                  </>
                 )}
                 {phase === 'countdown' && (
                   <button
@@ -813,8 +954,7 @@ export function PracticeView({
                   score={result.score}
                   delta={progress.delta}
                   best={progress.best}
-                  twoHanded={result.twoHanded}
-                  handsData={handsData}
+                  hands={handFeedback}
                 />
                 <div className="aww-result-feedback">
                   {result.score === 100 ? (
@@ -847,6 +987,7 @@ export function PracticeView({
       </div>
 
       <p className="sr-only" role="status">{liveMessage}</p>
+      <Onboarding open={onboardingOpen} onClose={closeOnboarding} />
     </div>
   )
 }

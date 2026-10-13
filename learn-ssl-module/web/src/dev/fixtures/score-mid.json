@@ -1,0 +1,18 @@
+{
+  "score": 72,
+  "delta": -3,
+  "best": false,
+  "gloss": "AHANAWA",
+  "resultNotes": [
+    "Check your index finger — its shape drifts from the reference."
+  ],
+  "fingerFocus": [
+    "index"
+  ],
+  "hands": [
+    {
+      "handedness": "Right",
+      "score": 72
+    }
+  ]
+}

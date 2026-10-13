@@ -1,0 +1,20 @@
+{
+  "score": 84,
+  "delta": 8,
+  "best": true,
+  "gloss": "AYUBOWAN",
+  "resultNotes": [
+    "Close match — both hands are tracking the reference well."
+  ],
+  "fingerFocus": [],
+  "hands": [
+    {
+      "handedness": "Left",
+      "score": 80
+    },
+    {
+      "handedness": "Right",
+      "score": 88
+    }
+  ]
+}

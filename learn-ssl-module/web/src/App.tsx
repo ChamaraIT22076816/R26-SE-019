@@ -15,6 +15,9 @@ import { persistMode, readMode } from './app/mode'
 import type { AppMode } from './app/mode'
 import { AUTHOR_TABS, LEARNER_TABS } from './app/tabs'
 import type { Tab } from './app/tabs'
+import { fetchSession } from './app/session'
+import type { SuvanaUser } from './app/session'
+import { AccountButton } from './app/AccountButton'
 import './components/views.css'
 
 /**
@@ -40,6 +43,9 @@ function App() {
   const [tab, setTab] = useState<Tab>('practice')
   const [mode, setModeState] = useState<AppMode>(readMode)
   const [entered, setEntered] = useState<boolean>(readEntered)
+  // undefined while unknown, null when signed out — so the bar shows nothing
+  // rather than flashing "Sign in" at someone who is already signed in.
+  const [user, setUser] = useState<SuvanaUser | null | undefined>(undefined)
 
   // A gloss handed from Progress's "Practise" rows to the next mount of
   // PracticeView. In-memory and one-shot: reloading just lands you in Practice,
@@ -96,6 +102,15 @@ function App() {
     return () => window.clearTimeout(id)
   }, [])
 
+  // Who is signed in, platform-wide. Never blocks anything: practice works
+  // signed out, and an unreachable Communicate deployment resolves to null.
+  useEffect(() => {
+    if (import.meta.env.VITE_SUVANA !== '1') return
+    const ac = new AbortController()
+    void fetchSession(ac.signal).then(setUser)
+    return () => ac.abort()
+  }, [])
+
   if (!entered) {
     return (
       <div className="app app-hero-mode">
@@ -113,6 +128,10 @@ function App() {
         mode={mode}
         onSetMode={setMode}
         onLeaveToHero={leaveToHero}
+        // One Suvana account, surfaced here but never required: progress
+        // lives in this browser, so gating practice would promise a
+        // portability that does not exist yet.
+        account={import.meta.env.VITE_SUVANA === '1' ? <AccountButton user={user} /> : undefined}
       />
 
       {/* data-tab drives the shell width: Progress is a dashboard and takes
