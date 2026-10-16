@@ -7147,3 +7147,295 @@
 }
 
 
+
+/* ==========================================================================
+   Reference playback (L-08): framing caption, Zoom to hands, mirror label,
+   speed control. Kept at the end so it wins over the HUD rules above.
+   ========================================================================== */
+
+.aww-player-meta {
+  position: absolute;
+  top: 14px;
+  left: 30px;
+  right: 30px;
+  z-index: 16;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.aww-player-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aww-frame-caption,
+.aww-mirror-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 600 11px var(--sans);
+  white-space: nowrap;
+}
+
+.aww-zoom-toggle {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 600 12px var(--sans);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.aww-zoom-toggle:hover {
+  border-color: var(--accent);
+}
+.aww-zoom-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Raw framing: the canvas is the original video frame, drawn as a plain
+   rectangle so the hands' position and the movement's size read against it. */
+.skeleton-player canvas.is-raw {
+  outline: 1px solid rgba(230, 238, 236, 0.5);
+  outline-offset: -1px;
+}
+
+.aww-speed-group {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: rgba(var(--surface-rgb), 0.5);
+}
+.aww-speed-opt {
+  min-width: 40px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: 700 11px var(--mono);
+  cursor: pointer;
+}
+.aww-speed-opt:hover {
+  color: var(--text);
+}
+.aww-speed-opt[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* The learner's own replay keeps its plain look. */
+.aww-practice-env .aww-replay-container .aww-player-meta,
+.aww-practice-env .aww-replay-container .aww-mirror-chip {
+  display: none;
+}
+
+/* The reference HUD is placed by left/right; the centring transform and fixed
+   width from .aww-player-controls pushed it off the pane's left edge. With the
+   speed buttons it may wrap to a second row on narrow panes. */
+.aww-practice-env .aww-pane-left .player-controls {
+  transform: none;
+  width: auto;
+  flex-wrap: wrap;
+}
+
+@media (pointer: coarse) {
+  /* The 44px touch height must not paint the whole box as the track. */
+  .aww-player-range {
+    background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)) center / 100% 4px no-repeat;
+  }
+  :root[data-theme='light'] .aww-player-range {
+    background: linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)) center / 100% 4px no-repeat;
+  }
+}
+
+@media (max-width: 860px) {
+  /* The phone reference frame is short: labels go in a row above it, not over it. */
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-skeleton-canvas-wrap {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-player-meta {
+    position: static;
+    order: -1;
+    align-items: center;
+    padding: 4px 12px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-player-labels {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0 8px;
+  }
+  /* One transport row on a phone: play, speeds, scrubber, time. Restart and
+     frame steps were off-screen here before (the HUD overflowed); the scrubber
+     does both jobs. */
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .player-controls {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-player-restart-btn,
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-player-step-btn {
+    display: none;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-speed-opt {
+    min-width: 34px;
+    padding: 0 4px;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-scrubber-wrap {
+    min-width: 40px;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-frame-caption,
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-mirror-chip {
+    padding: 0;
+    background: none;
+    color: var(--text-dim);
+    font-size: 10.5px;
+    white-space: normal;
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-zoom-toggle {
+    border-color: var(--border-interactive);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-zoom-toggle[aria-pressed='true'] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  .aww-practice-env:not(.aww-browse) .aww-pane-left .aww-skeleton-canvas-wrap canvas {
+    min-height: 0;
+    flex: 1;
+  }
+}
+/* L-16a: teaching steps stay separate from capture controls. */
+.practice-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); font-size: .9rem; }
+.practice-steps button { min-height: 44px; }
+.practice-steps [aria-current="step"], .practice-steps [aria-pressed="true"] { color: var(--text); font-weight: 700; }
+.practice-stars { margin-left: auto; letter-spacing: .15em; color: var(--text); }
+.practice-watch-prompt { margin: auto; padding: 32px 24px; max-width: 360px; text-align: center; color: var(--text); line-height: 1.7; }
+.practice-watch-prompt p:first-child { font-size: 1.4rem; }
+.practice-watch-prompt p { margin-bottom: 24px; }
+.practice-next-step { color: var(--text); margin: 8px 0 16px; font-size: .9rem; }
+.practice-recall-cue { display: grid; place-content: center; justify-items: center; gap: 12px; min-height: 280px; padding: 32px 24px; text-align: center; color: var(--text); }
+.practice-recall-cue p { margin: 0; line-height: 1.7; }
+.practice-recall-cue button { min-height: 48px; margin-top: 16px; white-space: normal; }
+.practice-next-step button + button { margin-left: 8px; }
+.aww-practice-env[data-stage='recall'][data-phase='result'] .aww-pane-left .aww-pane-content { visibility: visible; }
+.aww-practice-env[data-stage='recall'][data-phase='result'] .aww-result-overlay { left: 50%; width: 50%; align-items: flex-start; }
+@media (max-width: 860px) {
+  .aww-practice-env[data-stage='recall'][data-phase='result'] .aww-result-overlay { left: 0; top: 40vh; width: 100%; height: calc(100% - 40vh); padding: 12px; }
+  .aww-practice-env[data-stage='recall'][data-phase='result'] .aww-result-panel { padding: 20px 16px; max-height: none; }
+}
+.practice-hover-hint { display: none; }
+@media (hover: hover) { .practice-hover-hint { display: block; } }
+
+/* L-26: reserve space for teaching controls; short screens may scroll vertically. */
+.aww-practice-env > .practice-steps,
+.aww-practice-env > .practice-reason { flex-shrink: 0; }
+.aww-practice-env .aww-split-screen { flex: 1; height: auto; min-height: 0; min-width: 0; }
+.aww-practice-env .aww-pane { min-width: 0; }
+.aww-practice-env .aww-pane-header { position: static; inset: auto; flex-shrink: 0; padding: 16px 24px; gap: 12px; }
+.aww-practice-env .aww-pane-title { overflow-wrap: anywhere; }
+.aww-practice-env .aww-pane-content { flex: 1; height: auto; min-height: 0; }
+.aww-practice-env .aww-pane-content > .skeleton-player { height: 100%; min-height: 0; width: 100%; }
+.aww-practice-env .aww-camera-container { flex: 1; height: auto; min-height: 0; }
+.aww-practice-env .aww-camera-container.hidden { display: none; }
+.aww-practice-env .aww-preview-container { position: relative; flex: 1; min-height: 0; }
+.practice-preview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.practice-preview-actions .btn { min-height: 44px; font-size: .85rem; }
+.practice-preview-actions .btn:not(.ghost) { background: var(--accent); color: var(--on-accent); }
+.practice-preview-actions .btn.ghost { background: var(--surface); color: var(--text); }
+.practice-result-title { font-size: 1.35rem; margin: 0 0 16px; color: var(--text); }
+.practice-reason summary { min-height: 44px; }
+/* Prefer the selected step's border and weight to low-contrast pale fills. */
+.practice-steps .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-interactive); }
+.practice-steps .btn[aria-pressed='true'] { border: 2px solid var(--accent); }
+.practice-steps .btn:disabled { opacity: .6; }
+.aww-app-bar-inner { min-width: 0; }
+.app[data-mode='author'] .aww-nav-desktop { min-width: 0; }
+.app[data-mode='author'] .aww-nav-desktop .aww-nav-tab { padding-inline: 8px; gap: 4px; }
+/* The old author warning banner was removed; only the app bar remains above. */
+.app[data-mode='author'] .aww-practice-env,
+.app[data-mode='author'] .aww-scenario-env { top: var(--app-bar-h); }
+.aww-studio-env .studio-tool-right { flex-wrap: wrap; max-width: 100%; }
+@media (min-width: 861px) and (max-width: 1400px) {
+  .app[data-mode='author'] .aww-telemetry-pill,
+  .app[data-mode='author'] .aww-nav-desktop .aww-nav-tab-hotkey { display: none; }
+}
+@media (min-width: 861px) and (max-width: 1100px) {
+  .app[data-mode='author'] .aww-app-brand .wordmark,
+  .app[data-mode='author'] .aww-brand-pill { display: none; }
+  .app[data-mode='author'] .aww-app-bar-inner { padding-inline: 16px; gap: 8px; }
+  .app[data-mode='author'] .aww-nav-desktop .aww-nav-tab { font-size: 12px; padding-inline: 5px; }
+}
+/* Labels on the lighter explorer surfaces use readable ink, not decorative gold. */
+:root[data-theme='light'] .cs-nav-eyebrow,
+:root[data-theme='light'] .cs-suggested-tag,
+:root[data-theme='light'] .cs-sign-cat-tag { color: #006e62; }
+:root[data-theme='light'] .cs-nav-stat strong,
+:root[data-theme='light'] .cs-cat-badge { color: #805b00; }
+.cs-sign-card:focus-visible,
+.cs-category-card:focus-visible,
+.cs-suggested-banner:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+@media (max-width: 860px) {
+  .aww-nav-mobile { grid-auto-columns: minmax(0, 1fr); min-width: 0; }
+  .aww-nav-mobile .aww-nav-tab { min-width: 0; }
+  .aww-nav-mobile .aww-nav-tab-label { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+  .aww-app-bar-inner { gap: 8px; padding-inline: 12px; }
+  .app[data-mode='author'] .aww-app-brand .wordmark { display: none; }
+  .app[data-mode='author'] .aww-app-actions { gap: 4px; }
+  .aww-scenario-grid { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  .aww-scenario-card { min-width: 0; overflow-wrap: anywhere; }
+  .aww-practice-env:not(.aww-browse):not([data-phase='result']) { overflow-y: auto; }
+  .aww-practice-env:not(.aww-browse):not([data-phase='result']) .aww-split-screen { flex: 1 0 auto; height: auto; }
+  .aww-practice-env:not(.aww-browse):not([data-phase='result']) .aww-pane-left { flex: 0 0 40vh; height: 40vh; min-height: 280px; }
+  .aww-practice-env:not(.aww-browse):not([data-phase='result']) .aww-pane-right { flex: 1 0 350px; min-height: 350px; }
+  .aww-practice-env.aww-studio-env:not(.aww-browse):not([data-phase='result']) .aww-pane-right { flex-basis: 520px; min-height: 520px; }
+  .aww-practice-env:not(.aww-browse) .aww-pane-header { padding: 8px 14px; }
+  .practice-steps { padding: 8px 12px; gap: 8px; }
+  .practice-steps .btn { padding-inline: 12px; }
+  .practice-reason { padding: 4px 14px; }
+  .practice-watch-prompt { padding: 20px; }
+  .practice-watch-prompt p { margin-bottom: 16px; }
+  .aww-practice-env:not(.aww-browse)[data-stage='watch']:not([data-phase='result']) .aww-pane-right { flex-basis: 245px; min-height: 245px; }
+  .aww-practice-env[data-stage='watch'] .practice-watch-prompt { padding: 12px 20px; line-height: 1.5; }
+  .aww-practice-env[data-stage='watch'] .practice-watch-prompt p { margin-bottom: 8px; }
+  .aww-practice-env[data-stage='watch'] .practice-watch-prompt p:first-child { font-size: 1.15rem; }
+  .practice-recall-cue { min-height: 0; padding: 12px; gap: 8px; }
+  .practice-recall-cue button { margin-top: 4px; }
+  .aww-camera-intro { padding: 12px 20px; gap: 10px; }
+  /* A touch preview is a second scrolling pane, with an explicit way into Watch. */
+  .aww-practice-env.aww-browse[data-preview='open'] .aww-pane-left { flex: 1; min-height: 0; }
+  .aww-practice-env.aww-browse[data-preview='open'] .aww-pane-right { display: flex; flex: 0 0 42vh; min-height: 280px; border-top: 1px solid var(--border-subtle); }
+  .aww-browse .aww-pane-header { padding: 8px 14px; text-shadow: none; align-items: center; }
+  .aww-browse .aww-pane-header .aww-pane-title { font-size: 1.1rem; color: var(--text); }
+  .aww-browse .aww-pane-label { margin-bottom: 4px; }
+  .aww-browse .aww-preview-container > .skeleton-player { height: 100%; width: 100%; }
+  .aww-browse .aww-preview-container .aww-player-meta { display: none; }
+  .aww-browse .aww-preview-container .player-controls { position: static; inset: auto; transform: none; width: auto; max-width: 100%; padding: 6px 12px; }
+  .aww-browse .aww-preview-container .aww-player-restart-btn,
+  .aww-browse .aww-preview-container .aww-player-step-btn { display: none; }
+  .aww-browse .aww-preview-container .aww-scrubber-wrap { min-width: 32px; }
+  .aww-browse .aww-preview-container .aww-speed-opt { min-width: 30px; padding-inline: 4px; }
+  .practice-preview-actions { gap: 4px; }
+  .practice-preview-actions .btn { padding: 8px; }
+  .app[data-mode='author'] .aww-nav-mobile .aww-nav-tab-label { font-size: 9px; white-space: nowrap; overflow-wrap: normal; }
+}

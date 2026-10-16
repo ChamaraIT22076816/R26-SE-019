@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,13 +16,14 @@ import { listRecordings } from '../storage/recordingStore'
 import { loadReferenceFrames, loadReferenceIndex } from '../storage/bundledReferences'
 import { pickReferenceList } from '../storage/references'
 import { categoryOf, orderSigns } from '../data/categories'
-import { glossLabel } from '../data/translations'
+import { glossLabel, translationOf } from '../data/translations'
 import { addAttempt, listAttempts } from '../learner/attemptLog'
 import type { AttemptLogEntry } from '../learner/attemptLog'
-import { summarizeAll } from '../learner/mastery'
+import { summarizeAll, summarizeGloss } from '../learner/mastery'
 import {
   buildSession,
   clearSession,
+  currentGloss,
   isComplete,
   loadSession,
   markAttempted,
@@ -31,10 +32,10 @@ import {
 import type { PracticeSession } from '../learner/session'
 import { scoreAttempt, topFingers } from '../scoring/score'
 import type { ScoreResult } from '../scoring/score'
-import { FINGER_LABEL } from '../scoring/landmarks'
 import { band } from '../scoring/band'
 import { useFeedbackLatency } from '../metrics/useFeedbackLatency'
-import { drawHands, fitFor } from '../vision/drawing'
+import { drawHands, wristAnchorFit } from '../vision/drawing'
+import type { Fit } from '../vision/drawing'
 import { CameraStage } from './CameraStage'
 import { SkeletonPlayer } from './SkeletonPlayer'
 import { ScoreBadge } from './ScoreBadge'
@@ -46,6 +47,16 @@ import { trimTake } from '../scoring/trimTake'
 import { shortcutBlockedByTarget } from '../app/keyboard'
 import { captureDeadline } from '../vision/cameraLifecycle'
 import { progressAgainstEarlier, shouldLogAttempt } from '../learner/attemptProgress'
+import './PracticeReason.css'
+import { initialPracticeStage, practiceStageTransition } from './practiceStages'
+import { starsFor } from '../learner/game'
+import { nextExercise } from '../learner/nextExercise'
+import { SessionComplete } from './SessionComplete'
+import { clearHeroSession, readHeroSession } from '../learner/heroSession'
+import { cameraIntentTransition, initialCameraIntent } from './practiceCamera'
+import type { PracticeCameraEvent } from './practiceCamera'
+import { ReplayCompare } from './ReplayCompare'
+import { feedbackTip } from './feedbackTips'
 
 const COUNTDOWN_S = 3
 /**
@@ -73,13 +84,21 @@ export function PracticeView({
   const [reference, setReference] = useState<SignRecording | null>(null)
   const [refFailed, setRefFailed] = useState(false)
   const [phase, setPhaseState] = useState<Phase>('idle')
+  const [teaching, setTeaching] = useState(initialPracticeStage)
+  const recallHidden = teaching.stage === 'recall' && !teaching.revealed && phase !== 'result'
   const [count, setCount] = useState(COUNTDOWN_S)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [result, setResult] = useState<ScoreResult | null>(null)
   const [attempt, setAttempt] = useState<SignRecording | null>(null)
   const [entries, setEntries] = useState<AttemptLogEntry[]>([])
   const [suggested, setSuggested] = useState<string | null>(null)
-  const [session, setSession] = useState<PracticeSession | null>(() => loadSession())
+  const [session, setSession] = useState<PracticeSession | null>(() => {
+    const saved = readHeroSession() ?? loadSession()
+    // An explicit sign entry must not get trapped behind an old completion.
+    return initialGloss && saved && (isComplete(saved) || !saved.glosses.includes(initialGloss)) ? null : saved
+  })
+  const [loadingProgress, setLoadingProgress] = useState(true)
+  const mountIntent = useRef({ gloss: initialGloss, session })
   const [isBrowsing, setIsBrowsing] = useState(true)
   // Why the last countdown or take was abandoned, shown until the next one.
   const [captureNotice, setCaptureNotice] = useState<string | null>(null)
@@ -93,10 +112,13 @@ export function PracticeView({
   // Ghost Mode State (Overlay reference skeleton onto live webcam)
   const [ghostActive, setGhostActive] = useState(false)
   const ghostCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  // The learner's hands in the latest tracked frame, for anchoring the ghost.
+  const liveHandsRef = useRef<HandFrame['hands']>([])
   const ghostRafRef = useRef(0)
 
   // While browsing, the right pane previews a sign instead of sitting empty
   const [hoverRec, setHoverRec] = useState<RecordingMeta | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [previewFrames, setPreviewFrames] = useState<SignRecording | null>(null)
 
   const phaseRef = useRef<Phase>('idle')
@@ -111,7 +133,7 @@ export function PracticeView({
   const framesRef = useRef<HandFrame[]>([])
   const startTsRef = useRef<number | null>(null)
   const countdownRef = useRef(0)
-  const retryRef = useRef<HTMLButtonElement>(null)
+  const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const completeRef = useRef<HTMLHeadingElement>(null)
   const lastFrameAtRef = useRef<number | null>(null)
   const finishRef = useRef<() => void>(() => {})
@@ -136,6 +158,7 @@ export function PracticeView({
   }
 
   const tracking = useHandTracking((frame) => {
+    liveHandsRef.current = frame.hands
     handStreakRef.current = frame.hands.length > 0 ? handStreakRef.current + 1 : 0
     setReady(handStreakRef.current >= READY_STREAK)
     if (phaseRef.current !== 'recording') return
@@ -147,7 +170,62 @@ export function PracticeView({
     if (rel >= captureMs) finishRecording()
   })
 
+  const cameraIntent = useRef(initialCameraIntent(document.hidden))
+  const cameraControls = useRef({ start: tracking.start, stop: tracking.stop })
+  cameraControls.current = { start: tracking.start, stop: tracking.stop }
+  const cameraSurface = useRef(false)
+  cameraSurface.current = !isBrowsing && selected !== null && teaching.stage !== 'watch'
+  const issueCameraIntent = useCallback((event: PracticeCameraEvent) => {
+    const next = cameraIntentTransition(cameraIntent.current, event)
+    cameraIntent.current = next.state
+    if (next.action === 'start') void cameraControls.current.start()
+    if (next.action === 'stop') {
+      cameraControls.current.stop()
+      handStreakRef.current = 0
+      handsReadyRef.current = false
+      setHandsReady(false)
+    }
+  }, [])
+  const requestCamera = useCallback(() => issueCameraIntent('start'), [issueCameraIntent])
+  const stopCamera = useCallback(() => issueCameraIntent('stop'), [issueCameraIntent])
+
   useEffect(() => {
+    if (!cameraSurface.current) issueCameraIntent('leave-surface')
+  }, [isBrowsing, selected, teaching.stage, issueCameraIntent])
+  useEffect(() => {
+    if (tracking.status === 'error') issueCameraIntent('failed')
+  }, [tracking.status, issueCameraIntent])
+  useEffect(() => {
+    const away = () => {
+      if (phaseRef.current === 'countdown' || phaseRef.current === 'recording') {
+        window.clearInterval(countdownRef.current)
+        framesRef.current = []
+        setPhase('idle')
+        setCaptureNotice('You left the page, so that take was not scored. Try again.')
+      }
+      issueCameraIntent('away')
+    }
+    const returned = () => {
+      if (document.hidden) return
+      if (!cameraSurface.current) issueCameraIntent('leave-surface')
+      issueCameraIntent('return')
+    }
+    const visibility = () => { if (document.hidden) away(); else returned() }
+    document.addEventListener('visibilitychange', visibility)
+    window.addEventListener('pagehide', away)
+    window.addEventListener('pageshow', returned)
+    window.addEventListener('focus', returned)
+    return () => {
+      document.removeEventListener('visibilitychange', visibility)
+      window.removeEventListener('pagehide', away)
+      window.removeEventListener('pageshow', returned)
+      window.removeEventListener('focus', returned)
+      cameraIntent.current = initialCameraIntent()
+    }
+  }, [issueCameraIntent])
+
+  useEffect(() => {
+    let cancelled = false
     void (async () => {
       // allSettled: a failed IndexedDB (blocked site storage) must not blank
       // the bundled signs. Each store that fails contributes nothing.
@@ -156,6 +234,7 @@ export function PracticeView({
         loadReferenceIndex(),
         Promise.resolve().then(listAttempts),
       ])
+      if (cancelled) return
       const loc = locR.status === 'fulfilled' ? locR.value : []
       const index = indexR.status === 'fulfilled' ? indexR.value : []
       const log = logR.status === 'fulfilled' ? logR.value : []
@@ -163,13 +242,24 @@ export function PracticeView({
         if (r.status === 'rejected') console.error('Practice could not load a store', r.reason)
       }
       setLocalRecs(loc)
-      setReferences(pickReferenceList([...loc.map(toMeta), ...index]))
+      const refs = pickReferenceList([...loc.map(toMeta), ...index])
+      setReferences(refs)
       setEntries(log)
+      if (!mountIntent.current.gloss) {
+        const active = mountIntent.current.session
+        const first = active ? currentGloss(active) : null
+        const rec = refs.find(item => item.gloss === first)
+        if (rec) { setSelected(rec); setIsBrowsing(false) }
+      }
+      clearHeroSession()
+      setLoadingProgress(false)
     })()
+    return () => { cancelled = true }
   }, [])
 
   // Fetch reference frames for the selected sign
   useEffect(() => {
+    setTeaching(initialPracticeStage())
     setReference(null)
     setRefFailed(false)
     if (!selected) return
@@ -241,7 +331,7 @@ export function PracticeView({
   // Ghost Mode animation loop on webcam overlay canvas
   useEffect(() => {
     const canvas = ghostCanvasRef.current
-    if (!canvas || !ghostActive || !reference || tracking.status !== 'running' || phase === 'result') {
+    if (!canvas || !ghostActive || recallHidden || !reference || tracking.status !== 'running' || phase === 'result') {
       if (canvas) {
         const ctx = canvas.getContext('2d')
         ctx?.clearRect(0, 0, canvas.width, canvas.height)
@@ -252,12 +342,35 @@ export function PracticeView({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const fit = fitFor(reference.frames, 0.85)
+    const video = tracking.videoRef.current
     const duration = Math.max(reference.durationMs, 1000)
-    let startTime = performance.now()
+    const startTime = performance.now()
+    // The reference's first tracked hands are its anchor; references are
+    // trimmed, so this is normally frame 0.
+    const anchorHands = reference.frames.find((f) => f.hands.length > 0)?.hands ?? []
+    let fit: Fit | undefined
+    let anchoredLoop = -1
 
     const loop = () => {
-      const elapsed = (performance.now() - startTime) % duration
+      // Draw in the camera's own pixel space: the ghost canvas sits on the
+      // video with the same object-fit and mirroring, so a landmark lands where
+      // the same point of the video is. Re-checked each frame in case the
+      // camera changes resolution.
+      if (video?.videoWidth && (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight)) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+      }
+      const total = performance.now() - startTime
+      const loopIndex = Math.floor(total / duration)
+      const elapsed = total % duration
+      // Anchor once per loop, so the reference's own movement still shows; and
+      // as soon as the learner's hand appears, if it was missing at loop start.
+      if (loopIndex !== anchoredLoop || (fit === undefined && liveHandsRef.current.length > 0)) {
+        anchoredLoop = loopIndex
+        fit = liveHandsRef.current.length > 0
+          ? wristAnchorFit(anchorHands, liveHandsRef.current)
+          : undefined
+      }
       let idx = 0
       while (idx + 1 < reference.frames.length && reference.frames[idx + 1].timestampMs <= elapsed) {
         idx++
@@ -278,7 +391,7 @@ export function PracticeView({
         c?.clearRect(0, 0, canvas.width, canvas.height)
       }
     }
-  }, [ghostActive, reference, tracking.status, phase])
+  }, [ghostActive, recallHidden, reference, tracking.status, tracking.videoRef, phase])
 
   // Readiness is about the frames arriving now: start over whenever they stop.
   useEffect(() => {
@@ -295,7 +408,7 @@ export function PracticeView({
       window.clearInterval(countdownRef.current)
       framesRef.current = []
       setPhase('idle')
-      if (tracking.status === 'error') {
+      if (tracking.status === 'error' || tracking.status === 'interrupted') {
         setCaptureNotice('The camera stopped, so that take was not scored. Try again.')
       }
     }
@@ -327,11 +440,22 @@ export function PracticeView({
 
   const { pause: pauseTracking, resume: resumeTracking } = tracking
   useEffect(() => {
-    if (phase === 'result' || isBrowsing || !selected) {
+    if (phase === 'result' || isBrowsing || !selected || teaching.stage === 'watch') {
       pauseTracking()
       resetReady()
     } else resumeTracking()
-  }, [phase, isBrowsing, selected, pauseTracking, resumeTracking])
+  }, [phase, isBrowsing, selected, teaching.stage, tracking.status, pauseTracking, resumeTracking])
+
+  useLayoutEffect(() => {
+    if (phase !== 'result' || !result) return
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        if (!document.hidden) performance.mark('suvana:result-shown')
+      })
+    })
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second) }
+  }, [phase, result])
 
   useEffect(() => {
     if (session) saveSession(session)
@@ -356,14 +480,19 @@ export function PracticeView({
     if (phase === 'idle' && captureNotice) return captureNotice
     if (phase === 'result' && result) {
       const bandLabel = band(result.score).label
-      const hint = result.hints[0] ? ` ${result.hints[0]}` : ''
+      const hint = result.typedHints?.[0] ? ` ${feedbackTip(result.typedHints[0])}` : ''
       return `${selectedRef.current?.gloss ?? 'Sign'} scored ${result.score} out of 100. ${bandLabel}.${hint}`
     }
     return ''
   }, [phase, result, captureNotice])
 
   useEffect(() => {
-    if (phase === 'result') retryRef.current?.focus({ preventScroll: true })
+    if (phase === 'result') {
+      const heading = resultHeadingRef.current
+      heading?.closest('.aww-practice-env')?.scrollTo({ top: 0 })
+      heading?.closest('.aww-result-overlay')?.scrollTo({ top: 0 })
+      heading?.focus({ preventScroll: true })
+    }
   }, [phase])
 
   useEffect(() => {
@@ -371,6 +500,8 @@ export function PracticeView({
   }, [sessionDone, phase])
 
   function beginCountdown() {
+    if (teaching.stage === 'watch') return
+    if (phaseRef.current === 'result') setTeaching(state => practiceStageTransition(state, 'retry'))
     if (tracking.status !== 'running' || !referenceRef.current) return
     setCaptureNotice(null)
     setResult(null)
@@ -416,6 +547,9 @@ export function PracticeView({
 
   function finishRecording() {
     if (phaseRef.current !== 'recording') return
+    performance.clearMarks('suvana:capture-end')
+    performance.clearMarks('suvana:result-shown')
+    performance.mark('suvana:capture-end')
     const currentRef = referenceRef.current
     const captured = framesRef.current
     framesRef.current = []
@@ -472,6 +606,8 @@ export function PracticeView({
       gloss: currentRef.gloss,
       referenceId: currentRef.id,
       score: scored.score,
+      stage: teaching.stage === 'recall' ? 'recall' : 'try',
+      revealed: teaching.stage === 'recall' ? teaching.revealed : undefined,
       worstFingers: topFingers(scored),
       sessionId: session?.id,
       createdAt: att.createdAt,
@@ -486,7 +622,7 @@ export function PracticeView({
   const noAttemptHands =
     result != null && result.hands.length > 0 && result.hands.every((h) => h.missing)
 
-  const resultNotes = result ? result.hints.filter((h) => !h.startsWith('Check your ')) : []
+  const resultTips = result ? (result.typedHints ?? [{ kind: 'compare-reference' } as const]).slice(0, 2).map(feedbackTip) : []
 
   // Measured per-hand scores for ScoreBadge. When the take was scored
   // mirrored, the learner signed with the other hand than the reference's, so
@@ -500,7 +636,9 @@ export function PracticeView({
     }))
   }, [result])
 
-  const fingerFocus = result ? topFingers(result) : []
+  // D-A15/L-30: finger correctness states and highlights remain unvalidated.
+  // Keep the measured hand scores, without adding per-finger judgments.
+  const fadeTips = useMemo(() => selected ? ['improving', 'mastered'].includes(summarizeGloss(selected.gloss, entries).level) : false, [selected, entries])
 
   const progress = useMemo(() => {
     if (!result || !selected || !attempt) return { delta: null, best: false }
@@ -521,11 +659,38 @@ export function PracticeView({
   const closeOnboarding = useCallback(() => setOnboardingOpen(false), [])
 
   const browsing = isBrowsing || !selected
+  const watching = teaching.stage === 'watch'
+  const exercise = selected ? nextExercise(selected.gloss, entries) : null
+  const earnedStars = selected ? starsFor(selected.gloss, entries) : 0
+  const starsAdded = selected && attempt ? Math.max(0, earnedStars - starsFor(selected.gloss, entries.filter(entry => entry.id !== attempt.id))) : 0
+  const recallUnlocked = earnedStars >= 2
+
+  function enterRecall() {
+    if (!recallUnlocked || watching) return
+    const retry = phaseRef.current === 'result'
+    leaveResult()
+    setTeaching(state => state.stage === 'recall' && retry
+      ? practiceStageTransition(state, 'retry')
+      : practiceStageTransition(state, 'recall', recallUnlocked))
+  }
+
+  function watchAgain() {
+    leaveResult()
+    setTeaching(state => practiceStageTransition(state, 'watch'))
+  }
 
   // Cycle to next sign (suggested or next in category list)
   const handleNextSign = useCallback(() => {
     if (references.length === 0) return
     let targetRec: RecordingMeta | null = null
+
+    if (session) {
+      const next = currentGloss(session)
+      leaveResult()
+      if (next) setSelected(references.find(rec => rec.gloss === next) ?? null)
+      else setIsBrowsing(true)
+      return
+    }
 
     if (suggested && (!selected || suggested !== selected.gloss)) {
       targetRec = references.find((r) => r.gloss === suggested) ?? null
@@ -551,7 +716,7 @@ export function PracticeView({
       leaveResult()
       setIsBrowsing(true)
     }
-  }, [references, suggested, selected])
+  }, [references, suggested, selected, session])
 
   // Cycle previous sign in category
   const handlePrevSign = useCallback(() => {
@@ -580,6 +745,7 @@ export function PracticeView({
       }
       return
     }
+    if (e.defaultPrevented) return
     const key = e.code === 'Space' ? ' ' : e.key
     // A focused button or link keeps Enter/Space; text fields keep every key.
     if (shortcutBlockedByTarget(key, e.target)) return
@@ -594,13 +760,13 @@ export function PracticeView({
       } else if (phaseRef.current === 'result') {
         e.preventDefault()
         if (tracking.status === 'running') beginCountdown()
-        else void tracking.start()
+        else requestCamera()
       }
     } else if (e.key === 'ArrowLeft') {
       if (phaseRef.current === 'result') {
         e.preventDefault()
         if (tracking.status === 'running') beginCountdown()
-        else void tracking.start()
+        else requestCamera()
       }
     } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
       if (phaseRef.current === 'result') {
@@ -623,7 +789,7 @@ export function PracticeView({
         setIsBrowsing(true)
       }
     } else if (e.key === 'm' || e.key === 'M') {
-      if (!isBrowsing && phaseRef.current !== 'result') {
+      if (!isBrowsing && !watching && !recallHidden && phaseRef.current !== 'result') {
         e.preventDefault()
         setGhostActive((prev) => !prev)
       }
@@ -650,7 +816,6 @@ export function PracticeView({
     <div className="aww-result-actions">
       {tracking.status === 'running' ? (
         <button
-          ref={retryRef}
           className="btn massive aww-btn-action aww-btn-retry"
           onClick={beginCountdown}
           aria-label="Retry attempt (Left Arrow or Space)"
@@ -663,9 +828,8 @@ export function PracticeView({
         </button>
       ) : (
         <button
-          ref={retryRef}
           className="btn massive aww-btn-action"
-          onClick={() => void tracking.start()}
+          onClick={() => requestCamera()}
         >
           <RotateCcw size={16} aria-hidden="true" />
           <span>Turn on camera</span>
@@ -699,8 +863,30 @@ export function PracticeView({
     </div>
   )
 
+  if (sessionDone && phase === 'idle' && session) return loadingProgress
+    ? <p role="status" className="empty-state">Loading your session…</p>
+    : <SessionComplete session={session} attempts={entries} onContinue={() => {
+    setSession(null)
+    clearSession()
+    setSelected(null)
+    setIsBrowsing(true)
+  }} />
+
   return (
-    <div className={`aww-practice-env${browsing ? ' aww-browse' : ''}`} data-phase={phase}>
+    <div className={`aww-practice-env${browsing ? ' aww-browse' : ''}`} data-phase={phase} data-stage={teaching.stage} data-preview={previewOpen && previewRec ? 'open' : 'closed'}>
+      {!browsing && <div className="practice-steps" aria-label="Practice steps">
+        <button className="btn ghost" aria-pressed={watching} disabled={phase === 'countdown' || phase === 'recording'} onClick={watchAgain}>1. Watch</button>
+        <button className="btn ghost" aria-pressed={teaching.stage === 'try'} disabled={watching || phase === 'countdown' || phase === 'recording'} onClick={() => {
+          leaveResult(); setTeaching(state => practiceStageTransition(state, 'my-turn'))
+        }}>2. Try</button>
+        <button className="btn ghost" aria-pressed={teaching.stage === 'recall'} disabled={!recallUnlocked || watching || phase === 'countdown' || phase === 'recording'} onClick={enterRecall}>3. Recall</button>
+        {phase === 'result' && <span className="practice-stars" aria-label={`${earnedStars} of 3 stars`}>{'★'.repeat(earnedStars)}{'☆'.repeat(3 - earnedStars)}</span>}
+      </div>}
+      {!browsing && !recallHidden && session?.recommendations?.find(item => item.gloss === selected?.gloss) && (
+        <details className="practice-reason"><summary>Why this sign?</summary>
+          <p>{session.recommendations.find(item => item.gloss === selected?.gloss)?.reason}</p>
+        </details>
+      )}
       {/* The Split Screen */}
       <div className="aww-split-screen">
         {/* Left Pane: Target Reference or In-Pane Category & Sign Browser */}
@@ -712,11 +898,14 @@ export function PracticeView({
               selectedId={selected?.id}
               mode="practice"
               onSelect={(rec) => {
+                setTeaching(initialPracticeStage())
                 setSelected(rec)
                 setIsBrowsing(false)
                 setHoverRec(null)
+                setPreviewOpen(false)
               }}
-              onPreview={setHoverRec}
+              onPreview={(rec) => { setHoverRec(rec); setPreviewOpen(rec !== null) }}
+              previewedId={previewOpen ? hoverRec?.id : null}
             />
           ) : (
             <>
@@ -734,13 +923,13 @@ export function PracticeView({
                   </div>
                 )}
                 <div className="aww-ref-heading">
-                  <p className="aww-pane-label">Reference</p>
+                  <p className="aww-pane-label">{recallHidden ? 'From memory' : 'Reference'}</p>
                   <div className="aww-ref-title-wrap">
                     {/* glossLabel() already carries the English meaning */}
                     <h2 className="aww-pane-title">
-                      {glossLabel(selected.gloss)}
+                      {recallHidden ? translationOf(selected.gloss) ?? glossLabel(selected.gloss) : glossLabel(selected.gloss)}
                     </h2>
-                    {selected.gloss === suggested && (
+                    {!recallHidden && selected.gloss === suggested && (
                       <span className="badge cs-suggested-chip">Suggested</span>
                     )}
                   </div>
@@ -748,12 +937,21 @@ export function PracticeView({
               </div>
 
               <div className="aww-pane-content">
-                {reference ? (
+                {recallHidden ? (
+                  <div className="practice-recall-cue">
+                    <p>Try the sign from memory.</p>
+                    <p>Need another look?</p>
+                    <button className="btn ghost" onClick={() => setTeaching(state => practiceStageTransition(state, 'reveal'))}>Reveal (costs the 3rd star)</button>
+                  </div>
+                ) : reference ? (
                   <SkeletonPlayer
+                    key={`${selected.id}-${teaching.stage}`}
                     frames={reference.frames}
                     videoWidth={reference.videoWidth}
                     videoHeight={reference.videoHeight}
                     colorOverride="#e6eeec"
+                    fitToFrame={watching && window.innerWidth < 768}
+                    autoSpeedUp={!watching}
                   />
                 ) : refFailed ? (
                   <p className="camera-error">Could not load reference.</p>
@@ -770,7 +968,7 @@ export function PracticeView({
           <div className="aww-pane-header">
             <div>
               <div className="aww-you-row">
-                <p className="aww-pane-label">{browsing ? 'Preview' : 'You'}</p>
+                <p className="aww-pane-label">{browsing ? 'Preview' : watching ? 'Watch first' : 'Your turn'}</p>
                 {!browsing && (
                   <button
                     type="button"
@@ -785,6 +983,13 @@ export function PracticeView({
                 <h2 className="aww-pane-title">{glossLabel(previewRec.gloss)}</h2>
               )}
             </div>
+            {browsing && previewOpen && previewRec && <div className="practice-preview-actions">
+              <button className="btn" onClick={() => {
+                setTeaching(initialPracticeStage())
+                setSelected(previewRec); setIsBrowsing(false); setHoverRec(null); setPreviewOpen(false)
+              }}>Watch this sign</button>
+              <button className="btn ghost" onClick={() => { setPreviewOpen(false); setHoverRec(null) }} aria-label="Close preview">Close</button>
+            </div>}
           </div>
 
           {browsing && (
@@ -798,26 +1003,32 @@ export function PracticeView({
                   colorOverride="#e6eeec"
                 />
               ) : (
-                <p className="hint-text">Hover a sign to preview it here.</p>
+                <p className="hint-text practice-hover-hint">Hover a sign to preview it here.</p>
               )}
             </div>
           )}
 
           {/* Live Camera */}
+          {!browsing && watching && <div className="practice-watch-prompt">
+            <p>Watch the sign. Take your time.</p>
+            <p>Ready to try it?</p>
+            <button className="btn massive" disabled={!reference} onClick={() => setTeaching(state => practiceStageTransition(state, 'my-turn'))}>My turn</button>
+          </div>}
           <div
-            className={`aww-camera-container ${browsing || phase === 'result' ? 'hidden' : ''}`}
+            className={`aww-camera-container ${browsing || watching || phase === 'result' ? 'hidden' : ''}`}
           >
             <CameraStage
               videoRef={tracking.videoRef}
               canvasRef={tracking.canvasRef}
               ghostCanvasRef={ghostCanvasRef}
               status={tracking.status}
+              prepareTracker={!browsing && !watching && selected !== null}
               error={tracking.error}
-              onStart={() => void tracking.start()}
-              onStop={() => void tracking.stop()}
-              ghostActive={ghostActive}
+              onStart={requestCamera}
+              onStop={stopCamera}
+              ghostActive={ghostActive && !recallHidden}
               onToggleGhost={() => setGhostActive((g) => !g)}
-              ghostAvailable={reference !== null}
+              ghostAvailable={reference !== null && !recallHidden}
               idleHint=""
               inferring={tracking.inferring}
               intro={
@@ -827,7 +1038,7 @@ export function PracticeView({
                     Hand tracking runs entirely in your browser. No video is uploaded or
                     recorded.
                   </p>
-                  <button className="btn massive" onClick={() => void tracking.start()}>
+                  <button className="btn massive" onClick={() => requestCamera()}>
                     Turn on camera
                   </button>
                 </div>
@@ -840,7 +1051,7 @@ export function PracticeView({
           )}
 
           {/* Camera controls */}
-          {!browsing && phase !== 'result' && tracking.status === 'running' && (
+          {!browsing && !watching && phase !== 'result' && tracking.status === 'running' && (
             <>
               {phase === 'countdown' && (
                 <div className="aww-cam-countdown" aria-hidden="true">{count}</div>
@@ -908,6 +1119,7 @@ export function PracticeView({
                 frames={attempt.frames}
                 videoWidth={attempt.videoWidth}
                 videoHeight={attempt.videoHeight}
+                slowStart={false}
               />
             </div>
           )}
@@ -919,30 +1131,27 @@ export function PracticeView({
             {noAttemptHands ? (
               <div className="aww-result-panel aww-result-nohands">
                 <div className="aww-nohands-icon-wrap">
-                  <X size={32} />
+                  <X size={32} aria-hidden="true" />
                 </div>
-                <h3 className="aww-result-nohands-title">Couldn't see your hands</h3>
-                <p className="aww-result-lead">The AI tracker didn't detect a hand gesture in that take.</p>
+                <h3 className="aww-result-nohands-title" ref={resultHeadingRef} tabIndex={-1}>Couldn't see your hands</h3>
+                <p className="aww-result-lead">We couldn't track your hands in this try.</p>
                 <div className="aww-diagnostics-grid">
                   <div className="aww-diag-item">
-                    <span className="aww-diag-icon">💡</span>
                     <div>
-                      <strong>Check Room Lighting</strong>
-                      <p>Ensure light is in front of you, not behind.</p>
+                      <strong>Check the light</strong>
+                      <p>Keep a light in front of you.</p>
                     </div>
                   </div>
                   <div className="aww-diag-item">
-                    <span className="aww-diag-icon">📐</span>
                     <div>
-                      <strong>Camera Distance</strong>
-                      <p>Step back until your head &amp; shoulders are visible.</p>
+                      <strong>Check the camera</strong>
+                      <p>Move back until your head and shoulders fit.</p>
                     </div>
                   </div>
                   <div className="aww-diag-item">
-                    <span className="aww-diag-icon">✋</span>
                     <div>
-                      <strong>Hand Visibility</strong>
-                      <p>Raise your hands clearly within the camera frame.</p>
+                      <strong>Show your hands</strong>
+                      <p>Keep your hands inside the camera view.</p>
                     </div>
                   </div>
                 </div>
@@ -950,6 +1159,8 @@ export function PracticeView({
               </div>
             ) : (
               <div className="aww-result-panel">
+                <h2 className="practice-result-title" ref={resultHeadingRef} tabIndex={-1}>Your try</h2>
+                {reference && attempt && <ReplayCompare key={attempt.id} reference={reference} attempt={attempt} result={result} />}
                 <ScoreBadge
                   score={result.score}
                   delta={progress.delta}
@@ -957,27 +1168,17 @@ export function PracticeView({
                   hands={handFeedback}
                 />
                 <div className="aww-result-feedback">
-                  {result.score === 100 ? (
-                    <p className="perfect-hint">Flawless match. Perfect execution.</p>
-                  ) : (
-                    <>
-                      {resultNotes.map((h, i) => (
-                        <p key={i}>{h}</p>
-                      ))}
-                      {fingerFocus.length > 0 && (
-                        <div className="focus-block">
-                          <p className="pane-label">Focus on</p>
-                          <div className="finger-chips">
-                            {fingerFocus.map((f) => (
-                              <span key={f} className="finger-chip">
-                                {FINGER_LABEL[f]}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
+                  <div className="practice-next-step">
+                    <p>Your stars: {earnedStars} of 3 · +{starsAdded} this try</p>
+                    <p>{exercise?.stage === 'recall' ? 'Ready to practise from memory.' : exercise?.suggestedSpeed === 0.25 ? 'Watch again at quarter speed. You can turn on the hand guide too.' : 'Watch again, or give it another try.'}</p>
+                    <button className="btn ghost" onClick={watchAgain}>Watch again</button>
+                    {recallUnlocked && <button className="btn" onClick={enterRecall}>Try from memory</button>}
+                    {teaching.stage === 'recall' && teaching.revealed && <p>This revealed try cannot add the third star.</p>}
+                  </div>
+                  <details className="practice-tips" key={attempt?.id} open={!fadeTips}>
+                    <summary>{fadeTips ? 'Show tips' : 'Tips'}</summary>
+                    {resultTips.map((tip, index) => <p key={index}>{tip}</p>)}
+                  </details>
                   {resultActions}
                 </div>
               </div>

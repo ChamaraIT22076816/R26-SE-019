@@ -11,7 +11,7 @@ const OK = band(60).label
 const LOW = band(0).label
 
 // Generic practice guidance only: no sign content. Step 2 describes today's
-// controls (speed button, Record, Space); L-08/L-16a change them.
+// controls, including the Watch-to-Try handoff. No SSL content is supplied here.
 const STEPS: { title: string; body: ReactNode }[] = [
   {
     title: 'Frame yourself',
@@ -33,8 +33,12 @@ const STEPS: { title: string; body: ReactNode }[] = [
     body: (
       <>
         <p>
-          Watch the reference first. The speed button under it slows it down; 0.5x is a good
-          start.
+          Watch the reference at half speed. Use the speed buttons if you like.
+          Choose <strong>My turn</strong> when you are ready, then turn on your camera.
+        </p>
+        <p>
+          The rectangle is the original video frame, so you see where the hands were and how far
+          they moved. <strong>Zoom to hands</strong> enlarges them.
         </p>
         <p>
           Press <strong>Record</strong> (or Space). After a 3-second countdown, sign; press Space
